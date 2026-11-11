@@ -68,14 +68,23 @@ Status: ✅ sudah dibangun · ⏳ belum.
   Dampak tampil langsung saat menyeret; perubahan dikonfirmasi dulu dan bisa diurungkan.
   Setiap aksi juga bisa dilakukan lewat panel detail (tanpa drag) dan keyboard.
 
-### 4.3 Attachment, versioning, komentar ⏳
+### 4.3 Link, versioning, komentar ✅
 
-- **Attachment**: link bertipe preview, aset, atau dokumen (Drive, Frame.io, Vimeo, dll.)
-  yang menempel ke fase, milestone, deliverable, atau shot. Tanpa upload file.
-- **Version** di semua lini: nomor versi, link, catatan apa yang berubah/direvisi, pembuat,
-  tanggal, status approval.
-- **Komentar** per item atas nama akun.
-- **Dokumen produksi**: script, script report, camera/sound report, grab still.
+- **Link** bertipe preview, aset, atau dokumen (Drive, Frame.io, Vimeo, dll.) menempel ke
+  fase atau milestone. Tanpa upload file. Nama link dipilih dari daftar siap-pakai atau diketik.
+- **Versi**: setiap perubahan link menjadi versi baru bernomor (v1, v2, …) dengan catatan
+  wajib tentang apa yang berubah/direvisi, pembuat, dan waktu. Versi lama tetap bisa dibuka.
+- **Status review** per versi: Menunggu review, Approved, Perlu revisi. Hanya supervisor
+  yang menetapkannya (mencatat keputusan director/producer).
+- **Komentar** per item atas nama akun. Komentar adalah diskusi internal tim admin dan
+  **tidak tampil** di link view-only.
+- **Dokumen produksi** tingkat project: script, script report, camera/sound report, grab
+  still, dan lainnya.
+- Halaman **Aset & dokumen** merangkum semua link per track dan item; ringkasan project
+  menampilkan link yang belum approved.
+- Viewer melihat link dan riwayat versinya, kecuali yang bertanda internal atau yang
+  menempel pada item internal.
+- Belum: link pada deliverable dan shot (menyusul bersama modul 4 dan 6).
 
 ### 4.4 Deliverables ⏳
 

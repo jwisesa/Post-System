@@ -302,12 +302,19 @@ export async function getViewerData(db: Db, token: string) {
     .innerJoin(projects, eq(projects.id, shareLinks.projectId))
     .where(and(eq(shareLinks.token, token), isNull(shareLinks.revokedAt)));
   if (!row) return null;
+  const { getSchedule } = await import("./schedule/service");
+  const { listAttachments } = await import("./assets/service");
+  const schedule = await getSchedule(db, row.project.id, { includeInternal: false });
+  const visible = new Set(schedule.tracks.flatMap((t) => t.items.map((i) => i.id)));
+  // Links on hidden items stay hidden; comments are never sent to viewers.
+  const attachments = (await listAttachments(db, row.project.id, { includeInternal: false })).filter((a) => a.targetType === "project" || visible.has(a.targetId));
   return {
     project: row.project,
     label: row.label,
     techSpec: await getTechSpec(db, row.project.id),
     team: await getTeam(db, row.project.id, { includeInternal: false }),
-    schedule: await (await import("./schedule/service")).getSchedule(db, row.project.id, { includeInternal: false }),
+    schedule,
+    attachments,
   };
 }
 

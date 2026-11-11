@@ -9,7 +9,7 @@ const label = (key: string) => TECH_FIELDS.find((f) => f.key === key)?.label ?? 
 
 const KINDS: Record<string, string> = {
   schedule: "Jadwal", schedule_item: "Jadwal", track: "Jadwal", dependency: "Jadwal",
-  tech_spec: "Technical Page", team_contact: "Tim", team_group: "Tim", member: "Akses", share_link: "Akses", project: "Project",
+  attachment: "Aset", comment: "Komentar", tech_spec: "Technical Page", team_contact: "Tim", team_group: "Tim", member: "Akses", share_link: "Akses", project: "Project",
 };
 
 /** Field-level "old → new" lines for update entries. */

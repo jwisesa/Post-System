@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ProjectFields } from "@/components/project-fields";
 import { ErrorBanner, ProjectSummary } from "@/components/views";
+import { listAttachments } from "@/lib/assets/service";
 import { can } from "@/lib/auth/permissions";
 import { loadProject } from "@/lib/project-context";
 import { addDays, diffDays, fmtDate, today as todayWib } from "@/lib/schedule/dates";
@@ -13,7 +14,9 @@ export default async function Overview({ params, searchParams }: { params: Promi
   const { slug } = await params;
   const { error } = await searchParams;
   const { db, project, role } = await loadProject(slug);
-  const [schedule, recent] = await Promise.all([getSchedule(db, project.id, { includeInternal: true }), listActivity(db, project.id, 6)]);
+  const [schedule, recent, attachments] = await Promise.all([getSchedule(db, project.id, { includeInternal: true }), listActivity(db, project.id, 6), listAttachments(db, project.id, { includeInternal: true })]);
+  const itemName = new Map(schedule.tracks.flatMap((t) => t.items.map((i) => [i.id, `${t.name} / ${i.name}`] as const)));
+  const review = attachments.filter((a) => a.versions[0]?.status !== "approved");
   const today = todayWib();
   const open = schedule.tracks.flatMap((t) => t.items.map((i) => ({ ...i, track: t.name }))).filter((i) => i.status !== "done");
   const late = open.filter((i) => i.dueDate < today).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
@@ -45,6 +48,25 @@ export default async function Overview({ params, searchParams }: { params: Promi
           {list(soon, "Tidak ada deadline dalam 7 hari.")}
         </section>
       </div>
+      <section className="card">
+        <div className="mb-2 flex items-center justify-between">
+          <h2>Perlu dicek {review.length > 0 && <span className="tag tag-warn ml-1">{review.length}</span>}</h2>
+          <Link href={`/admin/p/${slug}/assets`} className="text-sm text-accent">Semua aset</Link>
+        </div>
+        {review.length === 0 ? <p className="muted text-sm">Tidak ada link yang menunggu review.</p> : (
+          <ul className="divide-y divide-line">
+            {review.map((a) => (
+              <li key={a.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span className="min-w-0">
+                  <span className="font-medium">{a.label}</span> <span className="tag tag-accent">v{a.versions[0].number}</span>{" "}
+                  <span className="muted">· {a.targetType === "project" ? "Dokumen project" : itemName.get(a.targetId)} · {a.versions[0].status === "pending" ? "menunggu review" : "perlu revisi"}</span>
+                </span>
+                <a href={a.versions[0].url} target="_blank" rel="noreferrer" className="btn-secondary !min-h-7 shrink-0 !py-0.5">Buka ↗</a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       <section className="card">
         <div className="mb-2 flex items-center justify-between"><h2>Perubahan terbaru</h2><Link href={`/admin/p/${slug}/activity`} className="text-sm text-accent">Lihat semua</Link></div>
         <ul className="divide-y divide-line">

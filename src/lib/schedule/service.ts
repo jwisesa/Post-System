@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { dependencies, scheduleItems, teamContacts, tracks, type ItemStatus } from "@/db/schema";
+import { attachments, comments, dependencies, scheduleItems, teamContacts, tracks, type ItemStatus } from "@/db/schema";
 import { InputError, record, requireRole, type Tx } from "../services";
 import { addDays, fmtRange, isDate } from "./dates";
 import { computeShift, wouldCycle, type Dep } from "./shift";
@@ -50,6 +50,13 @@ function checkDates(start: string, due: string) {
   if (start > due) throw new InputError("Tanggal mulai tidak boleh setelah due date.");
 }
 
+/** Links and comments point at items by id without a foreign key, so remove them with the items. */
+async function dropItemExtras(tx: Tx, itemIds: string[]) {
+  if (!itemIds.length) return;
+  await tx.delete(attachments).where(and(eq(attachments.targetType, "schedule_item"), inArray(attachments.targetId, itemIds)));
+  await tx.delete(comments).where(and(eq(comments.targetType, "schedule_item"), inArray(comments.targetId, itemIds)));
+}
+
 // ---------- tracks ----------
 
 export async function addTrack(db: Db, userId: string, projectId: string, input: { name: string; template: string; startDate: string }) {
@@ -78,6 +85,8 @@ export async function addTrack(db: Db, userId: string, projectId: string, input:
 export async function deleteTrack(db: Db, userId: string, projectId: string, trackId: string) {
   await requireRole(db, userId, projectId, "schedule.edit");
   await db.transaction(async (tx) => {
+    const ids = await tx.select({ id: scheduleItems.id }).from(scheduleItems).where(and(eq(scheduleItems.trackId, trackId), eq(scheduleItems.projectId, projectId)));
+    await dropItemExtras(tx, ids.map((i) => i.id));
     const [gone] = await tx.delete(tracks).where(and(eq(tracks.id, trackId), eq(tracks.projectId, projectId))).returning();
     if (gone) await record(tx, { projectId, userId, entity: "track", entityId: trackId, action: "delete", summary: `Menghapus track "${gone.name}" beserta isinya` });
   });
@@ -147,7 +156,8 @@ export async function deleteItem(db: Db, userId: string, projectId: string, item
   await requireRole(db, userId, projectId, "schedule.edit");
   await db.transaction(async (tx) => {
     const item = await loadItem(tx, projectId, itemId);
-    await tx.delete(scheduleItems).where(or(eq(scheduleItems.id, itemId), eq(scheduleItems.parentId, itemId)));
+    const gone = await tx.delete(scheduleItems).where(or(eq(scheduleItems.id, itemId), eq(scheduleItems.parentId, itemId))).returning({ id: scheduleItems.id });
+    await dropItemExtras(tx, gone.map((g) => g.id));
     await record(tx, { projectId, userId, entity: "schedule_item", entityId: itemId, action: "delete", summary: `Menghapus "${item.name}"`, before: item });
   });
 }

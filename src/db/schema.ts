@@ -172,3 +172,53 @@ export const dependencies = pgTable(
   },
   (t) => [primaryKey({ columns: [t.itemId, t.dependsOnId] })],
 );
+
+// ---------- attachments, versions, comments ----------
+
+export type TargetType = "schedule_item" | "project";
+export type AttachmentKind = "preview" | "asset" | "document";
+export type VersionStatus = "pending" | "approved" | "changes_requested";
+
+/** A named link (e.g. "Offline Cut") attached to a schedule item, or a project-level document. */
+export const attachments = pgTable("attachments", {
+  id: id(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  targetType: text("target_type").$type<TargetType>().notNull(),
+  targetId: uuid("target_id").notNull(),
+  kind: text("kind").$type<AttachmentKind>().notNull(),
+  label: text("label").notNull(),
+  internal: boolean("internal").notNull().default(false),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: createdAt(),
+});
+
+/** Every change to a link is a new version with a note on what changed. */
+export const attachmentVersions = pgTable("attachment_versions", {
+  id: id(),
+  attachmentId: uuid("attachment_id")
+    .notNull()
+    .references(() => attachments.id, { onDelete: "cascade" }),
+  number: integer("number").notNull(),
+  url: text("url").notNull(),
+  notes: text("notes").notNull().default(""),
+  status: text("status").$type<VersionStatus>().notNull().default("pending"),
+  statusBy: uuid("status_by").references(() => users.id),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: createdAt(),
+});
+
+export const comments = pgTable("comments", {
+  id: id(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  targetType: text("target_type").$type<TargetType>().notNull(),
+  targetId: uuid("target_id").notNull(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id),
+  body: text("body").notNull(),
+  createdAt: createdAt(),
+});

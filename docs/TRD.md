@@ -62,6 +62,9 @@ Sudah ada:
 | `tracks` | jalur paralel per project |
 | `schedule_items` | fase dan milestone (`parent_id`): tanggal, baseline, status, PIC, hard deadline, internal |
 | `dependencies` | finish-to-start antar `schedule_items` |
+| `attachments` | link bernama pada target `(target_type, target_id)`: item jadwal atau project; tipe, internal |
+| `attachment_versions` | nomor, url, catatan perubahan, status review, pembuat |
+| `comments` | target `(target_type, target_id)`, user, isi |
 | `audit_log` | entitas, aksi, ringkasan, before/after (JSONB), alasan, user, waktu |
 
 Tanggal jadwal disimpan sebagai `date` dan diperlakukan sebagai string `YYYY-MM-DD`;
@@ -71,16 +74,14 @@ Rancangan modul berikutnya:
 
 | Tabel | Isi |
 |---|---|
-| `attachments` | project, target (jenis + id), tipe (preview/aset/dokumen), label, url, internal |
-| `versions` | target (jenis + id), nomor, url, catatan perubahan, pembuat, status approval |
-| `comments` | target (jenis + id), user, isi |
 | `deliverables` | project, track, dimensi (konten, versi, resolusi, ratio, range, format, audio, bahasa), asal (dikirim/diturunkan), status, due, id preset |
 | `deliverable_presets` (katalog kode) | platform, versi spec, tanggal verifikasi, link spec, daftar item, aturan |
 | `shots`, `shot_lists` | hasil import XML/EDL: reel, timecode, track, marker, nama baru, status VFX, vendor |
 | `calendar_tokens` | token feed ICS per user/project |
 
-Attachment, version, dan comment memakai pasangan `(target_type, target_id)` supaya satu
-mekanisme berlaku untuk fase, milestone, deliverable, dan shot.
+Attachment dan comment memakai pasangan `(target_type, target_id)` tanpa foreign key, supaya
+satu mekanisme berlaku untuk fase, milestone, dan nanti deliverable serta shot. Karena itu
+layanan yang menghapus target wajib menghapus link dan komentarnya (`dropItemExtras`).
 
 ## 5. Hak akses
 
@@ -90,7 +91,8 @@ mekanisme berlaku untuk fase, milestone, deliverable, dan shot.
 |---|---|---|---|
 | `project.view` | ✓ | ✓ | lewat token |
 | `project.edit`, `tech.edit`, `access.manage`, `schedule.edit` | ✓ | – | – |
-| `team.edit`, `schedule.status` | ✓ | ✓ | – |
+| `team.edit`, `schedule.status`, `asset.edit`, `comment.add` | ✓ | ✓ | – |
+| `asset.approve` | ✓ | – | – |
 
 User yang bukan anggota project mendapat 404, bukan 403, agar keberadaan project tidak bocor.
 

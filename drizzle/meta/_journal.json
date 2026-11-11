@@ -15,6 +15,13 @@
       "when": 1794391459498,
       "tag": "0001_square_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794396357288,
+      "tag": "0002_opposite_the_hood",
+      "breakpoints": true
     }
   ]
 }

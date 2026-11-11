@@ -1,9 +1,12 @@
 "use client";
 
 import { addItemAction, addTrackAction, deleteItemAction, deleteTrackAction, rebaselineAction, setStatusAction, updateItemAction } from "@/app/admin/schedule-actions";
+import { LINK_LABELS } from "@/lib/assets/catalog";
+import type { Attachment, Comment } from "@/lib/assets/service";
 import { fmtDate, fmtRange } from "@/lib/schedule/dates";
 import type { Dep } from "@/lib/schedule/shift";
 import { STATUSES, statusLabel, TRACK_NAME_OPTIONS, TRACK_TEMPLATES } from "@/lib/schedule/templates";
+import { AttachmentList, CommentThread } from "../assets/AttachmentList";
 import { ConfirmButton } from "../ui/controls";
 import { isLate, slip, type Item, type Mode, type Track } from "./shared";
 
@@ -34,9 +37,10 @@ type ItemProps = {
   item: Item; track: Track; mode: Mode; slug: string; today: string;
   allItems: (Item & { trackName: string })[]; deps: Dep[]; contacts: { id: string; label: string }[];
   onLink: (itemId: string, dependsOnId: string) => void; onUnlink: (itemId: string, dependsOnId: string) => void;
+  attachments: Attachment[]; comments: Comment[]; me?: { id: string; role: string };
 };
 
-export function ItemPanel({ item, track, mode, slug, today, allItems, deps, contacts, onLink, onUnlink }: ItemProps) {
+export function ItemPanel({ item, track, mode, slug, today, allItems, deps, contacts, onLink, onUnlink, attachments, comments, me }: ItemProps) {
   const nameOf = (id: string) => { const i = allItems.find((x) => x.id === id); return i ? `${i.trackName} / ${i.name}` : "—"; };
   const preds = deps.filter((d) => d.itemId === item.id);
   const succs = deps.filter((d) => d.dependsOnId === item.id);
@@ -55,6 +59,18 @@ export function ItemPanel({ item, track, mode, slug, today, allItems, deps, cont
         </div>
         {slip(item) && <div className="muted text-xs">Baseline: {fmtRange(item.baselineStart, item.baselineDue)}</div>}
       </div>
+
+      <section className="space-y-2 border-t border-line pt-4">
+        <h3 className="text-xs font-medium text-muted">Link & versi</h3>
+        <AttachmentList attachments={attachments} target={{ type: "schedule_item", id: item.id }} slug={slug} canEdit={mode !== "view"} canApprove={mode === "edit"} labelOptions={LINK_LABELS} />
+      </section>
+
+      {mode !== "view" && me && (
+        <section className="space-y-2 border-t border-line pt-4">
+          <h3 className="text-xs font-medium text-muted">Komentar {comments.length > 0 && `(${comments.length})`}</h3>
+          <CommentThread comments={comments} target={{ type: "schedule_item", id: item.id }} slug={slug} me={me} />
+        </section>
+      )}
 
       {mode === "edit" && (
         <form key={`${item.id}:${item.startDate}:${item.dueDate}:${item.status}`} action={updateItemAction} className="space-y-3 border-t border-line pt-4">

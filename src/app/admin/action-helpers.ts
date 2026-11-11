@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
-import { getDb } from "@/db/client";
+import { getDb, type Db } from "@/db/client";
 import { ForbiddenError } from "@/lib/auth/permissions";
 import { requireUser } from "@/lib/auth/session";
 import * as s from "@/lib/services";
@@ -30,4 +30,22 @@ export async function finish(path: string, fn: () => Promise<unknown>): Promise<
   }
   revalidatePath(path);
   redirect(error ? `${path}?error=${encodeURIComponent(error)}` : path);
+}
+
+type Fail = { ok: false; error: string };
+
+/** For server functions called from client components: returns a result instead of redirecting. */
+export async function runForClient<T extends object>(slug: string, fn: (db: Db, userId: string, projectId: string) => Promise<T>): Promise<({ ok: true } & T) | Fail> {
+  const user = await requireUser();
+  const db = await getDb();
+  const row = await s.getProjectForUser(db, user.id, slug);
+  if (!row) return { ok: false, error: "Project tidak ditemukan." };
+  try {
+    const result = await fn(db, user.id, row.project.id);
+    revalidatePath(`/admin/p/${slug}`, "layout");
+    return { ok: true, ...result };
+  } catch (e) {
+    if (!isExpected(e)) throw e;
+    return { ok: false, error: e.message };
+  }
 }

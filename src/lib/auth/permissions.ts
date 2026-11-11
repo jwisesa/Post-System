@@ -7,9 +7,12 @@ export type Action =
   | "team.edit"
   | "access.manage"
   | "schedule.edit" // dates, structure, dependencies, baseline
-  | "schedule.status"; // status and notes only
+  | "schedule.status" // status and notes only
+  | "asset.edit" // links and versions
+  | "asset.approve" // version approval status
+  | "comment.add";
 
-const ASSISTANT: ReadonlySet<Action> = new Set(["project.view", "team.edit", "schedule.status"]);
+const ASSISTANT: ReadonlySet<Action> = new Set(["project.view", "team.edit", "schedule.status", "asset.edit", "comment.add"]);
 
 /** role = null means "not a member of this project". */
 export function can(role: Role | null, action: Action): boolean {

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { linkItems, quickStatus, shiftItem, undoShift, unlinkItems } from "@/app/admin/timeline-client-actions";
+import type { Attachment, Comment } from "@/lib/assets/service";
 import { addDays, diffDays, fmtDate, fmtRange } from "@/lib/schedule/dates";
 import type { DateMove, Schedule } from "@/lib/schedule/service";
 import { computeShift, wouldCycle } from "@/lib/schedule/shift";
@@ -35,9 +36,12 @@ function candidate(item: Item, kind: DragKind, delta: number): Pending {
   return { id: item.id, startDate, dueDate };
 }
 
-type Props = { schedule: Schedule; mode: Mode; slug: string; today: string; contacts: { id: string; label: string }[] };
+type Props = {
+  schedule: Schedule; mode: Mode; slug: string; today: string; contacts: { id: string; label: string }[];
+  attachments: Attachment[]; comments?: Comment[]; me?: { id: string; role: string };
+};
 
-export function TimelineBoard({ schedule, mode, slug, today, contacts }: Props) {
+export function TimelineBoard({ schedule, mode, slug, today, contacts, attachments, comments = [], me }: Props) {
   const toast = useToast();
   const editable = mode === "edit";
   const [, startTransition] = useTransition();
@@ -231,6 +235,8 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts }: Props) 
   }
   const days = zoom === "quarter" ? [] : Array.from({ length: total }, (_, n) => addDays(min, n)).map((d) => ({ d, dow: new Date(`${d}T00:00:00Z`).getUTCDay() }));
 
+  const linkCount = new Map<string, number>();
+  for (const a of attachments) if (a.targetType === "schedule_item") linkCount.set(a.targetId, (linkCount.get(a.targetId) ?? 0) + 1);
   const panelItem = panel?.kind === "item" ? byId.get(panel.id) : undefined;
   const panelTrack = panelItem ? tracks.find((t) => t.id === panelItem.trackId) : panel?.kind === "new" ? tracks.find((t) => t.id === panel.trackId) : undefined;
   const pendingItem = pending ? byId.get(pending.id) : undefined;
@@ -394,7 +400,9 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts }: Props) 
 
       {panel?.kind === "item" && panelItem && panelTrack && (
         <Drawer title={panelItem.name} onClose={() => setPanel(null)}>
-          <ItemPanel item={panelItem} track={panelTrack} mode={mode} slug={slug} today={today} allItems={allItems} deps={deps} contacts={contacts} onLink={addLink} onUnlink={removeLink} />
+          <ItemPanel item={panelItem} track={panelTrack} mode={mode} slug={slug} today={today} allItems={allItems} deps={deps} contacts={contacts} onLink={addLink} onUnlink={removeLink}
+            attachments={attachments.filter((a) => a.targetType === "schedule_item" && a.targetId === panelItem.id)}
+            comments={comments.filter((c) => c.targetType === "schedule_item" && c.targetId === panelItem.id)} me={me} />
         </Drawer>
       )}
       {panel?.kind === "new" && panelTrack && (
@@ -427,6 +435,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts }: Props) 
             {milestone && <span aria-hidden className="muted">◆ </span>}{item.name}
             {item.hardDeadline && <span className="ml-1 text-danger" title="Hard deadline">●</span>}
           </button>
+          {linkCount.get(item.id) && <span className="tag tag-accent shrink-0 !px-1.5" title={`${linkCount.get(item.id)} link`}>↗{linkCount.get(item.id)}</span>}
           <span className={`shrink-0 text-xs tabular-nums ${late ? "font-medium text-danger" : "muted"}`} title={late ? "Terlambat" : undefined}>
             {fmtDate(p.due).replace(/ \d{4}$/, "")}{slip(item) && <span className="text-warn"> {slip(item)}</span>}
           </span>

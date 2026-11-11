@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { AssetsOverview } from "@/components/assets/AssetsOverview";
 import { TeamDirectory } from "@/components/team-directory";
 import { TimelineBoard } from "@/components/timeline/TimelineBoard";
 import { Tabs, ThemeToggle } from "@/components/ui/controls";
@@ -27,7 +28,8 @@ export default async function ViewOnly({ params }: { params: Promise<{ token: st
       </header>
       <Tabs
         tabs={[
-          { id: "timeline", label: "Timeline", content: <TimelineBoard schedule={data.schedule} mode="view" slug="" today={today()} contacts={contacts} /> },
+          { id: "timeline", label: "Timeline", content: <TimelineBoard schedule={data.schedule} mode="view" slug="" today={today()} contacts={contacts} attachments={data.attachments} /> },
+          { id: "assets", label: "Aset & dokumen", content: <AssetsOverview projectId={data.project.id} schedule={data.schedule} attachments={data.attachments} slug="" canEdit={false} canApprove={false} /> },
           { id: "technical", label: "Technical Page", content: <TechSpecView spec={data.techSpec} /> },
           { id: "team", label: "Tim", content: <TeamDirectory team={data.team} /> },
         ]}

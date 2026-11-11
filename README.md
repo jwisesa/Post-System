@@ -7,7 +7,7 @@ Dokumen: [PRD](docs/PRD.md) · [TRD](docs/TRD.md)
 
 ## Status
 
-Langkah 1 (fondasi) dan 2 (timeline) dari 6 selesai:
+Modul 1 (fondasi), 2 (timeline), dan 3 (link, versi, komentar) dari 6 selesai:
 
 - Project dengan tipe produksi dan platform tujuan
 - **Technical Page** sebagai source of truth teknis (opsi siap-pilih + nilai custom)
@@ -26,7 +26,12 @@ Langkah 1 (fondasi) dan 2 (timeline) dari 6 selesai:
   saat menyeret, perubahan dikonfirmasi dulu, dan bisa diurungkan
 - Tema terang (bawaan) dan gelap; di layar ponsel timeline tampil sebagai agenda
 
-Berikutnya: attachment + versioning + komentar (3), deliverables (4),
+- **Link & versi**: link preview/aset/dokumen di tiap fase dan milestone; setiap perubahan
+  jadi versi baru dengan catatan apa yang direvisi dan status review
+- **Komentar** per item atas nama akun; **dokumen produksi** tingkat project
+- Halaman **Aset & dokumen** merangkum semua link beserta riwayat versinya
+
+Berikutnya: deliverables (4),
 dashboard + calendar feed (5), tool XML/EDL (6).
 
 ## Menjalankan
@@ -57,6 +62,7 @@ Tes browser end-to-end: lihat petunjuk di bagian atas `e2e/smoke.cjs`.
 - `src/db/schema.ts` — tabel; `drizzle/` — migrasi (`npm run db:generate` setelah mengubah skema)
 - `src/lib/services.ts` — semua baca/tulis; setiap mutasi memeriksa role dan menulis change log
 - `src/lib/schedule/` — logika geser jadwal (`shift.ts`), template track, layanan timeline
+- `src/lib/assets/` — link, versi, komentar, dan katalog nama siap-pilih
 - `src/lib/auth/` — password, sesi, hak akses (`can()`)
 - `src/lib/tech-spec/schema.ts` — field dan opsi Technical Page, default per tipe produksi
 - `src/app/admin/` — halaman admin; `src/app/v/[token]/` — halaman view-only
