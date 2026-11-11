@@ -100,6 +100,7 @@ export function Combobox({ name, options, defaultValue = "", placeholder, onValu
         className={changed ? "!border-warn" : undefined}
         onChange={(e) => { set(e.target.value); setOpen(true); setActive(-1); }}
         onFocus={() => options.length && setOpen(true)}
+        onBlur={() => setOpen(false)}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, shown.length - 1)); }
           else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }

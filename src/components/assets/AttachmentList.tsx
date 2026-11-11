@@ -13,7 +13,7 @@ const fmt = (iso: string) => when.format(new Date(iso));
 type Result = { ok: true } | { ok: false; error: string };
 
 /** Runs a server function, toasts the outcome, and reports success to the caller. */
-function useAct() {
+export function useAct() {
   const toast = useToast();
   const [busy, start] = useTransition();
   const act = (run: () => Promise<Result>, message: string, after?: () => void) =>
@@ -26,7 +26,7 @@ function useAct() {
 
 type ListProps = {
   attachments: Attachment[];
-  target: { type: "schedule_item" | "project"; id: string };
+  target: { type: "schedule_item" | "project" | "deliverable"; id: string };
   /** Empty slug = read-only (view-only link). */
   slug: string;
   canEdit: boolean;

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { attachments, attachmentVersions, comments, scheduleItems, users, type AttachmentKind, type TargetType, type VersionStatus } from "@/db/schema";
+import { attachments, attachmentVersions, comments, deliverables, scheduleItems, users, type AttachmentKind, type TargetType, type VersionStatus } from "@/db/schema";
 import { InputError, getRole, record, requireRole, type Tx } from "../services";
 import { KINDS, VERSION_STATUSES, versionStatus } from "./catalog";
 
@@ -17,6 +17,11 @@ async function targetName(tx: Tx | Db, projectId: string, targetType: string, ta
   if (targetType === "project") {
     if (targetId !== projectId) throw new InputError("Target tidak ditemukan.");
     return "Dokumen project";
+  }
+  if (targetType === "deliverable") {
+    const [d] = await tx.select({ name: deliverables.name }).from(deliverables).where(and(eq(deliverables.id, targetId), eq(deliverables.projectId, projectId)));
+    if (!d) throw new InputError("Deliverable tidak ditemukan.");
+    return `deliverable "${d.name}"`;
   }
   if (targetType !== "schedule_item") throw new InputError("Target tidak valid.");
   const [item] = await tx.select({ name: scheduleItems.name }).from(scheduleItems).where(and(eq(scheduleItems.id, targetId), eq(scheduleItems.projectId, projectId)));

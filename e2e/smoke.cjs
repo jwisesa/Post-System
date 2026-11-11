@@ -238,6 +238,60 @@ const daysBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / DAY;
   await sup.locator('[data-attachment="Script Report"]').waitFor();
   assert.ok(await sup.locator('section:has-text("Main Feature") [data-attachment="Offline Cut"]').isVisible());
   await shot(sup, "assets");
+  // ---- deliverables: preset, cutdown matrix, status, link + version, delete ----
+  await sup.goto(`${base}/deliverables`);
+  await sup.click("button:has-text('+ Dari preset')");
+  await sup.waitForSelector("aside >> text=Kebutuhan tim post");
+  await sup.fill('aside input[name="dueDate"]', "2027-03-20");
+  await shot(sup, "deliverables-preset");
+  await sup.click("aside button:has-text('Tambah 17 deliverable')");
+  await toast(sup, "17 deliverable ditambahkan").waitFor();
+  const dpxRow = sup.locator('tr[data-deliverable="DPX sequence (sumber DCP)"]');
+  await dpxRow.waitFor();
+  assert.ok((await dpxRow.textContent()).includes("4096x1716 (4K Scope)"), "resolution not inherited from Technical Page");
+  for (const n of ["Stereo (distribusi biasa)", "DME", "File seluruh musik (score & source)", "Music cue list"]) assert.ok(await sup.locator(`tr[data-deliverable="${n}"]`).isVisible(), n);
+  assert.equal(await sup.locator('tr[data-deliverable*="KDM"]').count(), 0);
+
+  await sup.click("button:has-text('+ Matriks cutdown')");
+  await sup.click('aside label.check:has-text("60s")');
+  await sup.waitForSelector("aside button:has-text('3 × 2 = 6 cutdown')");
+  await sup.click("aside button:has-text('3 × 2 = 6 cutdown')");
+  await toast(sup, "6 cutdown dibuat").waitFor();
+  const matrix = sup.locator("[data-matrix]");
+  await matrix.locator("tbody button").nth(5).waitFor();
+  assert.equal(await matrix.locator("tbody button").count(), 6);
+
+  await sup.selectOption('select[aria-label="Status DPX sequence (sumber DCP)"]', "qc");
+  await toast(sup, "QC").waitFor();
+  await sup.click('tr[data-deliverable="DPX sequence (sumber DCP)"] button');
+  const dDrawer = sup.locator("aside[role=dialog]");
+  await dDrawer.locator("summary:has-text('+ Tambah link')").click();
+  await dDrawer.locator('form:has(input[name="label"]) input[name="label"]').fill("Folder delivery");
+  await sup.keyboard.press("Tab");
+  await dDrawer.locator('form:has(input[name="url"]):has(input[name="label"]) input[name="url"]').fill("https://drive.google.com/dpx-v1");
+  await dDrawer.locator("button:has-text('Tambah link')").click();
+  const folder = dDrawer.locator('[data-attachment="Folder delivery"]');
+  await folder.locator(".tag:text-is('v1')").waitFor();
+  await folder.locator("summary:has-text('+ Versi baru (v2)')").click();
+  await folder.locator('input[name="url"]').fill("https://drive.google.com/dpx-v2");
+  await folder.locator('textarea[name="notes"]').fill("fix reel 3 frame 1021");
+  await folder.locator("button:has-text('Simpan versi')").click();
+  await folder.locator(".tag:text-is('v2')").waitFor();
+  await shot(sup, "deliverable-item");
+  await sup.keyboard.press("Escape");
+  assert.equal(await dpxRow.locator('a:has-text("Buka")').getAttribute("href"), "https://drive.google.com/dpx-v2");
+
+  // an internal manual item, and delete one preset item
+  await sup.click("button:has-text('+ Manual')");
+  await sup.fill('aside input[name="name"]', "Arsip LTO rahasia");
+  await sup.check('aside input[name="internal"]');
+  await sup.click("aside button:has-text('Tambah deliverable')");
+  await sup.locator('tr[data-deliverable="Arsip LTO rahasia"]').waitFor();
+  await sup.click('tr[data-deliverable="ProRes HD"] button');
+  await sup.click("aside button:text-is('Hapus')");
+  await sup.locator('tr[data-deliverable="ProRes HD"]').waitFor({ state: "detached" });
+  await shot(sup, "deliverables");
+
   await sup.goto(`${base}/timeline`);
   await bar(sup, "Delivery").waitFor();
   await sup.selectOption('select[aria-label="Status Ingest & Sync"]', "done");
@@ -273,6 +327,12 @@ const daysBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / DAY;
   await viewer.locator('aside [data-attachment="Offline Cut"] .tag:text-is("v2")').waitFor();
   assert.equal(await viewer.locator("aside form, aside textarea, aside button:has-text('Tandai')").count(), 0);
   await viewer.keyboard.press("Escape");
+  await viewer.click('[role="tab"]:has-text("Deliverables")');
+  const vPanel = viewer.locator('[role="tabpanel"]:not([hidden])');
+  await vPanel.locator('tr[data-deliverable="DPX sequence (sumber DCP)"] .tag:text-is("QC")').waitFor();
+  assert.equal(await vPanel.locator("select[aria-label^='Status '], button:has-text('+ Dari preset')").count(), 0);
+  assert.equal(await vPanel.locator("[data-matrix] tbody button").count(), 6);
+  assert.ok(!(await viewer.content()).includes("Arsip LTO rahasia"), "internal deliverable leaked to viewer");
   await viewer.click('[role="tab"]:has-text("Aset & dokumen")');
   await viewer.locator('[role="tabpanel"]:not([hidden]) [data-attachment="Script Report"]').waitFor();
   const viewerHtml = await viewer.content();
@@ -305,6 +365,10 @@ const daysBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / DAY;
   await asst.keyboard.press("Escape");
   await asst.selectOption('select[aria-label="Status Offline Edit"]', "in_progress");
   await toast(asst, "Berjalan").waitFor();
+  await asst.goto(`${base}/deliverables`);
+  assert.equal(await asst.locator("button:has-text('+ Dari preset')").count(), 0, "assistant can add deliverables");
+  await asst.selectOption('select[aria-label="Status Music cue list"]', "delivered");
+  await toast(asst, "Terkirim").waitFor();
   await asst.goto(`${base}/technical`);
   assert.equal(await asst.locator('input[name="frameRate"]').count(), 0);
   assert.ok((await asst.textContent("main")).includes("Hanya supervisor"));
@@ -315,7 +379,7 @@ const daysBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / DAY;
   // ---- change log ----
   await sup.goto(`${base}/activity`);
   const log = await sup.textContent("main");
-  for (const s of ["Frame rate: 24 → 25", "permintaan distributor", "menggeser 8 item lain", "director minta waktu", "Mengurungkan perubahan jadwal", '"Grading" kini menunggu "Music"', "Membuat link view-only", "Asisten", 'Menambah versi v2 untuk "Offline Cut"', "trim adegan 12, ganti musik temp", '"Offline Cut" v2: Approved', "Berkomentar di Offline Edit"]) {
+  for (const s of ["Frame rate: 24 → 25", "permintaan distributor", "menggeser 8 item lain", "director minta waktu", "Mengurungkan perubahan jadwal", '"Grading" kini menunggu "Music"', "Membuat link view-only", "Asisten", 'Menambah versi v2 untuk "Offline Cut"', "trim adegan 12, ganti musik temp", '"Offline Cut" v2: Approved', "Berkomentar di Offline Edit", 'dari preset "Film bioskop"', 'Membuat matriks cutdown "Trailer": 3 durasi × 2 ratio', 'Deliverable "DPX sequence (sumber DCP)": QC', 'Menghapus deliverable "ProRes HD"']) {
     assert.ok(log.includes(s), `change log missing: ${s}`);
   }
   await shot(sup, "activity");

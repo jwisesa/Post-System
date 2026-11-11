@@ -46,7 +46,7 @@ tests/  e2e/                unit dan browser
 5. **Data untuk viewer dibentuk di satu tempat** (`getViewerData`) dan memfilter item
    internal di query, bukan di tampilan.
 6. **Opsi siap-pilih hidup di kode sebagai katalog** (`tech-spec/schema.ts`,
-   `schedule/templates.ts`, nanti preset deliverables), bukan tersebar di komponen.
+   `schedule/templates.ts`, `deliverables/catalog.ts`), bukan tersebar di komponen.
 
 ## 4. Model data
 
@@ -65,6 +65,7 @@ Sudah ada:
 | `attachments` | link bernama pada target `(target_type, target_id)`: item jadwal atau project; tipe, internal |
 | `attachment_versions` | nomor, url, catatan perubahan, status review, pembuat |
 | `comments` | target `(target_type, target_id)`, user, isi |
+| `deliverables` | platform, kelompok, nama, `spec` JSONB (kunci divalidasi katalog), asal dikirim/diturunkan, status, due, track, internal, id + versi preset |
 | `audit_log` | entitas, aksi, ringkasan, before/after (JSONB), alasan, user, waktu |
 
 Tanggal jadwal disimpan sebagai `date` dan diperlakukan sebagai string `YYYY-MM-DD`;
@@ -74,14 +75,17 @@ Rancangan modul berikutnya:
 
 | Tabel | Isi |
 |---|---|
-| `deliverables` | project, track, dimensi (konten, versi, resolusi, ratio, range, format, audio, bahasa), asal (dikirim/diturunkan), status, due, id preset |
-| `deliverable_presets` (katalog kode) | platform, versi spec, tanggal verifikasi, link spec, daftar item, aturan |
 | `shots`, `shot_lists` | hasil import XML/EDL: reel, timecode, track, marker, nama baru, status VFX, vendor |
 | `calendar_tokens` | token feed ICS per user/project |
 
 Attachment dan comment memakai pasangan `(target_type, target_id)` tanpa foreign key, supaya
 satu mekanisme berlaku untuk fase, milestone, dan nanti deliverable serta shot. Karena itu
 layanan yang menghapus target wajib menghapus link dan komentarnya (`dropItemExtras`).
+
+Preset deliverables hidup di `src/lib/deliverables/catalog.ts`. Tiap preset wajib mengisi
+`specVersion`, `verifiedAt` (atau `null` bila belum dicek), dan `source`. Nilai spec berawalan
+`@` diisi dari Technical Page saat diterapkan (`resolveSpec`). Memperbarui preset tidak
+mengubah deliverable yang sudah dibuat; tiap item menyimpan `preset_version` asalnya.
 
 ## 5. Hak akses
 
@@ -92,7 +96,8 @@ layanan yang menghapus target wajib menghapus link dan komentarnya (`dropItemExt
 | `project.view` | ✓ | ✓ | lewat token |
 | `project.edit`, `tech.edit`, `access.manage`, `schedule.edit` | ✓ | – | – |
 | `team.edit`, `schedule.status`, `asset.edit`, `comment.add` | ✓ | ✓ | – |
-| `asset.approve` | ✓ | – | – |
+| `asset.approve`, `deliverable.edit` | ✓ | – | – |
+| `deliverable.status` | ✓ | ✓ | – |
 
 User yang bukan anggota project mendapat 404, bukan 403, agar keberadaan project tidak bocor.
 

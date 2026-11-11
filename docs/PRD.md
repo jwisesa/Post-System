@@ -84,9 +84,9 @@ Status: ✅ sudah dibangun · ⏳ belum.
   menampilkan link yang belum approved.
 - Viewer melihat link dan riwayat versinya, kecuali yang bertanda internal atau yang
   menempel pada item internal.
-- Belum: link pada deliverable dan shot (menyusul bersama modul 4 dan 6).
+- Link pada deliverable sudah ada (modul 4.4); pada shot menyusul bersama modul 6.
 
-### 4.4 Deliverables ⏳
+### 4.4 Deliverables ✅
 
 Deliverable dibentuk dari kombinasi opsi yang tinggal dipilih:
 
@@ -120,10 +120,26 @@ due date, link, dan riwayat versi.
 Aturan preset:
 
 - Preset **berversi dan bertanggal verifikasi**, dengan link ke spec resmi. Spesifikasi
-  platform sering berubah dan harus dicek ulang sebelum dipakai.
-- Membedakan item yang **dikirim** dari yang **diturunkan platform**.
-- Bisa memuat aturan antar item (mis. trailer tidak boleh Dolby Vision di Prime Video).
-- Deliverables mewarisi nilai dari Technical Page.
+  platform sering berubah dan harus dicek ulang sebelum dipakai. Preset yang belum pernah
+  dicek ke spec resmi (OTT lain, YouTube) ditandai jelas saat dipilih.
+- Membedakan item yang **dikirim** dari yang **diturunkan platform** (tanpa status dan due).
+- Aturan antar item (mis. trailer tidak boleh Dolby Vision di Prime Video) ditampilkan
+  sebagai catatan saat memilih preset; belum divalidasi otomatis.
+- Deliverables mewarisi resolusi master dan aspect ratio dari Technical Page saat preset
+  diterapkan.
+
+Perilaku yang sudah dibangun:
+
+- Item preset bisa dikurangi sebelum diterapkan (item opsional tidak dicentang secara
+  bawaan); menerapkan preset yang sama dua kali tidak menggandakan.
+- Deliverable bisa dikaitkan ke track (mis. Trailer) dan diberi due date sendiri.
+- Status bisa diubah langsung dari baris, juga oleh assistant; membuat, mengubah definisi,
+  dan menghapus hanya oleh supervisor.
+- Link berversi menempel di tiap deliverable (mekanisme yang sama dengan modul 4.3).
+- Ringkasan project menampilkan progres dan deliverable yang due dalam 7 hari atau terlambat.
+- Viewer melihat daftar, status, dan link, kecuali yang bertanda internal.
+- Belum: due date deliverable belum terhubung ke timeline (tidak ikut bergeser), dan belum
+  ada aksi massal (ubah status/hapus banyak item sekaligus).
 
 ### 4.5 Dashboard dan notifikasi ⏳
 

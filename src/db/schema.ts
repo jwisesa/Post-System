@@ -175,7 +175,7 @@ export const dependencies = pgTable(
 
 // ---------- attachments, versions, comments ----------
 
-export type TargetType = "schedule_item" | "project";
+export type TargetType = "schedule_item" | "project" | "deliverable";
 export type AttachmentKind = "preview" | "asset" | "document";
 export type VersionStatus = "pending" | "approved" | "changes_requested";
 
@@ -220,5 +220,32 @@ export const comments = pgTable("comments", {
     .notNull()
     .references(() => users.id),
   body: text("body").notNull(),
+  createdAt: createdAt(),
+});
+
+// ---------- deliverables ----------
+
+export type DeliverableStatus = "not_started" | "in_progress" | "qc" | "delivered" | "accepted" | "rejected";
+
+export const deliverables = pgTable("deliverables", {
+  id: id(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  trackId: uuid("track_id").references(() => tracks.id, { onDelete: "set null" }),
+  platform: text("platform").notNull().default(""),
+  groupName: text("group_name").notNull().default(""),
+  name: text("name").notNull(),
+  /** Known keys only: see SPEC_FIELDS in lib/deliverables/catalog. */
+  spec: jsonb("spec").$type<Record<string, string>>().notNull().default({}),
+  /** "derived" = produced by the platform from another deliverable; tracked for reference, not delivered. */
+  origin: text("origin").$type<"delivered" | "derived">().notNull().default("delivered"),
+  status: text("status").$type<DeliverableStatus>().notNull().default("not_started"),
+  dueDate: date("due_date", { mode: "string" }),
+  notes: text("notes").notNull().default(""),
+  internal: boolean("internal").notNull().default(false),
+  presetId: text("preset_id"),
+  presetVersion: text("preset_version"),
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: createdAt(),
 });

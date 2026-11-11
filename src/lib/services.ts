@@ -307,6 +307,9 @@ export async function getViewerData(db: Db, token: string) {
   const schedule = await getSchedule(db, row.project.id, { includeInternal: false });
   const visible = new Set(schedule.tracks.flatMap((t) => t.items.map((i) => i.id)));
   // Links on hidden items stay hidden; comments are never sent to viewers.
+  const { listDeliverables } = await import("./deliverables/service");
+  const deliverables = await listDeliverables(db, row.project.id, { includeInternal: false });
+  for (const d of deliverables) visible.add(d.id);
   const attachments = (await listAttachments(db, row.project.id, { includeInternal: false })).filter((a) => a.targetType === "project" || visible.has(a.targetId));
   return {
     project: row.project,
@@ -315,6 +318,7 @@ export async function getViewerData(db: Db, token: string) {
     team: await getTeam(db, row.project.id, { includeInternal: false }),
     schedule,
     attachments,
+    deliverables,
   };
 }
 

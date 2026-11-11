@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AssetsOverview } from "@/components/assets/AssetsOverview";
+import { DeliverablesBoard } from "@/components/deliverables/DeliverablesBoard";
 import { TeamDirectory } from "@/components/team-directory";
 import { TimelineBoard } from "@/components/timeline/TimelineBoard";
 import { Tabs, ThemeToggle } from "@/components/ui/controls";
@@ -29,6 +30,7 @@ export default async function ViewOnly({ params }: { params: Promise<{ token: st
       <Tabs
         tabs={[
           { id: "timeline", label: "Timeline", content: <TimelineBoard schedule={data.schedule} mode="view" slug="" today={today()} contacts={contacts} attachments={data.attachments} /> },
+          { id: "deliverables", label: "Deliverables", content: <DeliverablesBoard deliverables={data.deliverables} attachments={data.attachments} tracks={data.schedule.tracks.map((t) => ({ id: t.id, name: t.name }))} techSpec={data.techSpec} slug="" mode="view" today={today()} /> },
           { id: "assets", label: "Aset & dokumen", content: <AssetsOverview projectId={data.project.id} schedule={data.schedule} attachments={data.attachments} slug="" canEdit={false} canApprove={false} /> },
           { id: "technical", label: "Technical Page", content: <TechSpecView spec={data.techSpec} /> },
           { id: "team", label: "Tim", content: <TeamDirectory team={data.team} /> },

@@ -24,3 +24,6 @@ export const DOCUMENT_LABELS = [
   "Script", "Lined Script", "Script Report", "Camera Report", "Sound Report", "Grab Still", "Storyboard", "Shot List", "Call Sheet",
   "Lab / DIT Report", "Music Cue List", "Delivery Spec Sheet", "Budget Post", "Kontrak Vendor",
 ];
+
+/** Suggested names for links on deliverables. */
+export const DELIVERABLE_LINK_LABELS = ["File master", "Folder delivery", "Preview / screener", "QC report", "Bukti kirim", "Checksum / MD5", "Catatan revisi platform"];

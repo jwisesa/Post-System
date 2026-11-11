@@ -14,6 +14,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
     <>
       <NavLink href={base} exact>Ringkasan</NavLink>
       <NavLink href={`${base}/timeline`}>Timeline</NavLink>
+      <NavLink href={`${base}/deliverables`}>Deliverables</NavLink>
       <NavLink href={`${base}/assets`}>Aset & dokumen</NavLink>
       <NavLink href={`${base}/technical`}>Technical Page</NavLink>
       <NavLink href={`${base}/team`}>Tim</NavLink>

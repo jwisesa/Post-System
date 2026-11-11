@@ -7,7 +7,7 @@ Dokumen: [PRD](docs/PRD.md) · [TRD](docs/TRD.md)
 
 ## Status
 
-Modul 1 (fondasi), 2 (timeline), dan 3 (link, versi, komentar) dari 6 selesai:
+Modul 1 (fondasi), 2 (timeline), 3 (link, versi, komentar), dan 4 (deliverables) dari 6 selesai:
 
 - Project dengan tipe produksi dan platform tujuan
 - **Technical Page** sebagai source of truth teknis (opsi siap-pilih + nilai custom)
@@ -31,7 +31,11 @@ Modul 1 (fondasi), 2 (timeline), dan 3 (link, versi, komentar) dari 6 selesai:
 - **Komentar** per item atas nama akun; **dokumen produksi** tingkat project
 - Halaman **Aset & dokumen** merangkum semua link beserta riwayat versinya
 
-Berikutnya: deliverables (4),
+- **Deliverables**: checklist dari preset per platform (Bioskop, materi promo, Netflix,
+  Prime Video, OTT lain, YouTube), matriks cutdown durasi × ratio, status per item, due date,
+  dan link berversi; spesifikasi mewarisi nilai dari Technical Page
+
+Berikutnya:
 dashboard + calendar feed (5), tool XML/EDL (6).
 
 ## Menjalankan
@@ -63,6 +67,7 @@ Tes browser end-to-end: lihat petunjuk di bagian atas `e2e/smoke.cjs`.
 - `src/lib/services.ts` — semua baca/tulis; setiap mutasi memeriksa role dan menulis change log
 - `src/lib/schedule/` — logika geser jadwal (`shift.ts`), template track, layanan timeline
 - `src/lib/assets/` — link, versi, komentar, dan katalog nama siap-pilih
+- `src/lib/deliverables/` — katalog opsi + preset platform (`catalog.ts`) dan layanannya
 - `src/lib/auth/` — password, sesi, hak akses (`can()`)
 - `src/lib/tech-spec/schema.ts` — field dan opsi Technical Page, default per tipe produksi
 - `src/app/admin/` — halaman admin; `src/app/v/[token]/` — halaman view-only
