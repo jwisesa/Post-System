@@ -22,11 +22,11 @@ export function ProjectFields({ project }: Props) {
         <input name="unitCount" type="number" min={1} defaultValue={project?.unitCount ?? ""} />
       </label>
       <fieldset className="md:col-span-3">
-        <legend className="mb-1 text-xs font-medium text-neutral-600">Platform tujuan</legend>
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <legend className="mb-1.5 text-xs font-medium text-muted">Platform tujuan</legend>
+        <div className="flex flex-wrap gap-2">
           {PLATFORMS.map((p) => (
-            <label key={p} className="flex items-center gap-1">
-              <input type="checkbox" name="platforms" value={p} defaultChecked={project?.platforms.includes(p)} /> {p}
+            <label key={p} className="check rounded-full border border-line px-3 py-1 has-checked:border-accent has-checked:bg-accent-soft has-checked:text-accent">
+              <input type="checkbox" name="platforms" value={p} defaultChecked={project?.platforms.includes(p)} className="sr-only" /> {p}
             </label>
           ))}
         </div>

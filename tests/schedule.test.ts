@@ -158,6 +158,26 @@ describe("schedule service", () => {
     await expect(sch.setItemStatus(db, asst, projectId, offline.id, { status: "bogus", notes: "" })).rejects.toBeInstanceOf(s.InputError);
   });
 
+  it("applyMoves restores exact dates (undo) and is supervisor-only; overview counts", async () => {
+    const qc = await find("QC");
+    const mastering = await find("Mastering");
+    const r = await sch.applyShift(db, sup, projectId, qc.id, { startDate: qc.startDate, dueDate: addDays(qc.dueDate, 2), cascade: true });
+    expect((await find("Mastering")).startDate).toBe(addDays(mastering.startDate, 2));
+    const undo = r.moves.map((m) => ({ id: m.id, startDate: m.oldStart, dueDate: m.oldDue }));
+    await expect(sch.applyMoves(db, asst, projectId, undo, "x")).rejects.toBeInstanceOf(ForbiddenError);
+    await sch.applyMoves(db, sup, projectId, undo, "Mengurungkan perubahan jadwal");
+    expect((await find("Mastering")).startDate).toBe(mastering.startDate);
+    expect((await find("QC")).dueDate).toBe(qc.dueDate);
+    expect((await s.listActivity(db, projectId))[0].entry.summary).toBe("Mengurungkan perubahan jadwal");
+
+    const o = (await sch.getProjectsOverview(db, [projectId], "2027-01-01")).get(projectId)!;
+    expect(o.total).toBeGreaterThan(15);
+    expect(o.late).toBeGreaterThan(0); // Ingest & Sync was due in December
+    expect(o.next!.dueDate >= "2027-01-01").toBe(true);
+    await sch.setItemStatus(db, asst, projectId, qc.id, { status: "review" }); // notes omitted = kept
+    expect((await find("QC")).status).toBe("review");
+  });
+
   it("internal items and their milestones are hidden from viewers", async () => {
     const offline = await find("Offline Edit");
     await sch.updateItemDetails(db, sup, projectId, offline.id, { name: "Offline Edit", picContactId: null, hardDeadline: false, internal: true });

@@ -30,15 +30,15 @@ export default async function ShiftPreview({ params, searchParams }: { params: P
       <input type="hidden" name="itemId" value={q.item} />
       <input type="hidden" name="startDate" value={q.start} />
       <input type="hidden" name="dueDate" value={q.due} />
-      <h2>Dampak perubahan jadwal “{all.item.name}”</h2>
-      <p className="text-sm text-neutral-500">Belum ada yang disimpan. Periksa dampaknya, lalu pilih cara menerapkannya.</p>
+      <h1>Dampak perubahan jadwal “{all.item.name}”</h1>
+      <p className="muted text-sm">Belum ada yang disimpan. Periksa dampaknya, lalu pilih cara menerapkannya.</p>
 
-      <section className="card">
+      <section className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead><tr><th>Item</th><th>Sekarang</th><th>Menjadi</th><th>Due</th></tr></thead>
           <tbody>
             {all.moves.map((m) => (
-              <tr key={m.id} className={`border-t border-neutral-100 ${m.id === q.item ? "font-medium" : ""}`}>
+              <tr key={m.id} className={`border-t border-line ${m.id === q.item ? "font-medium" : ""}`}>
                 <td>{m.name}</td>
                 <td>{fmtRange(m.oldStart, m.oldDue)}</td>
                 <td>{fmtRange(m.newStart, m.newDue)}</td>
@@ -50,13 +50,13 @@ export default async function ShiftPreview({ params, searchParams }: { params: P
       </section>
 
       {all.conflicts.length > 0 && (
-        <section role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+        <section role="alert" className="rounded-lg border border-danger bg-danger-soft p-3 text-sm text-danger">
           <div className="font-medium">Bentrok jika semua yang bergantung ikut digeser:</div>
           <ul className="list-disc pl-5">{all.conflicts.map((c) => <li key={c}>{c}</li>)}</ul>
         </section>
       )}
       {single.conflicts.length > 0 && (
-        <section className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        <section className="rounded-lg border border-warn bg-warn-soft p-3 text-sm text-warn">
           <div className="font-medium">Bentrok jika hanya item ini yang diubah:</div>
           <ul className="list-disc pl-5">{single.conflicts.map((c) => <li key={c}>{c}</li>)}</ul>
         </section>
@@ -66,8 +66,8 @@ export default async function ShiftPreview({ params, searchParams }: { params: P
         <label><span>Alasan perubahan (opsional)</span><input name="reason" defaultValue={q.reason} /></label>
         <div className="flex flex-wrap items-center gap-3">
           {others.length > 0 && <button name="mode" value="cascade" className="btn">Terapkan dan geser {others.length} item yang bergantung</button>}
-          <button name="mode" value="single" className="btn">Ubah item ini saja</button>
-          <Link href={`/admin/p/${slug}/timeline`} className="text-sm underline">Batal</Link>
+          <button name="mode" value="single" className="btn-secondary">Ubah item ini saja</button>
+          <Link href={`/admin/p/${slug}/timeline`} className="btn-ghost">Batal</Link>
         </div>
       </div>
     </form>

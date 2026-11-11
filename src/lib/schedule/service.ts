@@ -130,13 +130,13 @@ export async function updateItemDetails(db: Db, userId: string, projectId: strin
   });
 }
 
-export async function setItemStatus(db: Db, userId: string, projectId: string, itemId: string, input: { status: string; notes: string }) {
+export async function setItemStatus(db: Db, userId: string, projectId: string, itemId: string, input: { status: string; notes?: string }) {
   await requireRole(db, userId, projectId, "schedule.status");
   const status = STATUSES.find((s) => s.value === input.status)?.value as ItemStatus | undefined;
   if (!status) throw new InputError("Status tidak valid.");
-  const notes = input.notes.trim();
   await db.transaction(async (tx) => {
     const item = await loadItem(tx, projectId, itemId);
+    const notes = input.notes === undefined ? item.notes : input.notes.trim(); // omitted = keep
     if (item.status === status && item.notes === notes) return;
     await tx.update(scheduleItems).set({ status, notes }).where(eq(scheduleItems.id, itemId));
     await record(tx, { projectId, userId, entity: "schedule_item", entityId: itemId, action: "update", summary: `Memperbarui status "${item.name}"`, before: { status: item.status, notes: item.notes }, after: { status, notes } });
@@ -232,4 +232,40 @@ export async function rebaseline(db: Db, userId: string, projectId: string, reas
     }
     await record(tx, { projectId, userId, entity: "schedule", entityId: projectId, action: "update", summary: "Menetapkan jadwal saat ini sebagai baseline baru", reason: reason.trim() });
   });
+}
+
+export type DateMove = { id: string; startDate: string; dueDate: string };
+
+/** Sets exact dates on several items at once (used to undo a shift). One change-log entry. */
+export async function applyMoves(db: Db, userId: string, projectId: string, moves: DateMove[], summary: string) {
+  await requireRole(db, userId, projectId, "schedule.edit");
+  for (const m of moves) checkDates(m.startDate, m.dueDate);
+  await db.transaction(async (tx) => {
+    const { items } = await loadGraph(tx, projectId);
+    const byId = new Map(items.map((i) => [i.id, i]));
+    const before: Record<string, string> = {};
+    const after: Record<string, string> = {};
+    for (const m of moves) {
+      const item = byId.get(m.id);
+      if (!item) throw new InputError("Item jadwal tidak ditemukan.");
+      if (item.startDate === m.startDate && item.dueDate === m.dueDate) continue;
+      await tx.update(scheduleItems).set({ startDate: m.startDate, dueDate: m.dueDate }).where(eq(scheduleItems.id, m.id));
+      before[item.name] = fmtRange(item.startDate, item.dueDate);
+      after[item.name] = fmtRange(m.startDate, m.dueDate);
+    }
+    if (Object.keys(after).length) await record(tx, { projectId, userId, entity: "schedule", entityId: projectId, action: "update", summary, before, after });
+  });
+}
+
+/** Per-project numbers for the project list: late items, next deadline, progress. */
+export async function getProjectsOverview(db: Db, projectIds: string[], today: string) {
+  const rows = projectIds.length ? await db.select().from(scheduleItems).where(inArray(scheduleItems.projectId, projectIds)) : [];
+  return new Map(
+    projectIds.map((id) => {
+      const items = rows.filter((r) => r.projectId === id);
+      const open = items.filter((i) => i.status !== "done");
+      const next = open.filter((i) => i.dueDate >= today).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+      return [id, { total: items.length, done: items.length - open.length, late: open.filter((i) => i.dueDate < today).length, next: next ? { name: next.name, dueDate: next.dueDate } : null }];
+    }),
+  );
 }

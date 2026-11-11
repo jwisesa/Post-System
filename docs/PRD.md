@@ -49,7 +49,7 @@ Status: ✅ sudah dibangun · ⏳ belum.
   perlu diberi akses, tanda internal.
 - **Change log**: siapa mengubah apa, kapan, nilai lama → baru, dan alasannya.
 
-### 4.2 Timeline ✅ (interaksi drag sedang dibangun)
+### 4.2 Timeline ✅
 
 - **Track paralel** per project: Main Feature, Trailer, Teaser, First Look, dan lainnya.
   Materi promo punya jadwal sendiri dan bisa deliver lebih dulu dari filmnya.
@@ -63,6 +63,10 @@ Status: ✅ sudah dibangun · ⏳ belum.
 - **Baseline**: jadwal awal disimpan sehingga selisihnya terlihat per item.
 - Status, PIC, catatan progress, dan penanda terlambat per item.
 - Pergeseran dihitung dalam hari kalender.
+- **Interaksi**: seret batang untuk memindah, tarik ujung untuk memperpanjang, seret titik
+  di kanan batang ke item lain untuk membuat dependency, klik panah untuk melepasnya.
+  Dampak tampil langsung saat menyeret; perubahan dikonfirmasi dulu dan bisa diurungkan.
+  Setiap aksi juga bisa dilakukan lewat panel detail (tanpa drag) dan keyboard.
 
 ### 4.3 Attachment, versioning, komentar ⏳
 

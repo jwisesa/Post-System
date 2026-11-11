@@ -5,7 +5,7 @@ import { addDays, diffDays, fmtDate } from "./dates";
 export type SItem = { id: string; name: string; parentId: string | null; startDate: string; dueDate: string; hardDeadline: boolean };
 export type Dep = { itemId: string; dependsOnId: string };
 export type Move = { id: string; name: string; oldStart: string; oldDue: string; newStart: string; newDue: string };
-export type ShiftResult = { moves: Move[]; conflicts: string[] };
+export type ShiftResult = { moves: Move[]; conflicts: string[]; conflictIds: string[] };
 
 /**
  * cascade = true: everything that (transitively) depends on the item moves by
@@ -42,17 +42,19 @@ export function computeShift(items: SItem[], deps: Dep[], itemId: string, newSta
 
   // A moved predecessor now ends on/after the start of something that stayed put.
   const conflicts: string[] = [];
+  const conflictIds: string[] = [];
   for (const d of deps) {
     const pred = moves.get(d.dependsOnId);
     const succ = byId.get(d.itemId);
     if (!pred || !succ || moves.has(succ.id)) continue;
     if (pred.newDue >= succ.startDate) {
+      conflictIds.push(succ.id);
       conflicts.push(
         `"${pred.name}" selesai ${fmtDate(pred.newDue)}, menabrak ${succ.hardDeadline ? "hard deadline " : ""}"${succ.name}" (mulai ${fmtDate(succ.startDate)}).`,
       );
     }
   }
-  return { moves: [...moves.values()], conflicts };
+  return { moves: [...moves.values()], conflicts, conflictIds };
 }
 
 /** True when making itemId depend on dependsOnId would create a loop. */

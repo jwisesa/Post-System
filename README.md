@@ -21,6 +21,10 @@ Langkah 1 (fondasi) dan 2 (timeline) dari 6 selesai:
 - Perubahan tanggal dipratinjau dulu: item yang bergantung ikut bergeser, hard deadline
   tidak ikut bergeser dan dilaporkan sebagai bentrok
 - Baseline vs jadwal aktual, status per item, penanda terlambat
+- **Timeline interaktif**: seret batang untuk memindah, tarik ujungnya untuk memperpanjang,
+  seret titik di kanan batang ke item lain untuk membuat dependency; dampak tampil langsung
+  saat menyeret, perubahan dikonfirmasi dulu, dan bisa diurungkan
+- Tema terang (bawaan) dan gelap; di layar ponsel timeline tampil sebagai agenda
 
 Berikutnya: attachment + versioning + komentar (3), deliverables (4),
 dashboard + calendar feed (5), tool XML/EDL (6).

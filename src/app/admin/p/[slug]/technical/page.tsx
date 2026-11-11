@@ -1,58 +1,47 @@
+import { TechForm, type FieldHistory } from "@/components/tech-form";
 import { ErrorBanner, TechSpecView } from "@/components/views";
 import { can } from "@/lib/auth/permissions";
 import { loadProject } from "@/lib/project-context";
-import { getTechSpec } from "@/lib/services";
-import { TECH_SECTIONS } from "@/lib/tech-spec/schema";
-import { updateTechSpecAction } from "../../../actions";
+import { getTechSpec, listActivity } from "@/lib/services";
+
+const fmt = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeZone: "Asia/Jakarta" });
 
 export default async function Technical({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string }> }) {
   const { slug } = await params;
   const { error } = await searchParams;
   const { db, project, role } = await loadProject(slug);
   const spec = await getTechSpec(db, project.id);
+  const head = (
+    <div>
+      <h1>Technical Page</h1>
+      <p className="muted mt-1 text-sm">Sumber kebenaran teknis project ini. Pilih dari opsi yang tersedia atau ketik nilai sendiri.</p>
+    </div>
+  );
 
   if (!can(role, "tech.edit")) {
     return (
       <>
-        <p className="text-sm text-neutral-500">Hanya supervisor yang bisa mengubah Technical Page.</p>
+        {head}
+        <p className="tag tag-warn">Hanya supervisor yang bisa mengubah Technical Page.</p>
         <TechSpecView spec={spec} />
       </>
     );
   }
 
+  const history: FieldHistory = {};
+  for (const { entry, userName } of await listActivity(db, project.id, 500)) {
+    if (entry.entity !== "tech_spec") continue;
+    const before = (entry.before ?? {}) as Record<string, string>;
+    for (const [key, to] of Object.entries((entry.after ?? {}) as Record<string, string>)) {
+      (history[key] ??= []).push({ who: userName ?? "—", when: fmt.format(entry.createdAt), from: before[key] ?? "", to });
+    }
+  }
+
   return (
-    <form action={updateTechSpecAction} className="space-y-4">
+    <>
+      {head}
       <ErrorBanner message={error} />
-      <input type="hidden" name="slug" value={slug} />
-      <p className="text-sm text-neutral-500">Pilih dari opsi yang tersedia atau ketik nilai sendiri. Setiap perubahan tercatat di change log.</p>
-      <div className="grid gap-4 md:grid-cols-2">
-        {TECH_SECTIONS.map((section) => (
-          <section key={section.title} className="card space-y-3">
-            <h2>{section.title}</h2>
-            {section.fields.map((f) => (
-              <label key={f.key}>
-                <span>{f.label}</span>
-                {f.key === "notes" ? (
-                  <textarea name={f.key} rows={5} defaultValue={spec[f.key]} />
-                ) : (
-                  <>
-                    <input name={f.key} list={f.options.length ? `opt-${f.key}` : undefined} defaultValue={spec[f.key]} placeholder={f.hint} />
-                    {f.options.length > 0 && (
-                      <datalist id={`opt-${f.key}`}>
-                        {f.options.map((o) => <option key={o} value={o} />)}
-                      </datalist>
-                    )}
-                  </>
-                )}
-              </label>
-            ))}
-          </section>
-        ))}
-      </div>
-      <div className="card flex items-end gap-3">
-        <label className="flex-1"><span>Alasan perubahan (opsional)</span><input name="reason" /></label>
-        <button className="btn">Simpan Technical Page</button>
-      </div>
-    </form>
+      <TechForm key={JSON.stringify(spec)} slug={slug} spec={spec} history={history} />
+    </>
   );
 }
