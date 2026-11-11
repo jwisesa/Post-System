@@ -1,36 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { getDb } from "@/db/client";
-import { ForbiddenError, type Role } from "@/lib/auth/permissions";
+import type { Role } from "@/lib/auth/permissions";
 import { requireUser, signIn, signOut } from "@/lib/auth/session";
 import * as s from "@/lib/services";
+import { ctx, finish, flag, str } from "./action-helpers";
 import { PLATFORMS, PRODUCTION_TYPES, TECH_FIELDS } from "@/lib/tech-spec/schema";
-
-const str = (f: FormData, k: string) => String(f.get(k) ?? "");
-const flag = (f: FormData, k: string) => f.get(k) === "on";
-
-async function ctx(f: FormData) {
-  const user = await requireUser();
-  const db = await getDb();
-  const row = await s.getProjectForUser(db, user.id, str(f, "slug"));
-  if (!row) notFound();
-  return { db, user, project: row.project };
-}
-
-/** Runs a mutation, then returns to `path`; expected failures come back as ?error=. */
-async function finish(path: string, fn: () => Promise<unknown>): Promise<never> {
-  let error = "";
-  try {
-    await fn();
-  } catch (e) {
-    if (!(e instanceof s.InputError || e instanceof ForbiddenError)) throw e;
-    error = e.message;
-  }
-  revalidatePath(path);
-  redirect(error ? `${path}?error=${encodeURIComponent(error)}` : path);
-}
 
 function projectInput(f: FormData): s.ProjectInput {
   const type = str(f, "productionType");

@@ -1,5 +1,6 @@
 import {
   boolean,
+  date,
   integer,
   jsonb,
   pgTable,
@@ -121,3 +122,53 @@ export const auditLog = pgTable("audit_log", {
   reason: text("reason").notNull().default(""),
   createdAt: createdAt(),
 });
+
+// ---------- schedule ----------
+
+export const tracks = pgTable("tracks", {
+  id: id(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), // Main Feature, Trailer, Teaser, ...
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: createdAt(),
+});
+
+export type ItemStatus = "not_started" | "in_progress" | "review" | "done" | "on_hold";
+
+export const scheduleItems = pgTable("schedule_items", {
+  id: id(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  trackId: uuid("track_id")
+    .notNull()
+    .references(() => tracks.id, { onDelete: "cascade" }),
+  parentId: uuid("parent_id"), // set for milestones inside a phase
+  name: text("name").notNull(),
+  startDate: date("start_date", { mode: "string" }).notNull(),
+  dueDate: date("due_date", { mode: "string" }).notNull(),
+  baselineStart: date("baseline_start", { mode: "string" }).notNull(),
+  baselineDue: date("baseline_due", { mode: "string" }).notNull(),
+  status: text("status").$type<ItemStatus>().notNull().default("not_started"),
+  picContactId: uuid("pic_contact_id").references(() => teamContacts.id, { onDelete: "set null" }),
+  hardDeadline: boolean("hard_deadline").notNull().default(false),
+  internal: boolean("internal").notNull().default(false),
+  notes: text("notes").notNull().default(""),
+  createdAt: createdAt(),
+});
+
+/** Finish-to-start: itemId cannot start before dependsOnId is due. */
+export const dependencies = pgTable(
+  "dependencies",
+  {
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => scheduleItems.id, { onDelete: "cascade" }),
+    dependsOnId: uuid("depends_on_id")
+      .notNull()
+      .references(() => scheduleItems.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.itemId, t.dependsOnId] })],
+);

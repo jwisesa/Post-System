@@ -60,6 +60,38 @@ async function login(page, email, password) {
     await sup.waitForSelector(`text=${who}`);
   }
 
+  // timeline: track from template, shift Picture Lock +3 days via the preview page
+  await sup.goto(`${base}/timeline`);
+  await sup.selectOption('select[name="template"]', "feature");
+  await sup.fill('form:has(select[name="template"]) input[name="startDate"]', "2026-12-01");
+  await sup.click("button:has-text('Tambah track')");
+  await sup.waitForSelector("h2:has-text('Main Feature')");
+  const itemRow = (n) => sup.locator("details", { has: sup.locator(`summary:has-text("${n}")`) }).first();
+  const deliveryBefore = await itemRow("Delivery").locator('input[name="dueDate"]').inputValue();
+  const lock = itemRow("Picture Lock");
+  await lock.locator("summary").click();
+  const lockDue = await lock.locator('input[name="dueDate"]').inputValue();
+  const plus3 = new Date(Date.parse(lockDue) + 3 * 864e5).toISOString().slice(0, 10);
+  const lockForm = lock.locator('form:has(input[name="dueDate"])');
+  await lockForm.locator('input[name="startDate"]').fill(plus3);
+  await lockForm.locator('input[name="dueDate"]').fill(plus3);
+  await lockForm.locator('input[name="reason"]').fill("director minta waktu");
+  await lockForm.locator("button:has-text('Simpan')").click();
+  await sup.waitForURL(/timeline\/shift/);
+  assert.ok((await sup.textContent("main")).includes("geser 8 item"));
+  if (SHOT) await sup.screenshot({ path: `${SHOT}/shift.png`, fullPage: true });
+  // nothing saved yet
+  const peek = await (await sup.context().newPage());
+  await peek.goto(`${base}/timeline`);
+  assert.equal(await peek.locator("details", { has: peek.locator('summary:has-text("Delivery")') }).first().locator('input[name="dueDate"]').inputValue(), deliveryBefore);
+  await peek.close();
+  await sup.click("button:has-text('Terapkan dan geser')");
+  await sup.waitForURL(/timeline$/);
+  const deliveryAfter = await itemRow("Delivery").locator('input[name="dueDate"]').inputValue();
+  assert.equal((Date.parse(deliveryAfter) - Date.parse(deliveryBefore)) / 864e5, 3);
+  assert.ok((await itemRow("Delivery").locator("summary").textContent()).includes("+3 hr dari baseline"));
+  if (SHOT) await sup.screenshot({ path: `${SHOT}/timeline.png`, fullPage: true });
+
   // access: assistant account + view-only link
   await sup.goto(`${base}/access`);
   const asstEmail = `asst${Date.now()}@example.com`;
@@ -76,7 +108,7 @@ async function login(page, email, password) {
   const viewer = await (await browser.newContext()).newPage();
   await viewer.goto(viewUrl);
   const body = await viewer.textContent("body");
-  assert.ok(body.includes(name) && body.includes("Budi Editor") && body.includes("25"));
+  assert.ok(body.includes(name) && body.includes("Budi Editor") && body.includes("25") && body.includes("Picture Lock"));
   assert.ok(!body.includes("Vendor Rahasia"), "internal contact leaked to viewer");
   assert.equal(await viewer.locator("main").locator("form, input, button").count(), 0);
   if (SHOT) await viewer.screenshot({ path: `${SHOT}/viewer.png`, fullPage: true });
@@ -91,13 +123,16 @@ async function login(page, email, password) {
   assert.equal(await asst.locator('input[name="frameRate"]').count(), 0);
   assert.ok((await asst.textContent("body")).includes("Hanya supervisor"));
   assert.equal((await asst.goto(`${base}/access`)).status(), 404);
+  await asst.goto(`${base}/timeline`);
+  assert.equal(await asst.locator('input[name="dueDate"]').count(), 0);
+  assert.ok((await asst.locator("button:has-text('Simpan status')").count()) > 0);
   await asst.goto(`${base}/team`);
   assert.ok((await asst.textContent("body")).includes("Vendor Rahasia"));
 
   // change log attributes the edit
   await sup.goto(`${base}/activity`);
   const log = await sup.textContent("main");
-  assert.ok(log.includes("Frame rate: 24 → 25") && log.includes("permintaan distributor") && log.includes("Membuat link view-only"));
+  assert.ok(log.includes("Frame rate: 24 → 25") && log.includes("permintaan distributor") && log.includes("Membuat link view-only") && log.includes("menggeser 8 item lain"));
   if (SHOT) await sup.screenshot({ path: `${SHOT}/activity.png`, fullPage: true });
 
   // revoke -> 404

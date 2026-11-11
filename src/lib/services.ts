@@ -17,7 +17,7 @@ import { hashPassword } from "./auth/password";
 import { assertCan, type Role } from "./auth/permissions";
 import { DEFAULT_TEAM_GROUPS, defaultTechSpec, parseTechSpec, TECH_FIELDS } from "./tech-spec/schema";
 
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export class InputError extends Error {}
 
@@ -33,7 +33,7 @@ export type Change = {
   reason?: string;
 };
 
-function record(tx: Tx, c: Change) {
+export function record(tx: Tx, c: Change) {
   return tx.insert(auditLog).values({ ...c, reason: c.reason ?? "" });
 }
 
@@ -50,7 +50,7 @@ export async function getRole(db: Db, userId: string, projectId: string): Promis
   return m?.role ?? null;
 }
 
-async function requireRole(db: Db, userId: string, projectId: string, action: Parameters<typeof assertCan>[1]) {
+export async function requireRole(db: Db, userId: string, projectId: string, action: Parameters<typeof assertCan>[1]) {
   assertCan(await getRole(db, userId, projectId), action);
 }
 
@@ -307,6 +307,7 @@ export async function getViewerData(db: Db, token: string) {
     label: row.label,
     techSpec: await getTechSpec(db, row.project.id),
     team: await getTeam(db, row.project.id, { includeInternal: false }),
+    schedule: await (await import("./schedule/service")).getSchedule(db, row.project.id, { includeInternal: false }),
   };
 }
 

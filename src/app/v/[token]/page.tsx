@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ProjectSummary, TeamView, TechSpecView } from "@/components/views";
+import { ScheduleView } from "@/components/schedule-view";
 import { getDb } from "@/db/client";
 import { getViewerData } from "@/lib/services";
 
@@ -17,6 +18,8 @@ export default async function ViewOnly({ params }: { params: Promise<{ token: st
         <h1>{data.project.name}</h1>
       </header>
       <section className="card"><ProjectSummary project={data.project} /></section>
+      <h2>Timeline</h2>
+      <ScheduleView schedule={data.schedule} />
       <h2>Technical Page</h2>
       <TechSpecView spec={data.techSpec} />
       <h2>Tim</h2>

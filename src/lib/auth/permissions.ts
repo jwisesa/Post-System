@@ -5,9 +5,11 @@ export type Action =
   | "project.edit"
   | "tech.edit"
   | "team.edit"
-  | "access.manage";
+  | "access.manage"
+  | "schedule.edit" // dates, structure, dependencies, baseline
+  | "schedule.status"; // status and notes only
 
-const ASSISTANT: ReadonlySet<Action> = new Set(["project.view", "team.edit"]);
+const ASSISTANT: ReadonlySet<Action> = new Set(["project.view", "team.edit", "schedule.status"]);
 
 /** role = null means "not a member of this project". */
 export function can(role: Role | null, action: Action): boolean {

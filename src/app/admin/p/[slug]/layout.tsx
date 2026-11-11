@@ -8,6 +8,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
   const base = `/admin/p/${slug}`;
   const tabs = [
     { href: base, label: "Ringkasan" },
+    { href: `${base}/timeline`, label: "Timeline" },
     { href: `${base}/technical`, label: "Technical Page" },
     { href: `${base}/team`, label: "Tim" },
     ...(can(role, "access.manage") ? [{ href: `${base}/access`, label: "Akses" }] : []),
