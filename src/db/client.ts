@@ -22,9 +22,19 @@ async function createPostgresDb(url: string): Promise<Db> {
   const { default: postgres } = await import("postgres");
   const { drizzle } = await import("drizzle-orm/postgres-js");
   const { migrate } = await import("drizzle-orm/postgres-js/migrator");
-  // prepare:false is required by transaction-mode poolers (Supabase port 6543).
-  // A small pool keeps serverless instances from exhausting the database's connections.
-  const client = postgres(url, { prepare: false, max: Number(process.env.DB_POOL_MAX) || 3, connect_timeout: 15 });
+  // Settings for transaction-mode poolers (Supabase Supavisor, port 6543):
+  // - prepare:false: no named prepared statements across pooled backends.
+  // - max_pipeline:1: never send a second query on a connection before the first has
+  //   answered. Pipelined queries hung in production (backends stuck in ClientRead) as soon
+  //   as a page ran several queries at once.
+  // - small pool + idle_timeout: serverless instances must not hoard connections.
+  const client = postgres(url, {
+    prepare: false,
+    max_pipeline: 1,
+    max: Number(process.env.DB_POOL_MAX) || 5,
+    idle_timeout: 20,
+    connect_timeout: 15,
+  });
   const db = drizzle(client, { schema });
   try {
     await migrate(db, MIGRATE);

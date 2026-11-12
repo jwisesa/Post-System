@@ -74,7 +74,8 @@ untuk disalin saat meminta bantuan.
 - Migrasi database (`drizzle/`) ikut dalam setiap deploy dan dijalankan saat koneksi pertama.
 - Semua tabel memakai Row Level Security tanpa policy, jadi tidak terjangkau lewat API
   Supabase (anon key); hanya aplikasi, lewat `DATABASE_URL`, yang bisa membaca dan menulis.
-- Koneksi memakai pool kecil (`DB_POOL_MAX`, bawaan 3) dan `prepare: false`, sesuai pooler
-  Supabase mode transaction.
+- Koneksi memakai pool kecil (`DB_POOL_MAX`, bawaan 5), `prepare: false`, dan tanpa pipelining
+  (`max_pipeline: 1`), sesuai pooler Supabase mode transaction. Dengan pipelining, halaman
+  yang menjalankan beberapa query sekaligus menggantung.
 - Di Vercel aplikasi menolak berjalan tanpa `DATABASE_URL`, supaya data tidak tersimpan di
   database sementara yang hilang saat restart.
