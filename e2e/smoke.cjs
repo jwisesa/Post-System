@@ -67,6 +67,24 @@ const daysBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / DAY;
   sup.on("pageerror", (e) => errors.push(e.message));
   const name = `E2E Film ${Date.now()}`;
 
+  // ---- first-run setup (only when E2E_SETUP_KEY is given: fresh database, no account yet) ----
+  if (process.env.E2E_SETUP_KEY) {
+    await sup.goto(`${BASE}/setup`);
+    await sup.fill('input[name="key"]', "kunci-salah");
+    await sup.fill('input[name="name"]', "Jalu");
+    await sup.fill('input[name="email"]', EMAIL);
+    await sup.fill('input[name="password"]', PASSWORD);
+    await sup.click("button:has-text('Buat akun')");
+    await sup.waitForSelector("text=Setup key salah.");
+    await sup.fill('input[name="key"]', process.env.E2E_SETUP_KEY);
+    await sup.fill('input[name="name"]', "Jalu");
+    await sup.fill('input[name="email"]', EMAIL);
+    await sup.fill('input[name="password"]', PASSWORD);
+    await sup.click("button:has-text('Buat akun')");
+    await sup.waitForURL(/\/admin\/login/);
+  }
+  assert.equal((await sup.goto(`${BASE}/setup`)).status(), 404, "/setup must be closed once an account exists");
+
   // ---- auth + project ----
   await sup.goto(`${BASE}/admin`);
   assert.match(sup.url(), /\/admin\/login/);

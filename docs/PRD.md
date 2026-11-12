@@ -141,7 +141,7 @@ Perilaku yang sudah dibangun:
 - Belum: due date deliverable belum terhubung ke timeline (tidak ikut bergeser), dan belum
   ada aksi massal (ubah status/hapus banyak item sekaligus).
 
-### 4.5 Dashboard, kalender, laporan ✅ (notifikasi ⏳)
+### 4.5 Dashboard, kalender, laporan ✅
 
 - **Hari Ini** (halaman pertama tiap project): due hari ini, terlambat, 7 hari ke depan,
   hard deadline berikutnya beserta sisa hari, progres deliverables, link yang belum approved,
@@ -160,8 +160,8 @@ Perilaku yang sudah dibangun:
   menunggu review, perubahan 7 hari terakhir; ramah cetak/PDF, plus tombol salin ringkasan
   teks untuk WhatsApp/email.
 - Viewer mendapat tab "Hari Ini" versi baca.
-- **Belum**: notifikasi push dan email otomatis (butuh aplikasi yang sudah di-deploy, kunci
-  push, dan penyedia email), serta pengiriman laporan mingguan otomatis.
+- **Notifikasi email tidak dibuat** (keputusan supervisor); pengingat lewat kalender.
+- **Belum**: notifikasi push dan pengiriman laporan mingguan otomatis.
 
 ### 4.6 Tool XML/EDL ⏳
 

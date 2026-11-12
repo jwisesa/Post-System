@@ -3,7 +3,7 @@
 Sistem manajemen pasca produksi berbasis web: satu sumber data per project untuk
 teknis, tim, jadwal, aset, dan deliverables.
 
-Dokumen: [PRD](docs/PRD.md) · [TRD](docs/TRD.md)
+Dokumen: [PRD](docs/PRD.md) · [TRD](docs/TRD.md) · [Panduan deploy](docs/DEPLOY.md)
 
 ## Status
 
@@ -54,7 +54,8 @@ npm run dev
 Buka `http://localhost:3000/admin`.
 
 Tanpa `DATABASE_URL`, data disimpan di Postgres embedded (PGlite) di folder `.data/`.
-Untuk produksi, set `DATABASE_URL` ke Postgres (mis. Supabase); migrasi dijalankan otomatis.
+Untuk produksi lihat [docs/DEPLOY.md](docs/DEPLOY.md): set `DATABASE_URL` ke Postgres (Supabase),
+migrasi dijalankan otomatis, dan akun pertama dibuat lewat `/setup`.
 
 ## Pemeriksaan
 

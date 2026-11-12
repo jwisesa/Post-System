@@ -1,6 +1,6 @@
 // All reads and writes go through here. Every mutation checks the caller's
 // role and writes an audit_log row in the same transaction.
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import {
@@ -68,6 +68,21 @@ export async function createUser(db: Db, input: { name: string; email: string; p
     .values({ name, email, passwordHash: await hashPassword(input.password) })
     .returning({ id: users.id, name: users.name, email: users.email });
   return u;
+}
+
+export async function hasAnyUser(db: Db): Promise<boolean> {
+  return (await db.select({ id: users.id }).from(users).limit(1)).length > 0;
+}
+
+/**
+ * One-time bootstrap for a fresh deployment: creates the first account when the
+ * users table is empty and the typed key matches SETUP_KEY. Disabled without a key.
+ */
+export async function createFirstAdmin(db: Db, setupKey: string | undefined, input: { key: string; name: string; email: string; password: string }) {
+  if (!setupKey || (await hasAnyUser(db))) throw new InputError("Setup sudah tidak tersedia.");
+  const digest = (v: string) => createHash("sha256").update(v).digest();
+  if (!timingSafeEqual(digest(input.key), digest(setupKey))) throw new InputError("Setup key salah.");
+  return createUser(db, input);
 }
 
 // ---------- projects ----------

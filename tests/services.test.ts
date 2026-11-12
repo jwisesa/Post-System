@@ -38,6 +38,26 @@ describe("permissions", () => {
   });
 });
 
+describe("first-admin setup", () => {
+  const input = { key: "kunci-rahasia", name: "Admin", email: "admin@x.id", password: "password1" };
+
+  it("is closed once any user exists, whatever the key", async () => {
+    expect(await s.hasAnyUser(db)).toBe(true);
+    await expect(s.createFirstAdmin(db, "kunci-rahasia", input)).rejects.toBeInstanceOf(s.InputError);
+  });
+
+  it("on an empty database: needs SETUP_KEY set and matching, then closes", async () => {
+    const fresh = await createPgliteDb();
+    expect(await s.hasAnyUser(fresh)).toBe(false);
+    await expect(s.createFirstAdmin(fresh, undefined, input)).rejects.toBeInstanceOf(s.InputError);
+    await expect(s.createFirstAdmin(fresh, "", { ...input, key: "" })).rejects.toBeInstanceOf(s.InputError);
+    await expect(s.createFirstAdmin(fresh, "kunci-rahasia", { ...input, key: "salah" })).rejects.toThrow("Setup key salah.");
+    expect(await s.hasAnyUser(fresh)).toBe(false);
+    expect((await s.createFirstAdmin(fresh, "kunci-rahasia", input)).email).toBe("admin@x.id");
+    await expect(s.createFirstAdmin(fresh, "kunci-rahasia", { ...input, email: "b@x.id" })).rejects.toBeInstanceOf(s.InputError);
+  });
+});
+
 describe("projects", () => {
   it("creator is supervisor; tech spec and team groups are seeded", async () => {
     expect(await s.getRole(db, sup, projectId)).toBe("supervisor");

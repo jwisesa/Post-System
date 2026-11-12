@@ -152,6 +152,13 @@ log berisi tanggal lama → baru semua item terdampak.
 
 ## 10. Deploy
 
-Belum di-deploy. Rencana: Vercel untuk aplikasi, Supabase untuk Postgres. Set `DATABASE_URL`;
-migrasi berjalan saat koneksi pertama. Akun admin pertama dibuat dengan
-`npm run create-admin`.
+Vercel untuk aplikasi, Supabase untuk Postgres; langkah lengkap di [DEPLOY.md](./DEPLOY.md).
+
+- `DATABASE_URL` wajib di Vercel; tanpa itu `getDb()` gagal dengan pesan jelas (PGlite hanya
+  untuk lokal). Koneksi gagal tidak di-cache, permintaan berikutnya mencoba lagi.
+- Migrasi dibaca dari `drizzle/` saat runtime, jadi folder itu dimasukkan ke trace semua
+  route lewat `outputFileTracingIncludes` di `next.config.ts`.
+- Akun pertama dibuat di `/setup` (`createFirstAdmin`): hanya saat tabel `users` kosong dan
+  kunci cocok dengan `SETUP_KEY`. Lokal tetap bisa memakai `npm run create-admin`.
+- Diuji: build produksi (`next start`) terhadap Postgres 16 dengan pool 1 koneksi, seluruh
+  `e2e/smoke.cjs` lulus. Belum diuji terhadap pooler Supabase sungguhan.
