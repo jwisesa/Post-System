@@ -1,12 +1,225 @@
 {
-  "id": "1b64e2fc-bc90-44c4-b140-ee97ea203d91",
+  "id": "189654e1-5224-4db6-a9a1-6e5e264c76c1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.audit_log": {
+    "post_system.attachment_versions": {
+      "name": "attachment_versions",
+      "schema": "post_system",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "attachment_id": {
+          "name": "attachment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "number": {
+          "name": "number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "status_by": {
+          "name": "status_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "attachment_versions_attachment_id_attachments_id_fk": {
+          "name": "attachment_versions_attachment_id_attachments_id_fk",
+          "tableFrom": "attachment_versions",
+          "tableTo": "attachments",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "attachment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "attachment_versions_status_by_users_id_fk": {
+          "name": "attachment_versions_status_by_users_id_fk",
+          "tableFrom": "attachment_versions",
+          "tableTo": "users",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "status_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "attachment_versions_created_by_users_id_fk": {
+          "name": "attachment_versions_created_by_users_id_fk",
+          "tableFrom": "attachment_versions",
+          "tableTo": "users",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "post_system.attachments": {
+      "name": "attachments",
+      "schema": "post_system",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_type": {
+          "name": "target_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "internal": {
+          "name": "internal",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "attachments_project_id_projects_id_fk": {
+          "name": "attachments_project_id_projects_id_fk",
+          "tableFrom": "attachments",
+          "tableTo": "projects",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "attachments_created_by_users_id_fk": {
+          "name": "attachments_created_by_users_id_fk",
+          "tableFrom": "attachments",
+          "tableTo": "users",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "post_system.audit_log": {
       "name": "audit_log",
-      "schema": "",
+      "schema": "post_system",
       "columns": {
         "id": {
           "name": "id",
@@ -84,6 +297,7 @@
           "name": "audit_log_project_id_projects_id_fk",
           "tableFrom": "audit_log",
           "tableTo": "projects",
+          "schemaTo": "post_system",
           "columnsFrom": [
             "project_id"
           ],
@@ -97,6 +311,7 @@
           "name": "audit_log_user_id_users_id_fk",
           "tableFrom": "audit_log",
           "tableTo": "users",
+          "schemaTo": "post_system",
           "columnsFrom": [
             "user_id"
           ],
@@ -113,9 +328,400 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.project_members": {
+    "post_system.calendar_tokens": {
+      "name": "calendar_tokens",
+      "schema": "post_system",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "calendar_tokens_project_id_projects_id_fk": {
+          "name": "calendar_tokens_project_id_projects_id_fk",
+          "tableFrom": "calendar_tokens",
+          "tableTo": "projects",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "calendar_tokens_user_id_users_id_fk": {
+          "name": "calendar_tokens_user_id_users_id_fk",
+          "tableFrom": "calendar_tokens",
+          "tableTo": "users",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "calendar_tokens_token_unique": {
+          "name": "calendar_tokens_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "post_system.comments": {
+      "name": "comments",
+      "schema": "post_system",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_type": {
+          "name": "target_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "comments_project_id_projects_id_fk": {
+          "name": "comments_project_id_projects_id_fk",
+          "tableFrom": "comments",
+          "tableTo": "projects",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "comments_user_id_users_id_fk": {
+          "name": "comments_user_id_users_id_fk",
+          "tableFrom": "comments",
+          "tableTo": "users",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "post_system.deliverables": {
+      "name": "deliverables",
+      "schema": "post_system",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "track_id": {
+          "name": "track_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "platform": {
+          "name": "platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "group_name": {
+          "name": "group_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "spec": {
+          "name": "spec",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'delivered'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'not_started'"
+        },
+        "due_date": {
+          "name": "due_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "internal": {
+          "name": "internal",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "preset_id": {
+          "name": "preset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "preset_version": {
+          "name": "preset_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "deliverables_project_id_projects_id_fk": {
+          "name": "deliverables_project_id_projects_id_fk",
+          "tableFrom": "deliverables",
+          "tableTo": "projects",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "deliverables_track_id_tracks_id_fk": {
+          "name": "deliverables_track_id_tracks_id_fk",
+          "tableFrom": "deliverables",
+          "tableTo": "tracks",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "track_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "post_system.dependencies": {
+      "name": "dependencies",
+      "schema": "post_system",
+      "columns": {
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "depends_on_id": {
+          "name": "depends_on_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "dependencies_item_id_schedule_items_id_fk": {
+          "name": "dependencies_item_id_schedule_items_id_fk",
+          "tableFrom": "dependencies",
+          "tableTo": "schedule_items",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "dependencies_depends_on_id_schedule_items_id_fk": {
+          "name": "dependencies_depends_on_id_schedule_items_id_fk",
+          "tableFrom": "dependencies",
+          "tableTo": "schedule_items",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "depends_on_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "dependencies_item_id_depends_on_id_pk": {
+          "name": "dependencies_item_id_depends_on_id_pk",
+          "columns": [
+            "item_id",
+            "depends_on_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "post_system.project_members": {
       "name": "project_members",
-      "schema": "",
+      "schema": "post_system",
       "columns": {
         "project_id": {
           "name": "project_id",
@@ -142,6 +748,7 @@
           "name": "project_members_project_id_projects_id_fk",
           "tableFrom": "project_members",
           "tableTo": "projects",
+          "schemaTo": "post_system",
           "columnsFrom": [
             "project_id"
           ],
@@ -155,6 +762,7 @@
           "name": "project_members_user_id_users_id_fk",
           "tableFrom": "project_members",
           "tableTo": "users",
+          "schemaTo": "post_system",
           "columnsFrom": [
             "user_id"
           ],
@@ -179,9 +787,9 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.projects": {
+    "post_system.projects": {
       "name": "projects",
-      "schema": "",
+      "schema": "post_system",
       "columns": {
         "id": {
           "name": "id",
@@ -252,9 +860,168 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.sessions": {
+    "post_system.schedule_items": {
+      "name": "schedule_items",
+      "schema": "post_system",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "track_id": {
+          "name": "track_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "due_date": {
+          "name": "due_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "baseline_start": {
+          "name": "baseline_start",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "baseline_due": {
+          "name": "baseline_due",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'not_started'"
+        },
+        "pic_contact_id": {
+          "name": "pic_contact_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hard_deadline": {
+          "name": "hard_deadline",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "internal": {
+          "name": "internal",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "schedule_items_project_id_projects_id_fk": {
+          "name": "schedule_items_project_id_projects_id_fk",
+          "tableFrom": "schedule_items",
+          "tableTo": "projects",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "schedule_items_track_id_tracks_id_fk": {
+          "name": "schedule_items_track_id_tracks_id_fk",
+          "tableFrom": "schedule_items",
+          "tableTo": "tracks",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "track_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "schedule_items_pic_contact_id_team_contacts_id_fk": {
+          "name": "schedule_items_pic_contact_id_team_contacts_id_fk",
+          "tableFrom": "schedule_items",
+          "tableTo": "team_contacts",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "pic_contact_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "post_system.sessions": {
       "name": "sessions",
-      "schema": "",
+      "schema": "post_system",
       "columns": {
         "token_hash": {
           "name": "token_hash",
@@ -281,6 +1048,7 @@
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
           "tableTo": "users",
+          "schemaTo": "post_system",
           "columnsFrom": [
             "user_id"
           ],
@@ -297,9 +1065,9 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.share_links": {
+    "post_system.share_links": {
       "name": "share_links",
-      "schema": "",
+      "schema": "post_system",
       "columns": {
         "id": {
           "name": "id",
@@ -352,6 +1120,7 @@
           "name": "share_links_project_id_projects_id_fk",
           "tableFrom": "share_links",
           "tableTo": "projects",
+          "schemaTo": "post_system",
           "columnsFrom": [
             "project_id"
           ],
@@ -365,6 +1134,7 @@
           "name": "share_links_created_by_users_id_fk",
           "tableFrom": "share_links",
           "tableTo": "users",
+          "schemaTo": "post_system",
           "columnsFrom": [
             "created_by"
           ],
@@ -389,9 +1159,9 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.team_contacts": {
+    "post_system.team_contacts": {
       "name": "team_contacts",
-      "schema": "",
+      "schema": "post_system",
       "columns": {
         "id": {
           "name": "id",
@@ -495,6 +1265,7 @@
           "name": "team_contacts_project_id_projects_id_fk",
           "tableFrom": "team_contacts",
           "tableTo": "projects",
+          "schemaTo": "post_system",
           "columnsFrom": [
             "project_id"
           ],
@@ -508,6 +1279,7 @@
           "name": "team_contacts_group_id_team_groups_id_fk",
           "tableFrom": "team_contacts",
           "tableTo": "team_groups",
+          "schemaTo": "post_system",
           "columnsFrom": [
             "group_id"
           ],
@@ -524,9 +1296,9 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.team_groups": {
+    "post_system.team_groups": {
       "name": "team_groups",
-      "schema": "",
+      "schema": "post_system",
       "columns": {
         "id": {
           "name": "id",
@@ -561,6 +1333,7 @@
           "name": "team_groups_project_id_projects_id_fk",
           "tableFrom": "team_groups",
           "tableTo": "projects",
+          "schemaTo": "post_system",
           "columnsFrom": [
             "project_id"
           ],
@@ -577,9 +1350,9 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.tech_specs": {
+    "post_system.tech_specs": {
       "name": "tech_specs",
-      "schema": "",
+      "schema": "post_system",
       "columns": {
         "project_id": {
           "name": "project_id",
@@ -608,6 +1381,7 @@
           "name": "tech_specs_project_id_projects_id_fk",
           "tableFrom": "tech_specs",
           "tableTo": "projects",
+          "schemaTo": "post_system",
           "columnsFrom": [
             "project_id"
           ],
@@ -624,9 +1398,70 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.users": {
+    "post_system.tracks": {
+      "name": "tracks",
+      "schema": "post_system",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tracks_project_id_projects_id_fk": {
+          "name": "tracks_project_id_projects_id_fk",
+          "tableFrom": "tracks",
+          "tableTo": "projects",
+          "schemaTo": "post_system",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "post_system.users": {
       "name": "users",
-      "schema": "",
+      "schema": "post_system",
       "columns": {
         "id": {
           "name": "id",

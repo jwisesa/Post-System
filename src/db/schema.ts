@@ -3,18 +3,21 @@ import {
   date,
   integer,
   jsonb,
-  pgTable,
+  pgSchema,
   primaryKey,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 
+// Everything lives in its own schema so the app can share a database with other apps.
+const ps = pgSchema("post_system");
+
 const id = () => uuid("id").primaryKey().defaultRandom();
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
-export const users = pgTable("users", {
+export const users = ps.table("users", {
   id: id(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
@@ -22,7 +25,7 @@ export const users = pgTable("users", {
   createdAt: createdAt(),
 });
 
-export const sessions = pgTable("sessions", {
+export const sessions = ps.table("sessions", {
   tokenHash: text("token_hash").primaryKey(),
   userId: uuid("user_id")
     .notNull()
@@ -30,7 +33,7 @@ export const sessions = pgTable("sessions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
 
-export const projects = pgTable("projects", {
+export const projects = ps.table("projects", {
   id: id(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
@@ -41,7 +44,7 @@ export const projects = pgTable("projects", {
   createdAt: createdAt(),
 });
 
-export const projectMembers = pgTable(
+export const projectMembers = ps.table(
   "project_members",
   {
     projectId: uuid("project_id")
@@ -55,7 +58,7 @@ export const projectMembers = pgTable(
   (t) => [primaryKey({ columns: [t.projectId, t.userId] })],
 );
 
-export const shareLinks = pgTable("share_links", {
+export const shareLinks = ps.table("share_links", {
   id: id(),
   projectId: uuid("project_id")
     .notNull()
@@ -67,7 +70,7 @@ export const shareLinks = pgTable("share_links", {
   createdAt: createdAt(),
 });
 
-export const techSpecs = pgTable("tech_specs", {
+export const techSpecs = ps.table("tech_specs", {
   projectId: uuid("project_id")
     .primaryKey()
     .references(() => projects.id, { onDelete: "cascade" }),
@@ -77,7 +80,7 @@ export const techSpecs = pgTable("tech_specs", {
     .defaultNow(),
 });
 
-export const teamGroups = pgTable("team_groups", {
+export const teamGroups = ps.table("team_groups", {
   id: id(),
   projectId: uuid("project_id")
     .notNull()
@@ -86,7 +89,7 @@ export const teamGroups = pgTable("team_groups", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
-export const teamContacts = pgTable("team_contacts", {
+export const teamContacts = ps.table("team_contacts", {
   id: id(),
   projectId: uuid("project_id")
     .notNull()
@@ -107,7 +110,7 @@ export const teamContacts = pgTable("team_contacts", {
   createdAt: createdAt(),
 });
 
-export const auditLog = pgTable("audit_log", {
+export const auditLog = ps.table("audit_log", {
   id: id(),
   projectId: uuid("project_id")
     .notNull()
@@ -125,7 +128,7 @@ export const auditLog = pgTable("audit_log", {
 
 // ---------- schedule ----------
 
-export const tracks = pgTable("tracks", {
+export const tracks = ps.table("tracks", {
   id: id(),
   projectId: uuid("project_id")
     .notNull()
@@ -137,7 +140,7 @@ export const tracks = pgTable("tracks", {
 
 export type ItemStatus = "not_started" | "in_progress" | "review" | "done" | "on_hold";
 
-export const scheduleItems = pgTable("schedule_items", {
+export const scheduleItems = ps.table("schedule_items", {
   id: id(),
   projectId: uuid("project_id")
     .notNull()
@@ -161,7 +164,7 @@ export const scheduleItems = pgTable("schedule_items", {
 });
 
 /** Finish-to-start: itemId cannot start before dependsOnId is due. */
-export const dependencies = pgTable(
+export const dependencies = ps.table(
   "dependencies",
   {
     itemId: uuid("item_id")
@@ -181,7 +184,7 @@ export type AttachmentKind = "preview" | "asset" | "document";
 export type VersionStatus = "pending" | "approved" | "changes_requested";
 
 /** A named link (e.g. "Offline Cut") attached to a schedule item, or a project-level document. */
-export const attachments = pgTable("attachments", {
+export const attachments = ps.table("attachments", {
   id: id(),
   projectId: uuid("project_id")
     .notNull()
@@ -196,7 +199,7 @@ export const attachments = pgTable("attachments", {
 });
 
 /** Every change to a link is a new version with a note on what changed. */
-export const attachmentVersions = pgTable("attachment_versions", {
+export const attachmentVersions = ps.table("attachment_versions", {
   id: id(),
   attachmentId: uuid("attachment_id")
     .notNull()
@@ -210,7 +213,7 @@ export const attachmentVersions = pgTable("attachment_versions", {
   createdAt: createdAt(),
 });
 
-export const comments = pgTable("comments", {
+export const comments = ps.table("comments", {
   id: id(),
   projectId: uuid("project_id")
     .notNull()
@@ -228,7 +231,7 @@ export const comments = pgTable("comments", {
 
 export type DeliverableStatus = "not_started" | "in_progress" | "qc" | "delivered" | "accepted" | "rejected";
 
-export const deliverables = pgTable("deliverables", {
+export const deliverables = ps.table("deliverables", {
   id: id(),
   projectId: uuid("project_id")
     .notNull()
@@ -254,7 +257,7 @@ export const deliverables = pgTable("deliverables", {
 
 // ---------- calendar feed ----------
 
-export const calendarTokens = pgTable("calendar_tokens", {
+export const calendarTokens = ps.table("calendar_tokens", {
   id: id(),
   projectId: uuid("project_id")
     .notNull()

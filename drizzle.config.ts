@@ -4,4 +4,5 @@ export default defineConfig({
   dialect: "postgresql",
   schema: "./src/db/schema.ts",
   out: "./drizzle",
+  schemaFilter: ["post_system"],
 });

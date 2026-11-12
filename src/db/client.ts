@@ -5,6 +5,8 @@ import * as schema from "./schema";
 export type Db = PgliteDatabase<typeof schema>;
 
 const MIGRATIONS = path.join(process.cwd(), "drizzle");
+// The migration journal lives in the app's schema too, not in a shared "drizzle" schema.
+const MIGRATE = { migrationsFolder: MIGRATIONS, migrationsSchema: "post_system" };
 
 /** In-memory (dataDir undefined) or on-disk embedded Postgres, migrated. */
 export async function createPgliteDb(dataDir?: string): Promise<Db> {
@@ -12,7 +14,7 @@ export async function createPgliteDb(dataDir?: string): Promise<Db> {
   const { drizzle } = await import("drizzle-orm/pglite");
   const { migrate } = await import("drizzle-orm/pglite/migrator");
   const db = drizzle(new PGlite(dataDir), { schema });
-  await migrate(db, { migrationsFolder: MIGRATIONS });
+  await migrate(db, MIGRATE);
   return db;
 }
 
@@ -25,7 +27,7 @@ async function createPostgresDb(url: string): Promise<Db> {
   const client = postgres(url, { prepare: false, max: Number(process.env.DB_POOL_MAX) || 3, connect_timeout: 15 });
   const db = drizzle(client, { schema });
   try {
-    await migrate(db, { migrationsFolder: MIGRATIONS });
+    await migrate(db, MIGRATE);
   } catch (e) {
     await client.end({ timeout: 1 }).catch(() => {});
     throw new Error(`Tidak bisa menyiapkan database dari DATABASE_URL: ${e instanceof Error ? e.message : e}`, { cause: e });

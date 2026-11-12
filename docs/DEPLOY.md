@@ -13,7 +13,13 @@ Password dan kunci hanya diketik di dashboard Vercel/Supabase, tidak pernah di c
 4. Ganti `[YOUR-PASSWORD]` dengan password dari langkah 1. Kalau password memuat karakter
    seperti `@ : / # ?`, ganti password dengan yang hanya huruf dan angka agar URI tetap valid.
 
-Tabel tidak perlu dibuat manual; aplikasi membuatnya sendiri saat pertama kali dibuka.
+Tabel tidak perlu dibuat manual; aplikasi membuatnya sendiri saat pertama kali dibuka, di
+schema terpisah bernama `post_system`.
+
+**Memakai project Supabase yang sudah ada** (mis. karena batas 2 project di paket free) juga
+bisa: lewati langkah 1, dan ambil URI Transaction pooler dari project itu. Post-System hanya
+menyentuh schema `post_system`; tabel aplikasi lain di project yang sama tidak diubah. Kuota
+penyimpanan dan koneksi dipakai bersama.
 
 ## 2. Vercel: import repo
 

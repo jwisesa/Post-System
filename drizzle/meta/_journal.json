@@ -5,36 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1794390798473,
-      "tag": "0000_last_morph",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1794391459498,
-      "tag": "0001_square_red_wolf",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1794396357288,
-      "tag": "0002_opposite_the_hood",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1794396911766,
-      "tag": "0003_daffy_clea",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1794450691955,
-      "tag": "0004_chief_miek",
+      "when": 1794453698131,
+      "tag": "0000_flawless_speedball",
       "breakpoints": true
     }
   ]

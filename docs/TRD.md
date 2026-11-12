@@ -69,6 +69,10 @@ Sudah ada:
 | `calendar_tokens` | token feed kalender per user per project, bisa dicabut |
 | `audit_log` | entitas, aksi, ringkasan, before/after (JSONB), alasan, user, waktu |
 
+Semua tabel berada di schema Postgres `post_system` (bukan `public`), termasuk tabel pencatat
+migrasi Drizzle (`migrationsSchema`). Dengan begitu aplikasi bisa berbagi satu database dengan
+aplikasi lain tanpa bertabrakan. Schema dibuat oleh migrator saat koneksi pertama.
+
 Tanggal jadwal disimpan sebagai `date` dan diperlakukan sebagai string `YYYY-MM-DD`;
 aritmetika di UTC (`schedule/dates.ts`). "Hari ini" dihitung di zona Asia/Jakarta.
 
@@ -160,5 +164,6 @@ Vercel untuk aplikasi, Supabase untuk Postgres; langkah lengkap di [DEPLOY.md](.
   route lewat `outputFileTracingIncludes` di `next.config.ts`.
 - Akun pertama dibuat di `/setup` (`createFirstAdmin`): hanya saat tabel `users` kosong dan
   kunci cocok dengan `SETUP_KEY`. Lokal tetap bisa memakai `npm run create-admin`.
-- Diuji: build produksi (`next start`) terhadap Postgres 16 dengan pool 1 koneksi, seluruh
-  `e2e/smoke.cjs` lulus. Belum diuji terhadap pooler Supabase sungguhan.
+- Diuji: build produksi (`next start`) terhadap Postgres 16 dengan pool 1 koneksi, di database
+  yang sudah berisi tabel dan catatan migrasi aplikasi lain; seluruh `e2e/smoke.cjs` lulus dan
+  tabel aplikasi lain tidak tersentuh. Belum diuji terhadap pooler Supabase sungguhan.
