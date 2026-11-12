@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, IBM_Plex_Sans } from "next/font/google";
 import { cookies } from "next/headers";
+import { themeViewport } from "@/lib/theme-color";
 import { Toaster } from "@/components/ui/toast";
 import "./globals.css";
 
@@ -14,9 +15,10 @@ export const metadata: Metadata = {
 const archivo = Archivo({ subsets: ["latin", "latin-ext"], axes: ["wdth"], variable: "--font-archivo", display: "swap" });
 const plex = IBM_Plex_Sans({ subsets: ["latin", "latin-ext"], axes: ["wdth"], variable: "--font-app", display: "swap" });
 
-export const viewport: Viewport = {
-  themeColor: [{ media: "(prefers-color-scheme: light)", color: "#133529" }, { media: "(prefers-color-scheme: dark)", color: "#0a3225" }],
-};
+export async function generateViewport(): Promise<Viewport> {
+  // never disable zoom; viewport-fit=cover enables env(safe-area-inset-*); the keyboard resizes the layout viewport
+  return { width: "device-width", initialScale: 1, viewportFit: "cover", interactiveWidget: "resizes-content", ...(await themeViewport("paper")) };
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const theme = (await cookies()).get("theme")?.value === "dark" ? "dark" : "light";

@@ -289,10 +289,10 @@ function SettingsForm({ slug, settings }: { slug: string; settings: ScheduleSett
             ))}
           </ul>
         )}
-        <div className="grid grid-cols-[9.5rem_1fr_auto] gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-[9.5rem_1fr_auto]">
           <input type="date" aria-label="Tanggal libur" value={date} onChange={(e) => setDate(e.target.value)} />
           <input aria-label="Nama libur" placeholder="Nama, mis. Idul Fitri" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (date) { add([{ date, name }]); setDate(""); setName(""); } } }} />
-          <button type="button" className="btn-secondary" disabled={!date} onClick={() => { add([{ date, name }]); setDate(""); setName(""); }}>Tambah</button>
+          <button type="button" className="btn-secondary col-span-2 sm:col-span-1" disabled={!date} onClick={() => { add([{ date, name }]); setDate(""); setName(""); }}>Tambah</button>
         </div>
         <p className="muted text-xs">Hari libur khusus produksi, mis. hari libur lokasi syuting atau tim.</p>
       </div>
@@ -398,7 +398,7 @@ export function AgendaList({ tracks, today, onOpen, ph }: { tracks: Track[]; tod
           <ul className="rows">
             {t.items.map((i) => (
               <li key={i.id}>
-                <button type="button" className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-raised ${i.parentId ? "pl-6" : ""}`} onClick={() => onOpen(i.id)}>
+                <button type="button" className={`flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors duration-100 hover:bg-raised active:bg-raised ${i.parentId ? "pl-6" : ""}`} onClick={() => onOpen(i.id)}>
                   <span aria-hidden className={i.parentId ? "diamond" : "ph-mark"} data-ph={ph(i.id)} />
                   <span className="min-w-0 flex-1">
                     <span className="font-medium">{i.name}</span>

@@ -218,8 +218,11 @@
 }
 
 @layer base {
-  html { -webkit-tap-highlight-color: transparent; }
+  /* html overscroll is left at default on purpose: a document-style app where pull-to-refresh is useful.
+     Inner scrollers (drawer, timeline, popovers, nav row) use overscroll-behavior: contain. */
+  html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body {
+    padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
     @apply bg-bg text-ink antialiased;
     font-size: 14px;
     line-height: 1.5;
@@ -255,7 +258,7 @@
     background-position: right 0.5rem center;
   }
   [data-theme="dark"] select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23b3c3b5' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 6.5 3 3 3-3'/%3E%3C/svg%3E"); }
-  @media (hover: hover) {
+  @media (hover: hover) and (pointer: fine) {
     input:not([type="checkbox"]):not([type="radio"]):hover, select:hover, textarea:hover { background-color: var(--field-hover); }
   }
   input:not([type="checkbox"]):focus-visible, select:focus-visible, textarea:focus-visible {
@@ -298,6 +301,13 @@
   td { font-size: 0.8125rem; }
 
   a { text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  /* controls only, never body text: no 300ms tap wait, no long-press selection or callout */
+  button, summary, [role="button"], [role="tab"], [role="option"], .nav-link, .brand, .row-btn, .index-link, .project-switch, a.stat, a.span-bar, .swatch, .milestone, .bar {
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
   a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   summary { cursor: pointer; list-style: none; }
   summary::-webkit-details-marker { display: none; }
@@ -357,7 +367,7 @@
   .btn-secondary { background: var(--raised); color: var(--ink); }              /* tonal, no border */
   .btn-ghost { background: transparent; color: var(--ink-2); padding-inline: 0.5rem; font-weight: 500; }
   .btn-danger { background: transparent; color: var(--danger); padding-inline: 0.5rem; }
-  @media (hover: hover) {
+  @media (hover: hover) and (pointer: fine) {
     .btn:not(:disabled):hover { background: var(--accent-hover); }
     .btn-secondary:not(:disabled):hover { background: var(--field-hover); }
     .btn-ghost:not(:disabled):hover { background: var(--raised); color: var(--ink); }
@@ -411,7 +421,7 @@
   .tag-warn { --tone: var(--warn); }
   .tag-ok { --tone: var(--ok); }
   button.tag { cursor: pointer; }
-  @media (hover: hover) { button.tag:hover { color: var(--ink); } }
+  @media (hover: hover) and (pointer: fine) { button.tag:hover { color: var(--ink); } }
 
   .muted { color: var(--ink-2); }
   .check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; cursor: pointer; }
@@ -449,7 +459,7 @@
     cursor: pointer;
     transition: background-color 100ms ease, color 100ms ease;
   }
-  @media (hover: hover) { .seg > button:hover { background: var(--raised); color: var(--ink); } }
+  @media (hover: hover) and (pointer: fine) { .seg > button:hover { background: var(--raised); color: var(--ink); } }
   .seg > button[aria-pressed="true"], .seg > button[aria-selected="true"] { background: var(--sel); color: var(--ink); font-weight: 600; }
   .seg > button:disabled { opacity: 0.45; cursor: not-allowed; }
 
@@ -478,7 +488,7 @@
   /* ---------- lists / tables: the one place a hairline is allowed ---------- */
   .rows > * + * { box-shadow: inset 0 1px 0 var(--line); }
   .row-btn { display: flex; width: 100%; align-items: center; gap: 0.75rem; min-height: 2.5rem; padding: 0.625rem 0.75rem; border-radius: 8px; text-align: start; cursor: pointer; }
-  @media (hover: hover) { .row-btn:hover, tr.hoverable:hover { background: var(--raised); } }
+  @media (hover: hover) and (pointer: fine) { .row-btn:hover, tr.hoverable:hover { background: var(--raised); } }
   .table { width: 100%; border-collapse: separate; border-spacing: 0; }
   .table thead th { position: sticky; top: 0; z-index: 1; background: var(--c-soft, var(--raised)); color: var(--c-text, var(--ink-2)); }
   .table thead th:first-child { border-start-start-radius: 6px; border-end-start-radius: 6px; }
@@ -490,24 +500,27 @@
   .sidebar { background: var(--sidebar); color: var(--band-ink); }
   .sidebar .muted { color: var(--band-ink2); }
   .sidebar .btn-ghost { color: var(--band-ink2); }
-  @media (hover: hover) { .sidebar .btn-ghost:not(:disabled):hover { background: var(--band-hover); color: var(--band-ink); } }
+  @media (hover: hover) and (pointer: fine) { .sidebar .btn-ghost:not(:disabled):hover { background: var(--band-hover); color: var(--band-ink); } }
   .sidebar .popover, .sidebar .popover .muted { color: var(--ink); }
   .brand { font-family: var(--font-display); font-size: 1rem; font-weight: 720; font-stretch: 112%; letter-spacing: -0.01em; }
   .project-switch { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; border-radius: 8px; background: var(--band-hover); padding: 0.5rem 0.625rem; font-size: 0.875rem; font-weight: 600; }
 
+  .nav-scroll { overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; }
+  .nav-scroll::-webkit-scrollbar { display: none; }
+  .nav-scroll > .nav-link { scroll-snap-align: start; }
   .nav-link { display: block; border-radius: 7px; padding: 0.4375rem 0.75rem; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--band-ink2); white-space: nowrap; }
-  @media (hover: hover) { .nav-link:hover { background: var(--band-hover); color: var(--band-ink); } }
+  @media (hover: hover) and (pointer: fine) { .nav-link:hover { background: var(--band-hover); color: var(--band-ink); } }
   .nav-link[aria-current="page"] { background: var(--bg); color: var(--ink); font-weight: 650; }
   @media (min-width: 768px) {
     /* the active item is cut out of the board and joins the page */
     .sidebar .nav-link[aria-current="page"] { margin-inline-end: -0.5rem; border-start-end-radius: 0; border-end-end-radius: 0; }
   }
   .popover .nav-link { color: var(--ink); }
-  @media (hover: hover) { .popover .nav-link:hover { background: var(--raised); color: var(--ink); } }
+  @media (hover: hover) and (pointer: fine) { .popover .nav-link:hover { background: var(--raised); color: var(--ink); } }
 
   /* ---------- floating layers ---------- */
   .drawer {
-    position: fixed; inset-block: 0; inset-inline-end: 0; z-index: 40;
+    position: fixed; inset-block: 0; max-height: 100dvh; inset-inline-end: 0; z-index: 40;
     display: flex; flex-direction: column; width: 100%; max-width: 27.5rem;
     background: var(--overlay); border-inline-start: 1px solid transparent; box-shadow: var(--float-lg);
     overscroll-behavior: contain;
@@ -516,13 +529,13 @@
   }
   .drawer[data-closing] { translate: calc(100% * var(--shift)) 0; transition-duration: 200ms; }
   .drawer > header {
-    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 4rem; padding: 0.75rem 0.75rem 0.75rem 1.25rem;
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: calc(4rem + env(safe-area-inset-top)); padding: calc(0.75rem + env(safe-area-inset-top)) calc(0.75rem + env(safe-area-inset-right)) 0.75rem 1.25rem;
     background: var(--c, var(--raised)); color: var(--c-ink, var(--ink));
   }
   .drawer > header h2 { font-size: 1.25rem; line-height: 1.625rem; letter-spacing: -0.015em; color: inherit; }
   .drawer > header .btn-ghost { color: inherit; }
-  @media (hover: hover) { .drawer > header .btn-ghost:not(:disabled):hover { background: color-mix(in oklab, currentColor 14%, transparent); color: inherit; } }
-  .drawer > div { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 1.25rem; }
+  @media (hover: hover) and (pointer: fine) { .drawer > header .btn-ghost:not(:disabled):hover { background: color-mix(in oklab, currentColor 14%, transparent); color: inherit; } }
+  .drawer > div { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 1.25rem calc(1.25rem + env(safe-area-inset-right)) calc(1.25rem + env(safe-area-inset-bottom)) 1.25rem; }
   .drawer > div > * + * { margin-top: 1.25rem; }
 
   .popover {
@@ -605,7 +618,7 @@
   .tl-row { position: absolute; inset-inline: 0; height: var(--row); transition: top 180ms var(--ease-out); }
   /* phase rows: a translucent wash of the phase colour, so grid and weekends read through */
   .tl-row[data-ph] { background: color-mix(in oklab, var(--c-soft) 60%, transparent); }
-  @media (hover: hover) { .tl-row[data-ph]:hover { background: var(--c-soft); } }
+  @media (hover: hover) and (pointer: fine) { .tl-row[data-ph]:hover { background: var(--c-soft); } }
   /* track rows: full-width board band (the scope at the top of @layer components recolours text inside) */
   .tl-row[data-track] { z-index: 1; }
   .tl-row[data-conflict] { background: color-mix(in oklab, var(--danger) 16%, transparent); }
@@ -627,7 +640,7 @@
     display: flex; align-items: center; gap: 4px; overflow: hidden;
     border-radius: 5px;
     padding-inline: 7px; font-size: 0.71875rem; font-weight: 650; white-space: nowrap; font-stretch: 87.5%;
-    user-select: none; touch-action: none;
+    user-select: none; touch-action: pan-y; /* JS owns horizontal drag; vertical still scrolls the page */
     transition: --p 300ms var(--ease-out), left 200ms var(--ease-in-out), width 200ms var(--ease-in-out), opacity 150ms ease;
   }
   .bar[data-status="not_started"], .span-bar[data-status="not_started"] { --p: 0 !important; }
@@ -662,7 +675,7 @@
   .bar-handle::after { content: ""; position: absolute; inset-block: 5px; inset-inline-start: 3px; width: 2px; border-radius: 1px; background: currentColor; opacity: 0.8; }
   .bar-handle[data-edge="start"] { inset-inline-start: 0; }
   .bar-handle[data-edge="due"] { inset-inline-end: 0; }
-  @media (hover: hover) { .tl-row:hover .bar-handle, .tl-row:hover .bar-link { opacity: 1; } }
+  @media (hover: hover) and (pointer: fine) { .tl-row:hover .bar-handle, .tl-row:hover .bar-link { opacity: 1; } }
   .bar-link { position: absolute; width: 10px; height: 10px; border-radius: 2px; background: var(--c); box-shadow: 0 0 0 2px var(--bg); rotate: 45deg; cursor: crosshair; opacity: 0; transition: opacity 100ms ease; }
 
   /* milestone: always a solid diamond. Done = deep, late = danger ring */
@@ -672,7 +685,8 @@
 
   /* dependency arrows */
   .dep { fill: none; stroke: var(--ink-2); stroke-width: 1.25; opacity: 0.55; }
-  .dep:hover, .dep[data-active] { stroke: var(--ink); stroke-width: 1.75; opacity: 1; }
+  @media (hover: hover) and (pointer: fine) { .dep:hover { stroke: var(--ink); stroke-width: 1.75; opacity: 1; } }
+  .dep[data-active] { stroke: var(--ink); stroke-width: 1.75; opacity: 1; }
   .dep[data-bad] { stroke: var(--danger); stroke-width: 1.75; opacity: 1; }
   .dep-draft { stroke: var(--accent); stroke-width: 1.75; stroke-dasharray: 4 3; fill: none; }
 
@@ -717,10 +731,11 @@
   .week-strip {
     --lane: 22px;
     display: grid; grid-template-columns: repeat(7, minmax(5.25rem, 1fr)); grid-template-rows: 2.875rem repeat(4, var(--lane));
-    row-gap: 4px; padding-bottom: 0.625rem; overflow-x: auto; overscroll-behavior-x: contain;
+    row-gap: 4px; padding-bottom: 0.625rem; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity;
     border-radius: 10px; background: var(--raised);
   }
   .week-day { grid-row: 1 / -1; display: flex; flex-direction: column; padding: 0.4375rem 0.625rem 0; min-width: 0; }
+  .week-day { scroll-snap-align: start; }
   .week-day + .week-day { box-shadow: inset 1px 0 0 var(--line); }
   .week-day[data-off] { background: color-mix(in oklab, var(--ink) 4%, transparent); }
   .week-day[data-today] { background: var(--sel); }
@@ -747,7 +762,7 @@
   /* ---------- technical page index ---------- */
   .index-link { display: flex; align-items: center; gap: 0.5rem; border-radius: 6px; padding: 0.3125rem 0.5rem; font-size: 0.8125rem; font-weight: 500; color: var(--ink-2); }
   .index-link::before { content: ""; flex: none; width: 0.625rem; height: 0.625rem; border-radius: 2px; background: var(--c, var(--ink-2)); }
-  @media (hover: hover) { .index-link:hover { background: var(--c-soft, var(--raised)); color: var(--ink); } }
+  @media (hover: hover) and (pointer: fine) { .index-link:hover { background: var(--c-soft, var(--raised)); color: var(--ink); } }
   .index-link > .num { margin-inline-start: auto; font-size: 0.75rem; }
 
   /* ---------- empty states ---------- */
@@ -767,7 +782,7 @@
 @media (prefers-reduced-motion: reduce) {
   :root { --shift: 0; }
   .tl-row, .bar, .span-bar, .meter > span { transition: none; }
-  .btn:not(:disabled):active, .btn-secondary:not(:disabled):active, .btn-ghost:not(:disabled):active, .btn-danger:not(:disabled):active, a.stat:active { scale: 1; }
+  .btn:not(:disabled):active, .btn-secondary:not(:disabled):active, .btn-ghost:not(:disabled):active, .btn-danger:not(:disabled):active, a.stat:active, .nav-link:active, .seg > button:active, .project-switch:active, button.span-bar:active, a.span-bar:active { scale: 1; }
   html:focus-within { scroll-behavior: auto; }
 }
 
@@ -787,7 +802,8 @@
   .milestone:focus-visible, .bar:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   /* status picker inside a timeline row: reads as text until hovered */
   select.status-select { width: 6.25rem; flex: none; min-height: 1.625rem; height: 1.625rem; padding-block: 0; padding-inline-start: 0.375rem; font-size: 0.75rem; font-weight: 500; background-color: transparent; box-shadow: none; color: var(--ink-2); }
-  select.status-select:hover, select.status-select:focus-visible { background-color: var(--field); }
+  select.status-select:focus-visible { background-color: var(--field); }
+  @media (hover: hover) and (pointer: fine) { select.status-select:hover { background-color: var(--field); } }
   select.status-select[data-status="done"] { color: var(--ok); font-weight: 600; }
   select.status-select[data-status="in_progress"] { color: var(--ink); font-weight: 600; }
   select.status-select[data-status="review"] { color: var(--warn); font-weight: 600; }
@@ -796,4 +812,43 @@
   .swatch-radio { cursor: pointer; }
   .swatch-radio input:checked + .swatch { outline: 2px solid var(--ink); outline-offset: 2px; }
   .swatch-radio input:focus-visible + .swatch { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- press feedback: :active works for every input type (100-160ms, ease-out) ---------- */
+  .nav-link, .row-btn, .seg > button, button.tag, .index-link, .project-switch, button.span-bar, a.span-bar, [role="option"] {
+    transition: background-color 100ms var(--ease-out), color 100ms var(--ease-out), scale 120ms var(--ease-out);
+  }
+  .nav-link:not([aria-current="page"]):active { background: var(--band-hover); color: var(--band-ink); scale: 0.97; }
+  .popover .nav-link:not([aria-current="page"]):active { background: var(--raised); color: var(--ink); }
+  .row-btn:active, tr.hoverable:active, [role="option"]:active { background: var(--raised); }
+  .seg > button:not(:disabled):active { background: var(--raised); color: var(--ink); scale: 0.96; }
+  button.tag:active { color: var(--ink); }
+  .index-link:active { background: var(--c-soft, var(--raised)); color: var(--ink); }
+  .project-switch:active, button.span-bar:active, a.span-bar:active { scale: 0.98; }
+  .brand:active { opacity: 0.7; }
+
+  /* ---------- tables: first column stays put while the rest scrolls inside its own container ---------- */
+  @media (max-width: 767px) {
+    .table tbody td:first-child, .table tbody th[scope="row"] { position: sticky; inset-inline-start: 0; z-index: 1; background: var(--bg); max-width: 11rem; }
+    .table td:first-child > button { white-space: normal; }
+  }
+
+  /* ---------- touch: 16px fields (iOS zooms below that) and 44px targets, desktop density untouched ---------- */
+  @media (pointer: coarse) {
+    input:not([type="checkbox"]):not([type="radio"]), select, textarea, select.status-select { font-size: 16px; line-height: 1.5rem; min-height: 2.75rem; }
+    select.status-select { height: auto; width: 7.5rem; }
+    .btn, .btn-secondary, .btn-ghost, .btn-danger { min-height: 2.75rem !important; min-width: 2.75rem; }
+    .btn-icon { width: 2.75rem; }
+    .nav-link, .project-switch { display: flex; align-items: center; min-height: 2.75rem; }
+    .brand { display: inline-flex; align-items: center; min-height: 2.75rem; }
+    .row-btn, .index-link, .check, .seg > button, .toast button { min-height: 2.75rem; }
+    .check { padding-block: 0.125rem; }
+    .toast button { min-width: 2.75rem; }
+    .seg > button { padding-inline: 0.875rem; }
+    button.status, .table td button { min-height: 2.75rem; }
+    [role="option"] { display: flex; align-items: center; min-height: 2.75rem; }
+    .swatch { position: relative; width: 2rem; height: 2rem; }
+    .swatch::after { content: ""; position: absolute; inset: -0.375rem; }
+    .bar-handle { width: 1rem; }
+    input[type="checkbox"] { width: 1.25rem; height: 1.25rem; }
+  }
 }

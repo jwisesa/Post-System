@@ -44,10 +44,10 @@ export default async function Access({ params, searchParams }: { params: Promise
           <summary className="btn-ghost inline-flex cursor-pointer list-none"><Icon name="plus" />Beri akses admin</summary>
           <form action={addMemberAction} className="mt-3 grid items-end gap-3 md:grid-cols-5">
             <input type="hidden" name="slug" value={slug} />
-            <label><span>Email</span><input name="email" type="email" required /></label>
+            <label><span>Email</span><input name="email" type="email" inputMode="email" required autoCapitalize="none" autoCorrect="off" enterKeyHint="next" /></label>
             <label><span>Role</span><select name="role"><option value="assistant">assistant</option><option value="supervisor">supervisor</option></select></label>
             <label><span>Nama (akun baru)</span><input name="name" /></label>
-            <label><span>Password sementara (akun baru)</span><input name="password" type="text" minLength={8} autoComplete="off" /></label>
+            <label><span>Password sementara (akun baru)</span><input name="password" type="text" minLength={8} autoComplete="off" autoCapitalize="none" autoCorrect="off" /></label>
             <button className="btn">Beri akses</button>
           </form>
         </details>
@@ -79,9 +79,9 @@ export default async function Access({ params, searchParams }: { params: Promise
             </li>
           ))}
         </ul>
-        <form action={createShareLinkAction} className="mt-3 flex items-end gap-3">
+        <form action={createShareLinkAction} className="mt-3 flex flex-wrap items-end gap-3">
           <input type="hidden" name="slug" value={slug} />
-          <label className="flex-1"><span>Label link baru (mis. Director, Producer)</span><input name="label" required /></label>
+          <label className="min-w-48 flex-1"><span>Label link baru (mis. Director, Producer)</span><input name="label" required /></label>
           <button className="btn">Buat link</button>
         </form>
       </section>

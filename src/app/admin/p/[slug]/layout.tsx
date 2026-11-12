@@ -5,6 +5,9 @@ import { NavLink } from "@/components/ui/controls";
 import { can } from "@/lib/auth/permissions";
 import { loadProject } from "@/lib/project-context";
 import { listProjects } from "@/lib/services";
+import { themeViewport } from "@/lib/theme-color";
+
+export const generateViewport = () => themeViewport("board");
 
 export default async function ProjectLayout({ children, params }: { children: React.ReactNode; params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -26,7 +29,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
   );
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
-      <aside className="sidebar shrink-0 print:hidden md:sticky md:top-0 md:h-dvh md:w-56">
+      <aside className="sidebar shrink-0 pt-[env(safe-area-inset-top)] print:hidden md:sticky md:top-0 md:h-dvh md:w-56 md:pt-0">
         <div className="flex items-center justify-between px-4 py-3 md:block">
           <Brand />
           <div className="md:hidden"><UserMenu name={user.name} /></div>
@@ -42,13 +45,13 @@ export default async function ProjectLayout({ children, params }: { children: Re
             <Link href="/admin" className="nav-link flex items-center justify-between">Semua project <Icon name="chevron" className="muted" /></Link>
           </div>
         </details>
-        <nav aria-label="Navigasi project" className="flex gap-0.5 overflow-x-auto px-2 pb-3 md:flex-col md:overflow-visible">{nav}</nav>
+        <nav aria-label="Navigasi project" className="nav-scroll flex gap-0.5 overflow-x-auto px-2 pb-3 md:flex-col md:overflow-visible">{nav}</nav>
       </aside>
       <div className="min-w-0 flex-1">
         <header className="hidden print:hidden! items-center justify-end bg-bg h-14 px-8 md:flex">
           <UserMenu name={user.name} role={role} />
         </header>
-        <main className="space-y-5 px-4 py-5 md:px-8 md:py-6">{children}</main>
+        <main className="space-y-5 px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] md:px-8 md:py-6">{children}</main>
       </div>
     </div>
   );

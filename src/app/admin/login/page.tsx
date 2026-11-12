@@ -16,8 +16,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </div>
         <ErrorBanner message={error ? "Email atau password salah." : undefined} />
         <form action={loginAction} className="card space-y-3">
-          <label><span>Email</span><input name="email" type="email" required autoComplete="username" autoFocus /></label>
-          <label><span>Password</span><input name="password" type="password" required autoComplete="current-password" /></label>
+          <label><span>Email</span><input name="email" type="email" inputMode="email" required autoComplete="username" autoCapitalize="none" autoCorrect="off" enterKeyHint="next" autoFocus /></label>
+          <label><span>Password</span><input name="password" type="password" required autoComplete="current-password" autoCapitalize="none" autoCorrect="off" enterKeyHint="go" /></label>
           <button className="btn w-full">Masuk</button>
         </form>
         <div className="flex justify-center"><ThemeToggle /></div>

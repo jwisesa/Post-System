@@ -45,7 +45,7 @@ export default async function Report({ params }: { params: Promise<{ slug: strin
           {report.tracks.map((tr) => (
             <div key={tr.id}>
               <h3 className="mb-1 text-sm font-semibold">{tr.name}</h3>
-              <table className="table text-sm">
+              <div className="overflow-x-auto"><table className="table text-sm">
                 <thead><tr className="muted text-start text-xs"><th className="py-1 pe-3 text-start font-medium">Fase</th><th className="py-1 pe-3 text-start font-medium">Status</th><th className="py-1 pe-3 text-start font-medium">Due</th><th className="py-1 text-end font-medium">Selisih baseline</th></tr></thead>
                 <tbody>
                   {tr.phases.map((p) => (
@@ -57,7 +57,7 @@ export default async function Report({ params }: { params: Promise<{ slug: strin
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           ))}
         </div>

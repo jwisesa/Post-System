@@ -18,7 +18,7 @@ export function CalendarCard({ slug, origin, initialToken }: { slug: string; ori
     });
   };
   return (
-    <section className="card space-y-3 print:hidden">
+    <section className="card min-w-0 space-y-3 print:hidden">
       <div>
         <h2>Langganan kalender</h2>
         <p className="muted mt-1 text-[13px]">Link pribadi untuk Anda. Jangan dibagikan: siapa pun yang memegangnya bisa melihat jadwal project, termasuk item internal.</p>

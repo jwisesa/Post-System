@@ -27,11 +27,11 @@ export function TechSpecView({ spec }: { spec: TechSpec }) {
       {TECH_SECTIONS.map((section, i) => ({ section, ph: (i % 8) + 1 })).filter(({ section }) => section.fields.some((f) => spec[f.key])).map(({ section, ph }) => (
         <section key={section.title} className="card" data-ph={ph}>
           <h2 className="section-band">{section.title}</h2>
-          <dl className="grid grid-cols-[minmax(0,11rem)_1fr] gap-x-3 gap-y-1.5 text-sm">
+          <dl className="grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
             {section.fields.filter((f) => spec[f.key]).map((f) => (
               <div key={f.key} className="contents">
                 <dt className="text-ink-2">{f.label}</dt>
-                <dd className={`whitespace-pre-wrap ${spec[f.key] ? "font-medium" : "muted"}`}>{spec[f.key] || "—"}</dd>
+                <dd className={`whitespace-pre-wrap break-words ${spec[f.key] ? "font-medium" : "muted"}`}>{spec[f.key] || "—"}</dd>
               </div>
             ))}
           </dl>

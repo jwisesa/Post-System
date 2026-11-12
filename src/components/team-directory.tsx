@@ -18,8 +18,8 @@ function ContactForm({ slug, team, contact, groupId }: { slug: string; team: Tea
       <div className="grid grid-cols-2 gap-3">
         <label><span>Jabatan</span><input name="jobTitle" defaultValue={contact?.jobTitle} /></label>
         <label><span>Perusahaan</span><input name="company" defaultValue={contact?.company} /></label>
-        <label><span>Email</span><input name="email" type="email" defaultValue={contact?.email} /></label>
-        <label><span>Telepon</span><input name="phone" defaultValue={contact?.phone} /></label>
+        <label><span>Email</span><input name="email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" defaultValue={contact?.email} /></label>
+        <label><span>Telepon</span><input name="phone" type="tel" inputMode="tel" defaultValue={contact?.phone} /></label>
       </div>
       <label><span>Catatan</span><textarea name="notes" rows={2} defaultValue={contact?.notes} /></label>
       <div className="space-y-2">
@@ -51,7 +51,7 @@ export function TeamDirectory({ team, slug }: { team: Team; slug?: string }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <input className="max-w-xs" type="search" placeholder="Cari nama, vendor, email…" aria-label="Cari kontak" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input className="max-w-xs" type="search" inputMode="search" enterKeyHint="search" autoCapitalize="none" autoCorrect="off" placeholder="Cari nama, vendor, email…" aria-label="Cari kontak" value={query} onChange={(e) => setQuery(e.target.value)} />
         <select className="max-w-52" aria-label="Filter departemen" value={group} onChange={(e) => setGroup(e.target.value)}>
           <option value="">Semua departemen</option>
           {team.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.contacts.length})</option>)}

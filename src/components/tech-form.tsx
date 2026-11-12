@@ -24,10 +24,10 @@ export function TechForm({ slug, spec, history }: { slug: string; spec: TechSpec
   const changed = TECH_FIELDS.filter((f) => (values[f.key] ?? "").trim() !== (spec[f.key] ?? ""));
 
   return (
-    <form action={updateTechSpecAction} className="space-y-4 pb-24">
+    <form action={updateTechSpecAction} className="space-y-4 pb-32 md:pb-24">
       <input type="hidden" name="slug" value={slug} />
       <div className="gap-8 lg:grid lg:grid-cols-[12rem_1fr]">
-        <nav className="sticky top-4 hidden max-h-[calc(100vh-8rem)] self-start overflow-y-auto lg:block">
+        <nav className="sticky top-4 hidden max-h-[calc(100dvh-8rem)] self-start overflow-y-auto lg:block">
           <ul className="space-y-0.5">
             {TECH_SECTIONS.map((section, i) => (
               <li key={section.key}><a href={`#sec-${section.key}`} data-ph={(i % 8) + 1} className="index-link">{section.title}<span className="num">{count(section)}</span></a></li>
@@ -57,7 +57,7 @@ export function TechForm({ slug, spec, history }: { slug: string; spec: TechSpec
                     {past.length > 0 && (
                       <details className="relative text-xs">
                         <summary className="list-none text-ink-2 underline hover:text-ink">Riwayat ({past.length})</summary>
-                        <ul className="popover absolute right-0 z-20 mt-1 w-72 space-y-2 p-3">
+                        <ul className="popover absolute right-0 z-20 mt-1 max-h-72 w-72 max-w-[calc(100vw-2rem)] space-y-2 overflow-auto overscroll-contain p-3">
                           {past.map((h, i) => (
                             <li key={i}>
                               <div>{h.from || "—"} <Icon name="chevron" className="inline" /> <span className="font-medium">{h.to || "—"}</span></div>
@@ -72,7 +72,7 @@ export function TechForm({ slug, spec, history }: { slug: string; spec: TechSpec
                     <textarea id={`f-${f.key}`} name={f.key} rows={6} value={values[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} className={isChanged ? "is-changed" : undefined} />
                   ) : (
                     <div id={`f-${f.key}`}>
-                      <Combobox name={f.key} options={f.options} defaultValue={spec[f.key] ?? ""} placeholder={f.hint} changed={isChanged} onValue={(v) => set(f.key, v)} />
+                      <Combobox name={f.key} options={f.options} inputMode={f.key === "handles" || f.key === "vfx_start_frame" ? "numeric" : undefined} defaultValue={spec[f.key] ?? ""} placeholder={f.hint} changed={isChanged} onValue={(v) => set(f.key, v)} />
                     </div>
                   )}
                 </div>
@@ -87,17 +87,17 @@ export function TechForm({ slug, spec, history }: { slug: string; spec: TechSpec
         })}
         </div>
       </div>
-      <div className="board fixed inset-x-0 bottom-0 z-20 px-4 py-3 md:left-56">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-0 flex-1 text-sm">
+      <div className="board fixed inset-x-0 bottom-0 z-20 px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:left-56 md:pt-3 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <div className="flex items-end gap-2 md:flex-wrap md:gap-3">
+          <div className="hidden min-w-0 flex-1 text-sm md:block">
             {changed.length === 0 ? (
               <span className="muted">Belum ada perubahan.</span>
             ) : (
               <span><span className="font-medium">{changed.length} field diubah:</span> <span className="muted">{changed.map((f) => f.label).join(", ")}</span></span>
             )}
           </div>
-          <label className="w-full sm:w-72"><span>Alasan perubahan (opsional)</span><input name="reason" /></label>
-          <button className="btn" disabled={changed.length === 0}>Simpan Technical Page</button>
+          <label className="min-w-0 flex-1 md:w-72 md:flex-none"><span className="sr-only md:not-sr-only">Alasan perubahan (opsional)</span><input name="reason" placeholder="Alasan perubahan (opsional)" /></label>
+          <button className="btn shrink-0" disabled={changed.length === 0}>Simpan Technical Page</button>
         </div>
       </div>
     </form>

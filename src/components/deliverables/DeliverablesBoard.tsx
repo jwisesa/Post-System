@@ -109,7 +109,7 @@ export function DeliverablesBoard({ deliverables, attachments, tracks, techSpec,
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <input className="max-w-56" type="search" placeholder="Cari deliverable, format…" aria-label="Cari deliverable" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input className="max-w-56" type="search" inputMode="search" enterKeyHint="search" autoCapitalize="none" autoCorrect="off" placeholder="Cari deliverable, format…" aria-label="Cari deliverable" value={query} onChange={(e) => setQuery(e.target.value)} />
         <select aria-label="Filter platform" className="!w-auto" value={fPlatform} onChange={(e) => setFPlatform(e.target.value)}>
           <option value="">Semua platform</option>
           {platforms.map((p) => <option key={p} value={p}>{p || "Tanpa platform"}</option>)}

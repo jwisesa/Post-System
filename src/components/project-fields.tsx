@@ -19,7 +19,7 @@ export function ProjectFields({ project }: Props) {
       </label>
       <label>
         <span>Jumlah episode / reel</span>
-        <input name="unitCount" type="number" min={1} defaultValue={project?.unitCount ?? ""} />
+        <input name="unitCount" type="number" inputMode="numeric" enterKeyHint="done" min={1} defaultValue={project?.unitCount ?? ""} />
       </label>
       <fieldset className="md:col-span-3">
         <legend className="mb-2 text-xs font-semibold text-ink-2">Platform tujuan</legend>

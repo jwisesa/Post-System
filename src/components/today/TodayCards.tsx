@@ -140,8 +140,8 @@ export function TodayBoard({ data, today, base, aside }: { data: TodayData; toda
 
       <WeekStrip week={data.week} today={today} />
 
-      <div className="grid gap-x-8 gap-y-6 pt-2 md:grid-cols-2">
-        <section>
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-6 pt-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <section className="min-w-0">
           <ListHead title="Jatuh tempo" count={due.length} href={base ? `${base}/timeline` : undefined} link="Timeline" />
           {due.length === 0 ? <p className="py-2 text-[13px] text-ink-2">Tidak ada deadline dalam 7 hari.</p> : (
             <ul>{due.slice(0, DUE_CAP).map((e) => <DueRow key={`${e.kind}-${e.id}`} e={e} today={today} />)}</ul>
@@ -151,7 +151,7 @@ export function TodayBoard({ data, today, base, aside }: { data: TodayData; toda
               : <p className="mt-1 px-1 text-[13px] text-ink-2">+{due.length - DUE_CAP} lainnya</p>
           )}
         </section>
-        <div className="space-y-6">{aside}</div>
+        <div className="min-w-0 space-y-6">{aside}</div>
       </div>
     </div>
   );

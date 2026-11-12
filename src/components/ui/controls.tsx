@@ -20,6 +20,9 @@ export function ThemeToggle() {
         root.dataset.theme = next;
         requestAnimationFrame(() => delete root.dataset.themeSwitching);
         document.cookie = `theme=${next}; path=/; max-age=31536000; samesite=lax`;
+        // keep the browser/status bar in step: colour at the very top of this page (board on project pages, else paper)
+        const top = getComputedStyle(root).getPropertyValue(document.querySelector(".sidebar, header.board") ? "--sidebar" : "--bg").trim();
+        document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", top));
       }}
     >
       <Icon name="sun" className="hidden dark:block" />
@@ -72,8 +75,8 @@ export function ConfirmButton({ message, className = "btn-danger", children, ...
 }
 
 /** Text input with a filterable list of prepared options; any typed value is still accepted. */
-export function Combobox({ name, options, defaultValue = "", placeholder, onValue, changed }: {
-  name: string; options: string[]; defaultValue?: string; placeholder?: string; onValue?: (v: string) => void; changed?: boolean;
+export function Combobox({ name, options, defaultValue = "", placeholder, onValue, changed, inputMode }: {
+  name: string; options: string[]; defaultValue?: string; placeholder?: string; onValue?: (v: string) => void; changed?: boolean; inputMode?: "numeric" | "decimal";
 }) {
   const [value, setValue] = useState(defaultValue);
   const [open, setOpen] = useState(false);
@@ -102,6 +105,10 @@ export function Combobox({ name, options, defaultValue = "", placeholder, onValu
         aria-controls={listId}
         aria-autocomplete="list"
         autoComplete="off"
+        autoCapitalize="off"
+        autoCorrect="off"
+        enterKeyHint="done"
+        inputMode={inputMode}
         className={changed ? "is-changed" : undefined}
         onChange={(e) => { set(e.target.value); setOpen(true); setActive(-1); }}
         onFocus={() => options.length && setOpen(true)}
@@ -114,7 +121,7 @@ export function Combobox({ name, options, defaultValue = "", placeholder, onValu
         }}
       />
       {open && shown.length > 0 && (
-        <ul id={listId} role="listbox" className="popover absolute z-30 mt-1 max-h-56 w-full overflow-auto py-1">
+        <ul id={listId} role="listbox" className="popover absolute z-30 mt-1 max-h-56 w-full overflow-auto overscroll-contain py-1">
           {shown.map((o, i) => (
             <li
               key={o}

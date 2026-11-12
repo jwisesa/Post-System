@@ -28,10 +28,10 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
         </div>
         <ErrorBanner message={error} />
         <form action={setupAction} className="card space-y-3">
-          <label><span>Setup key (nilai SETUP_KEY di Vercel)</span><input name="key" type="password" required autoComplete="off" /></label>
+          <label><span>Setup key (nilai SETUP_KEY di Vercel)</span><input name="key" type="password" required autoComplete="off" autoCapitalize="none" autoCorrect="off" enterKeyHint="next" /></label>
           <label><span>Nama</span><input name="name" required autoComplete="name" /></label>
-          <label><span>Email</span><input name="email" type="email" required autoComplete="username" /></label>
-          <label><span>Password (minimal 8 karakter)</span><input name="password" type="password" required minLength={8} autoComplete="new-password" /></label>
+          <label><span>Email</span><input name="email" type="email" inputMode="email" required autoComplete="username" autoCapitalize="none" autoCorrect="off" enterKeyHint="next" /></label>
+          <label><span>Password (minimal 8 karakter)</span><input name="password" type="password" required minLength={8} autoComplete="new-password" autoCapitalize="none" autoCorrect="off" enterKeyHint="go" /></label>
           <button className="btn w-full">Buat akun</button>
         </form>
       </div>

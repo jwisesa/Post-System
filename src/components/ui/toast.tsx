@@ -24,7 +24,7 @@ export function Toaster({ children }: { children: React.ReactNode }) {
   return (
     <Ctx.Provider value={push}>
       {children}
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 top-4 z-[60] flex flex-col items-center gap-2 px-4">
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 top-[calc(1rem+env(safe-area-inset-top))] z-[60] flex flex-col items-center gap-2 px-4">
         {toasts.map((t) => (
           <div key={t.id} role="status" className="toast pointer-events-auto" data-tone={t.tone}>
             <span>{t.message}</span>

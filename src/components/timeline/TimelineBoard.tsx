@@ -403,7 +403,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
           {view === "vertical" && <div className="hidden md:block"><VerticalGantt tracks={shown} cal={cal} ph={ph} progress={progress} today={today} onOpen={openItem} /></div>}
 
           {view === "gantt" && (
-            <div ref={scroller} className="tl hidden max-h-[74vh] overflow-auto md:block" style={{ "--row": `${ROW}px` } as React.CSSProperties} data-testid="timeline-board">
+            <div ref={scroller} className="tl hidden max-h-[74dvh] overflow-auto overscroll-contain md:block" style={{ "--row": `${ROW}px` } as React.CSSProperties} data-testid="timeline-board">
               <div className="relative" style={{ width: LEFT + width }}>
                 <div className="tl-head sticky top-0 z-30 flex" style={{ height: HEAD }}>
                   <div className="sticky left-0 z-10 flex shrink-0 items-end bg-bg px-3 pb-2 text-xs text-ink-2" style={{ width: LEFT }}>
@@ -495,7 +495,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
 
       {/* actions on a multi-selection */}
       {sel.size > 1 && mode !== "view" && (
-        <div role="toolbar" aria-label="Aksi untuk item terpilih" className="sheet-bar fixed inset-x-0 bottom-5 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] flex-wrap items-center gap-3 px-3 py-2 text-sm">
+        <div role="toolbar" aria-label="Aksi untuk item terpilih" className="sheet-bar fixed inset-x-0 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] flex-wrap items-center gap-3 px-3 py-2 text-sm">
           <span className="font-medium tabular-nums">{sel.size} dipilih</span>
           <select aria-label="Ubah status item terpilih" className="!w-auto" value="" onChange={(e) => e.target.value && setStatus([...sel], e.target.value)}>
             <option value="">Ubah status…</option>
@@ -553,7 +553,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
         data-status={item.status}
         data-selected={sel.has(item.id) || undefined}
         data-late={late || undefined}
-        className={`milestone ${editable ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-pointer"}`}
+        className={`milestone ${editable ? "cursor-grab touch-pan-y active:cursor-grabbing" : "cursor-pointer"}`}
         style={{ left: x(p.start) + px / 2 - 6 }}
         onKeyDown={(e) => keys(e, item)}
         {...dragHandlers(item, "move")}

@@ -43,7 +43,7 @@ export default function VerticalGantt({ tracks, today, cal, ph, progress, onOpen
   const todayY = diffDays(g.min, today) * DAY;
 
   return (
-    <div ref={box} className="max-h-[72vh] overflow-auto rounded-xl bg-bg text-ink">
+    <div ref={box} className="max-h-[72dvh] overflow-auto overscroll-contain rounded-xl bg-bg text-ink">
       <div style={{ width: AXIS + W, minWidth: "100%" }}>
         <div className="sticky top-0 z-30 flex bg-bg shadow-[0_6px_8px_-8px_rgb(16_40_30/0.25)]" style={{ height: HEAD }}>
           <div className="sticky left-0 z-10 shrink-0 bg-bg" style={{ width: AXIS }} />

@@ -66,20 +66,20 @@ export default async function Overview({ params, searchParams }: { params: Promi
           </>
         }
       />
-      <div className="grid gap-x-8 gap-y-10 pt-8 md:grid-cols-2">
-        <section className="card">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-10 pt-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <section className="card min-w-0">
           <div className="list-head"><h2>Perubahan terbaru</h2><Link href={`${base}/activity`} className="text-[13px] font-semibold underline underline-offset-2">Lihat semua</Link></div>
           {recent.length === 0 ? <p className="text-[13px] text-ink-2">Belum ada perubahan.</p> : (
             <ul className="rows">
               {recent.map(({ entry, userName }) => (
-                <li key={entry.id} className="py-2 text-[13px]"><span className="font-semibold">{userName ?? "—"}</span> <span className="text-ink-2">·</span> {entry.summary}</li>
+                <li key={entry.id} className="min-w-0 break-words py-2 text-[13px]"><span className="font-semibold">{userName ?? "—"}</span> <span className="text-ink-2">·</span> {entry.summary}</li>
               ))}
             </ul>
           )}
         </section>
       <CalendarCard slug={slug} origin={origin} initialToken={calendarToken} />
       {can(role, "project.edit") && (
-        <details className="card">
+        <details className="card min-w-0">
           <summary className="cursor-pointer text-sm font-medium">Ubah info project</summary>
           <form action={updateProjectAction} className="mt-4 space-y-3">
             <input type="hidden" name="slug" value={slug} />
@@ -89,7 +89,7 @@ export default async function Overview({ params, searchParams }: { params: Promi
         </details>
       )}
       {can(role, "project.delete") && (
-        <details className="card">
+        <details className="card min-w-0">
           <summary className="cursor-pointer text-sm font-medium text-danger">Hapus project</summary>
           <form action={deleteProjectAction} className="mt-4 space-y-3">
             <input type="hidden" name="slug" value={slug} />
