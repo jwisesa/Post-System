@@ -4,8 +4,7 @@ import { ThemeToggle } from "./ui/controls";
 
 export function Brand() {
   return (
-    <Link href="/admin" className="flex items-center gap-2 font-semibold tracking-tight">
-      <span aria-hidden className="grid size-6 place-items-center rounded-md bg-accent text-xs text-accent-ink">PS</span>
+    <Link href="/admin" className="brand">
       Post-System
     </Link>
   );

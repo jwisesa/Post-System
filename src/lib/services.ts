@@ -146,6 +146,15 @@ export async function updateProject(db: Db, userId: string, projectId: string, i
   });
 }
 
+/** Removes the project and everything in it. The typed name must match, so it cannot happen by a stray click. */
+export async function deleteProject(db: Db, userId: string, projectId: string, typedName: string) {
+  await requireRole(db, userId, projectId, "project.delete");
+  const [p] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, projectId));
+  if (!p) throw new InputError("Project tidak ditemukan.");
+  if (typedName.trim() !== p.name) throw new InputError("Nama project yang diketik tidak sama.");
+  await db.delete(projects).where(eq(projects.id, projectId)); // every project table cascades from here
+}
+
 // ---------- technical page ----------
 
 export async function getTechSpec(db: Db, projectId: string) {

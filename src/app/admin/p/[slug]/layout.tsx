@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Brand, UserMenu } from "@/components/shell";
+import { Icon } from "@/components/ui/icons";
 import { NavLink } from "@/components/ui/controls";
 import { can } from "@/lib/auth/permissions";
 import { loadProject } from "@/lib/project-context";
@@ -25,30 +26,29 @@ export default async function ProjectLayout({ children, params }: { children: Re
   );
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
-      <aside className="shrink-0 print:hidden border-b border-line bg-surface md:sticky md:top-0 md:h-dvh md:w-56 md:border-r md:border-b-0">
+      <aside className="sidebar shrink-0 print:hidden md:sticky md:top-0 md:h-dvh md:w-56">
         <div className="flex items-center justify-between px-4 py-3 md:block">
           <Brand />
           <div className="md:hidden"><UserMenu name={user.name} /></div>
         </div>
-        <details className="group mx-2 mb-2 rounded-lg border border-line">
-          <summary className="flex list-none items-center justify-between gap-2 px-2.5 py-2 text-sm font-medium">
-            <span className="truncate">{project.name}</span><span aria-hidden className="muted transition group-open:rotate-180">▾</span>
+        <details className="group relative mx-2 mb-3">
+          <summary className="project-switch cursor-pointer list-none">
+            <span className="truncate">{project.name}</span><Icon name="chevron" className="muted rotate-90 group-open:-rotate-90" />
           </summary>
-          <div className="border-t border-line p-1 text-sm">
+          <div className="popover absolute inset-x-0 z-30 mt-1 p-1 text-sm">
             {others.map((o) => (
-              <Link key={o.project.id} href={`/admin/p/${o.project.slug}`} className="block truncate rounded-md px-2 py-1.5 hover:bg-raised">{o.project.name}</Link>
+              <Link key={o.project.id} href={`/admin/p/${o.project.slug}`} className="nav-link truncate">{o.project.name}</Link>
             ))}
-            <Link href="/admin" className="muted block rounded-md px-2 py-1.5 hover:bg-raised">Semua project →</Link>
+            <Link href="/admin" className="nav-link flex items-center justify-between">Semua project <Icon name="chevron" className="muted" /></Link>
           </div>
         </details>
-        <nav aria-label="Navigasi project" className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:overflow-visible">{nav}</nav>
+        <nav aria-label="Navigasi project" className="flex gap-0.5 overflow-x-auto px-2 pb-3 md:flex-col md:overflow-visible">{nav}</nav>
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="hidden print:hidden! items-center justify-between border-b border-line bg-surface px-6 py-2 md:flex">
-          <span className="muted text-sm">{project.name}</span>
+        <header className="hidden print:hidden! items-center justify-end bg-bg h-14 px-8 md:flex">
           <UserMenu name={user.name} role={role} />
         </header>
-        <main className="space-y-5 p-4 md:p-6">{children}</main>
+        <main className="space-y-5 px-4 py-5 md:px-8 md:py-6">{children}</main>
       </div>
     </div>
   );

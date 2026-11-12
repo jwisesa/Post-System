@@ -4,7 +4,7 @@ import type { getTeam } from "@/lib/services";
 
 export function ErrorBanner({ message }: { message?: string }) {
   if (!message) return null;
-  return <p role="alert" className="rounded-lg border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{message}</p>;
+  return <p role="alert" className="notice">{message}</p>;
 }
 
 export function productionTypeLabel(value: string) {
@@ -13,8 +13,8 @@ export function productionTypeLabel(value: string) {
 
 export function ProjectSummary({ project }: { project: { productionType: string; platforms: string[]; unitCount: number | null } }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      <span className="tag tag-accent">{productionTypeLabel(project.productionType)}</span>
+    <div className="flex flex-wrap gap-x-2 gap-y-1">
+      <span className="tag !text-ink">{productionTypeLabel(project.productionType)}</span>
       {project.platforms.map((p) => <span key={p} className="tag">{p}</span>)}
       {project.unitCount && <span className="tag">{project.unitCount} episode / reel</span>}
     </div>
@@ -23,14 +23,14 @@ export function ProjectSummary({ project }: { project: { productionType: string;
 
 export function TechSpecView({ spec }: { spec: TechSpec }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {TECH_SECTIONS.map((section) => (
-        <section key={section.title} className="card">
-          <h2 className="mb-3">{section.title}</h2>
+    <div className="grid gap-x-8 gap-y-6 md:grid-cols-2">
+      {TECH_SECTIONS.map((section, i) => ({ section, ph: (i % 8) + 1 })).filter(({ section }) => section.fields.some((f) => spec[f.key])).map(({ section, ph }) => (
+        <section key={section.title} className="card" data-ph={ph}>
+          <h2 className="section-band">{section.title}</h2>
           <dl className="grid grid-cols-[minmax(0,11rem)_1fr] gap-x-3 gap-y-1.5 text-sm">
-            {section.fields.map((f) => (
+            {section.fields.filter((f) => spec[f.key]).map((f) => (
               <div key={f.key} className="contents">
-                <dt className="muted">{f.label}</dt>
+                <dt className="text-ink-2">{f.label}</dt>
                 <dd className={`whitespace-pre-wrap ${spec[f.key] ? "font-medium" : "muted"}`}>{spec[f.key] || "—"}</dd>
               </div>
             ))}
@@ -46,8 +46,8 @@ export type Contact = Team[number]["contacts"][number];
 
 export function ContactFlags({ c }: { c: Contact }) {
   return (
-    <span className="inline-flex flex-wrap gap-1">
-      {c.isPic && <span className="tag tag-accent">PIC</span>}
+    <span className="inline-flex flex-wrap gap-y-1">
+      {c.isPic && <span className="tag !text-ink">PIC</span>}
       {c.isContact && <span className="tag">Contact</span>}
       {c.needsAccess && <span className="tag tag-ok">Perlu akses</span>}
       {c.internal && <span className="tag tag-warn">Internal</span>}

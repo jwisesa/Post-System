@@ -5,16 +5,32 @@
 import * as sch from "@/lib/schedule/service";
 import { runForClient as run } from "./action-helpers";
 
-export async function shiftItem(slug: string, itemId: string, startDate: string, dueDate: string, cascade: boolean, reason: string) {
+/** Sets exact dates on items: a drag, a multi-move, an undo or a redo. The board computed them. */
+export async function moveItems(slug: string, moves: sch.DateMove[], summary: string) {
   return run(slug, async (db, userId, projectId) => {
-    const { moves, conflicts } = await sch.applyShift(db, userId, projectId, itemId, { startDate, dueDate, cascade }, reason);
-    return { undo: moves.map((m) => ({ id: m.id, startDate: m.oldStart, dueDate: m.oldDue })), conflicts };
+    await sch.applyMoves(db, userId, projectId, moves, summary);
+    return {};
   });
 }
 
-export async function undoShift(slug: string, moves: sch.DateMove[]) {
+export async function patchItems(slug: string, itemIds: string[], patch: { status?: string; color?: number | null }) {
   return run(slug, async (db, userId, projectId) => {
-    await sch.applyMoves(db, userId, projectId, moves, "Mengurungkan perubahan jadwal");
+    await sch.updateItems(db, userId, projectId, itemIds, patch);
+    return {};
+  });
+}
+
+export async function removeItems(slug: string, itemIds: string[]) {
+  return run(slug, async (db, userId, projectId) => {
+    await sch.deleteItems(db, userId, projectId, itemIds);
+    return {};
+  });
+}
+
+export async function setCascade(slug: string, cascade: boolean) {
+  return run(slug, async (db, userId, projectId) => {
+    const { settings } = await sch.getSchedule(db, projectId, { includeInternal: true });
+    await sch.updateScheduleSettings(db, userId, projectId, { ...settings, cascade });
     return {};
   });
 }

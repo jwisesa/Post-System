@@ -22,9 +22,8 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
   return (
     <main className="grid min-h-dvh place-items-center p-4">
       <div className="w-full max-w-sm space-y-5">
-        <div className="text-center">
-          <div aria-hidden className="mx-auto mb-3 grid size-10 place-items-center rounded-xl bg-accent font-semibold text-accent-ink">PS</div>
-          <h1>Setup awal</h1>
+        <div>
+          <h1 className="page-title">Setup awal</h1>
           <p className="muted mt-1 text-sm">Buat akun supervisor pertama. Halaman ini tertutup setelah akun dibuat.</p>
         </div>
         <ErrorBanner message={error} />

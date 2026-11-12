@@ -13,18 +13,18 @@ export default async function Technical({ params, searchParams }: { params: Prom
   const spec = await getTechSpec(db, project.id);
   const head = (
     <div>
-      <h1>Technical Page</h1>
-      <p className="muted mt-1 text-sm">Sumber kebenaran teknis project ini. Pilih dari opsi yang tersedia atau ketik nilai sendiri.</p>
+      <h1 className="page-title">Technical Page</h1>
+      <p className="page-meta">Sumber kebenaran teknis project ini. Pilih dari opsi yang tersedia atau ketik nilai sendiri.</p>
     </div>
   );
 
   if (!can(role, "tech.edit")) {
     return (
-      <>
+      <div className="mx-auto max-w-[1040px] space-y-10">
         {head}
         <p className="tag tag-warn">Hanya supervisor yang bisa mengubah Technical Page.</p>
         <TechSpecView spec={spec} />
-      </>
+      </div>
     );
   }
 
@@ -38,10 +38,10 @@ export default async function Technical({ params, searchParams }: { params: Prom
   }
 
   return (
-    <>
+    <div className="mx-auto max-w-[1040px] space-y-10">
       {head}
       <ErrorBanner message={error} />
       <TechForm key={JSON.stringify(spec)} slug={slug} spec={spec} history={history} />
-    </>
+    </div>
   );
 }

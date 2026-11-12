@@ -9,12 +9,12 @@ export default async function Assets({ params }: { params: Promise<{ slug: strin
   const { db, project, role } = await loadProject(slug);
   const [schedule, attachments] = await Promise.all([getSchedule(db, project.id, { includeInternal: true }), listAttachments(db, project.id, { includeInternal: true })]);
   return (
-    <>
+    <div className="mx-auto max-w-[1040px] space-y-10">
       <div>
-        <h1>Aset & dokumen</h1>
-        <p className="muted mt-1 text-sm">Semua link preview, aset, dan dokumen project ini beserta riwayat versinya.</p>
+        <h1 className="page-title">Aset & dokumen</h1>
+        <p className="page-meta">Semua link preview, aset, dan dokumen project ini beserta riwayat versinya.</p>
       </div>
       <AssetsOverview projectId={project.id} schedule={schedule} attachments={attachments} slug={slug} canEdit={can(role, "asset.edit")} canApprove={can(role, "asset.approve")} />
-    </>
+    </div>
   );
 }

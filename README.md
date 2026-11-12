@@ -25,6 +25,13 @@ Modul 1 (fondasi), 2 (timeline), 3 (link, versi, komentar), 4 (deliverables), da
   seret titik di kanan batang ke item lain untuk membuat dependency; dampak tampil langsung
   saat menyeret, perubahan dikonfirmasi dulu, dan bisa diurungkan
 - Tema terang (bawaan) dan gelap; di layar ponsel timeline tampil sebagai agenda
+- Tiga tampilan: Gantt, Gantt vertikal, dan kalender; fase punya warna dan milestone (satu tanggal)
+  yang bisa diciutkan; template track menyertakan milestone umum (Picture Lock ada di dalam Offline Edit)
+  dan ada template Produksi (testcam, principal photography)
+- Hari kerja: akhir pekan dan hari libur diblokir (bisa diatur per project); fase menjaga jumlah hari kerjanya
+- Pilih beberapa item (Shift-klik) untuk digeser, diwarnai, diubah statusnya, atau dihapus sekaligus;
+  undo/redo (Cmd/Ctrl+Z); item yang bergantung hanya ikut bergeser jika opsinya dinyalakan
+- Versi timeline tersimpan yang bisa dipulihkan; export PDF (halaman cetak) dan CSV untuk Excel/Sheets
 
 - **Link & versi**: link preview/aset/dokumen di tiap fase dan milestone; setiap perubahan
   jadi versi baru dengan catatan apa yang direvisi dan status review

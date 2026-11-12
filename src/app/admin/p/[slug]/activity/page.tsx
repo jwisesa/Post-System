@@ -35,8 +35,8 @@ export default async function Activity({ params, searchParams }: { params: Promi
   }
 
   return (
-    <>
-      <h1>Change log</h1>
+    <div className="mx-auto max-w-[1040px] space-y-10">
+      <h1 className="page-title">Change log</h1>
       <form className="flex flex-wrap items-center gap-2">
         <select name="who" defaultValue={who} aria-label="Filter orang" className="max-w-48">
           <option value="">Semua orang</option>
@@ -48,14 +48,14 @@ export default async function Activity({ params, searchParams }: { params: Promi
         </select>
         <button className="btn-secondary">Terapkan</button>
       </form>
-      {log.length === 0 && <p className="card muted text-sm">Tidak ada perubahan yang cocok.</p>}
+      {log.length === 0 && <p className="empty muted">Tidak ada perubahan yang cocok.</p>}
       {[...groups].map(([date, entries]) => (
         <section key={date}>
-          <h2 className="muted mb-2 text-xs font-medium tracking-wide uppercase">{date}</h2>
-          <ul className="card divide-y divide-line py-1">
+          <h2 className="section-band mb-2">{date}</h2>
+          <ul className="rows">
             {entries.map(({ entry, userName }) => (
               <li key={entry.id} className="flex gap-3 py-2.5 text-sm">
-                <span className="muted w-12 shrink-0 text-xs tabular-nums">{time.format(entry.createdAt)}</span>
+                <span className="muted w-12 shrink-0 text-[13px] tabular-nums">{time.format(entry.createdAt)}</span>
                 <div className="min-w-0 flex-1">
                   <div><span className="font-medium">{userName ?? "—"}</span> <span className="muted">·</span> {entry.summary}</div>
                   {entry.action === "update" && diff(entry.before, entry.after).map((line) => <div key={line} className="muted">{line}</div>)}
@@ -67,6 +67,6 @@ export default async function Activity({ params, searchParams }: { params: Promi
           </ul>
         </section>
       ))}
-    </>
+    </div>
   );
 }

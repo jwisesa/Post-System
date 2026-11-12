@@ -1,19 +1,21 @@
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { attachments, comments, dependencies, scheduleItems, teamContacts, tracks, type ItemStatus } from "@/db/schema";
+import { attachments, comments, dependencies, projects, scheduleItems, scheduleVersions, teamContacts, tracks, users, type ItemStatus, type ScheduleSettings, type ScheduleSnapshot } from "@/db/schema";
 import { InputError, record, requireRole, type Tx } from "../services";
-import { addDays, fmtRange, isDate } from "./dates";
+import { addDays, diffDays, fmtRange, isDate } from "./dates";
 import { computeShift, wouldCycle, type Dep } from "./shift";
-import { STATUSES, TRACK_TEMPLATES } from "./templates";
+import { PHASE_COLORS, STATUSES, TRACK_TEMPLATES } from "./templates";
+import { calOf, snap } from "./workdays";
 
 export type Item = typeof scheduleItems.$inferSelect;
 
 /** Tracks with their items (phases by start date, milestones under their phase) plus dependencies. */
 export async function getSchedule(db: Db, projectId: string, opts: { includeInternal: boolean }) {
-  const [trackRows, itemRows, contacts] = await Promise.all([
+  const [trackRows, itemRows, contacts, [project]] = await Promise.all([
     db.select().from(tracks).where(eq(tracks.projectId, projectId)).orderBy(asc(tracks.sortOrder), asc(tracks.createdAt)),
     db.select().from(scheduleItems).where(eq(scheduleItems.projectId, projectId)).orderBy(asc(scheduleItems.startDate), asc(scheduleItems.createdAt)),
     db.select({ id: teamContacts.id, name: teamContacts.name, internal: teamContacts.internal }).from(teamContacts).where(eq(teamContacts.projectId, projectId)),
+    db.select({ settings: projects.scheduleSettings }).from(projects).where(eq(projects.id, projectId)),
   ]);
   const hidden = new Set<string>();
   if (!opts.includeInternal) {
@@ -34,6 +36,7 @@ export async function getSchedule(db: Db, projectId: string, opts: { includeInte
       return { ...t, items: ordered.map(withPic) };
     }),
     deps,
+    settings: project?.settings ?? {},
   };
 }
 
@@ -65,18 +68,29 @@ export async function addTrack(db: Db, userId: string, projectId: string, input:
   const name = input.name.trim() || template.defaultName;
   if (template.phases.length && !isDate(input.startDate)) throw new InputError("Tanggal mulai wajib diisi untuk template.");
   await db.transaction(async (tx) => {
+    const [project] = await tx.select({ settings: projects.scheduleSettings }).from(projects).where(eq(projects.id, projectId));
+    const cal = calOf(project?.settings);
     const [track] = await tx.insert(tracks).values({ projectId, name, sortOrder: 999 }).returning();
     const made = new Map<string, { id: string; due: string }>();
     for (const p of template.phases) {
       const preds = (p.after ?? []).map((n) => made.get(n)!);
-      const start = preds.length ? addDays(preds.map((x) => x.due).sort().at(-1)!, 1) : input.startDate;
-      const due = addDays(start, p.days - 1);
+      const start = snap(cal, preds.length ? addDays(preds.map((x) => x.due).sort().at(-1)!, 1) : input.startDate);
+      const end = snap(cal, addDays(start, p.days - 1), -1);
+      const due = end < start ? start : end;
       const [item] = await tx
         .insert(scheduleItems)
-        .values({ projectId, trackId: track.id, name: p.name, startDate: start, dueDate: due, baselineStart: start, baselineDue: due })
+        .values({ projectId, trackId: track.id, name: p.name, color: p.color, startDate: start, dueDate: due, baselineStart: start, baselineDue: due })
         .returning();
       made.set(p.name, { id: item.id, due });
       if (preds.length) await tx.insert(dependencies).values(preds.map((x) => ({ itemId: item.id, dependsOnId: x.id })));
+      // Every phase arrives with its usual single-date milestones, ready to be dated.
+      const span = diffDays(start, due);
+      const stones = (p.milestones ?? []).map((m) => {
+        const on = snap(cal, addDays(start, Math.round(m.at * span)), -1);
+        const date = on < start ? start : on;
+        return { projectId, trackId: track.id, parentId: item.id, name: m.name, startDate: date, dueDate: date, baselineStart: date, baselineDue: date };
+      });
+      if (stones.length) await tx.insert(scheduleItems).values(stones);
     }
     await record(tx, { projectId, userId, entity: "track", entityId: track.id, action: "create", summary: `Menambah track "${name}" (${template.label}, ${template.phases.length} fase)` });
   });
@@ -94,7 +108,9 @@ export async function deleteTrack(db: Db, userId: string, projectId: string, tra
 
 // ---------- items ----------
 
-export type NewItemInput = { trackId: string; parentId: string | null; name: string; startDate: string; dueDate: string };
+export type NewItemInput = { trackId: string; parentId: string | null; name: string; startDate: string; dueDate: string; color?: number | null };
+
+const cleanColor = (c: number | null | undefined) => (c && Number.isInteger(c) && c >= 1 && c <= PHASE_COLORS ? c : null);
 
 export async function addItem(db: Db, userId: string, projectId: string, input: NewItemInput) {
   await requireRole(db, userId, projectId, "schedule.edit");
@@ -111,13 +127,13 @@ export async function addItem(db: Db, userId: string, projectId: string, input: 
     }
     const [item] = await tx
       .insert(scheduleItems)
-      .values({ projectId, trackId: track.id, parentId: input.parentId, name, startDate: input.startDate, dueDate: due, baselineStart: input.startDate, baselineDue: due })
+      .values({ projectId, trackId: track.id, parentId: input.parentId, name, color: cleanColor(input.color), startDate: input.startDate, dueDate: due, baselineStart: input.startDate, baselineDue: due })
       .returning();
     await record(tx, { projectId, userId, entity: "schedule_item", entityId: item.id, action: "create", summary: `Menambah ${input.parentId ? "milestone" : "fase"} "${name}" di ${track.name} (${fmtRange(input.startDate, due)})` });
   });
 }
 
-export type ItemDetails = { name: string; picContactId: string | null; hardDeadline: boolean; internal: boolean };
+export type ItemDetails = { name: string; picContactId: string | null; hardDeadline: boolean; internal: boolean; color?: number | null };
 
 /** Everything except dates and status. Returns whether anything changed. */
 export async function updateItemDetails(db: Db, userId: string, projectId: string, itemId: string, input: ItemDetails) {
@@ -130,8 +146,8 @@ export async function updateItemDetails(db: Db, userId: string, projectId: strin
       const [c] = await tx.select({ id: teamContacts.id }).from(teamContacts).where(and(eq(teamContacts.id, input.picContactId), eq(teamContacts.projectId, projectId)));
       if (!c) throw new InputError("PIC tidak ditemukan di direktori tim.");
     }
-    const before = { name: item.name, picContactId: item.picContactId, hardDeadline: item.hardDeadline, internal: item.internal };
-    const after = { ...input, name };
+    const before = { name: item.name, picContactId: item.picContactId, hardDeadline: item.hardDeadline, internal: item.internal, color: item.color };
+    const after = { name, picContactId: input.picContactId, hardDeadline: input.hardDeadline, internal: input.internal, color: input.color === undefined ? item.color : cleanColor(input.color) };
     if (JSON.stringify(before) === JSON.stringify(after)) return false;
     await tx.update(scheduleItems).set({ ...after, updatedAt: new Date() }).where(eq(scheduleItems.id, itemId));
     await record(tx, { projectId, userId, entity: "schedule_item", entityId: itemId, action: "update", summary: `Mengubah detail "${name}"`, before, after });
@@ -172,12 +188,38 @@ export async function deleteItem(db: Db, userId: string, projectId: string, item
   });
 }
 
+/** Same status and/or colour on several items at once. One change-log entry. */
+export async function updateItems(db: Db, userId: string, projectId: string, itemIds: string[], patch: { status?: string; color?: number | null }) {
+  const status = patch.status === undefined ? undefined : (STATUSES.find((s) => s.value === patch.status)?.value as ItemStatus | undefined);
+  if (patch.status !== undefined && !status) throw new InputError("Status tidak valid.");
+  await requireRole(db, userId, projectId, patch.color !== undefined ? "schedule.edit" : "schedule.status");
+  if (!itemIds.length) return;
+  const set = { ...(status ? { status } : {}), ...(patch.color !== undefined ? { color: cleanColor(patch.color) } : {}), updatedAt: new Date() };
+  await db.transaction(async (tx) => {
+    const done = await tx.update(scheduleItems).set(set).where(and(eq(scheduleItems.projectId, projectId), inArray(scheduleItems.id, itemIds))).returning({ id: scheduleItems.id });
+    if (done.length) await record(tx, { projectId, userId, entity: "schedule", entityId: projectId, action: "update", summary: `Mengubah ${status ? "status" : "warna"} ${done.length} item`, after: patch });
+  });
+}
+
+export async function deleteItems(db: Db, userId: string, projectId: string, itemIds: string[]) {
+  await requireRole(db, userId, projectId, "schedule.edit");
+  if (!itemIds.length) return;
+  await db.transaction(async (tx) => {
+    const gone = await tx.delete(scheduleItems)
+      .where(and(eq(scheduleItems.projectId, projectId), or(inArray(scheduleItems.id, itemIds), inArray(scheduleItems.parentId, itemIds))))
+      .returning({ id: scheduleItems.id, name: scheduleItems.name });
+    await dropItemExtras(tx, gone.map((g) => g.id));
+    if (gone.length) await record(tx, { projectId, userId, entity: "schedule", entityId: projectId, action: "delete", summary: `Menghapus ${gone.length} item jadwal`, before: gone.map((g) => g.name) });
+  });
+}
+
 // ---------- dependencies ----------
 
 async function loadGraph(tx: Tx | Db, projectId: string) {
   const items = await tx.select().from(scheduleItems).where(eq(scheduleItems.projectId, projectId));
   const deps = items.length ? await tx.select().from(dependencies).where(inArray(dependencies.itemId, items.map((i) => i.id))) : [];
-  return { items, deps };
+  const [project] = await tx.select({ settings: projects.scheduleSettings }).from(projects).where(eq(projects.id, projectId));
+  return { items, deps, cal: calOf(project?.settings) };
 }
 
 export async function addDependency(db: Db, userId: string, projectId: string, itemId: string, dependsOnId: string) {
@@ -209,8 +251,8 @@ export async function previewShift(db: Db, userId: string, projectId: string, it
   await requireRole(db, userId, projectId, "schedule.edit");
   checkDates(input.startDate, input.dueDate);
   const item = await loadItem(db, projectId, itemId);
-  const { items, deps } = await loadGraph(db, projectId);
-  return { item, ...computeShift(items, deps, itemId, input.startDate, input.dueDate, input.cascade) };
+  const { items, deps, cal } = await loadGraph(db, projectId);
+  return { item, ...computeShift(items, deps, itemId, input.startDate, input.dueDate, input.cascade, cal) };
 }
 
 export async function applyShift(db: Db, userId: string, projectId: string, itemId: string, input: ShiftInput, reason = "") {
@@ -218,8 +260,8 @@ export async function applyShift(db: Db, userId: string, projectId: string, item
   checkDates(input.startDate, input.dueDate);
   return db.transaction(async (tx) => {
     const item = await loadItem(tx, projectId, itemId);
-    const { items, deps } = await loadGraph(tx, projectId);
-    const { moves, conflicts } = computeShift(items, deps, itemId, input.startDate, input.dueDate, input.cascade);
+    const { items, deps, cal } = await loadGraph(tx, projectId);
+    const { moves, conflicts } = computeShift(items, deps, itemId, input.startDate, input.dueDate, input.cascade, cal);
     if (!moves.length) return { moves, conflicts };
     const trackName = new Map((await tx.select().from(tracks).where(eq(tracks.projectId, projectId))).map((t) => [t.id, t.name]));
     const before: Record<string, string> = {};
@@ -274,6 +316,97 @@ export async function applyMoves(db: Db, userId: string, projectId: string, move
       after[item.name] = fmtRange(m.startDate, m.dueDate);
     }
     if (Object.keys(after).length) await record(tx, { projectId, userId, entity: "schedule", entityId: projectId, action: "update", summary, before, after });
+  });
+}
+
+// ---------- working-day settings ----------
+
+export async function updateScheduleSettings(db: Db, userId: string, projectId: string, input: ScheduleSettings) {
+  await requireRole(db, userId, projectId, "schedule.edit");
+  const holidays = (input.holidays ?? [])
+    .filter((h) => isDate(h.date))
+    .map((h) => ({ date: h.date, name: String(h.name ?? "").trim().slice(0, 80) }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const next: ScheduleSettings = { skipWeekends: input.skipWeekends !== false, cascade: Boolean(input.cascade), national: input.national !== false, jointLeave: input.jointLeave !== false, holidays: [...new Map(holidays.map((h) => [h.date, h])).values()] };
+  await db.transaction(async (tx) => {
+    const [before] = await tx.select({ settings: projects.scheduleSettings }).from(projects).where(eq(projects.id, projectId));
+    if (JSON.stringify(before?.settings) === JSON.stringify(next)) return;
+    await tx.update(projects).set({ scheduleSettings: next }).where(eq(projects.id, projectId));
+    await record(tx, { projectId, userId, entity: "schedule", entityId: projectId, action: "update", summary: "Mengubah aturan hari kerja timeline", before: before?.settings, after: next });
+  });
+}
+
+// ---------- saved versions ----------
+
+async function snapshot(tx: Tx | Db, projectId: string): Promise<ScheduleSnapshot> {
+  const t = await tx.select({ id: tracks.id, name: tracks.name, sortOrder: tracks.sortOrder }).from(tracks).where(eq(tracks.projectId, projectId)).orderBy(asc(tracks.sortOrder), asc(tracks.createdAt));
+  const rows = await tx.select().from(scheduleItems).where(eq(scheduleItems.projectId, projectId));
+  const items = rows.map((i) => ({
+    id: i.id, trackId: i.trackId, parentId: i.parentId, name: i.name, startDate: i.startDate, dueDate: i.dueDate, baselineStart: i.baselineStart, baselineDue: i.baselineDue,
+    status: i.status, picContactId: i.picContactId, hardDeadline: i.hardDeadline, internal: i.internal, notes: i.notes, color: i.color,
+  }));
+  const deps = items.length ? await tx.select().from(dependencies).where(inArray(dependencies.itemId, items.map((i) => i.id))) : [];
+  return { tracks: t, items, deps };
+}
+
+export async function saveVersion(db: Db, userId: string, projectId: string, name: string) {
+  await requireRole(db, userId, projectId, "schedule.edit");
+  const label = name.trim();
+  if (!label) throw new InputError("Nama versi wajib diisi.");
+  await db.transaction(async (tx) => {
+    const [v] = await tx.insert(scheduleVersions).values({ projectId, name: label, snapshot: await snapshot(tx, projectId), createdBy: userId }).returning({ id: scheduleVersions.id });
+    await record(tx, { projectId, userId, entity: "schedule_version", entityId: v.id, action: "create", summary: `Menyimpan versi timeline "${label}"` });
+  });
+}
+
+export async function listVersions(db: Db, projectId: string) {
+  return db
+    .select({ id: scheduleVersions.id, name: scheduleVersions.name, createdAt: scheduleVersions.createdAt, by: users.name, items: sql<number>`jsonb_array_length(${scheduleVersions.snapshot}->'items')` })
+    .from(scheduleVersions).leftJoin(users, eq(users.id, scheduleVersions.createdBy))
+    .where(eq(scheduleVersions.projectId, projectId)).orderBy(desc(scheduleVersions.createdAt));
+}
+
+export type VersionRow = Awaited<ReturnType<typeof listVersions>>[number];
+
+export async function deleteVersion(db: Db, userId: string, projectId: string, versionId: string) {
+  await requireRole(db, userId, projectId, "schedule.edit");
+  await db.transaction(async (tx) => {
+    const [gone] = await tx.delete(scheduleVersions).where(and(eq(scheduleVersions.id, versionId), eq(scheduleVersions.projectId, projectId))).returning({ name: scheduleVersions.name });
+    if (gone) await record(tx, { projectId, userId, entity: "schedule_version", entityId: versionId, action: "delete", summary: `Menghapus versi timeline "${gone.name}"` });
+  });
+}
+
+/**
+ * Puts the timeline back exactly as it was when the version was saved. The current
+ * state is saved as a version first, so a restore can itself be undone. Items keep
+ * their ids, so links and comments on items that exist in both stay attached.
+ */
+export async function restoreVersion(db: Db, userId: string, projectId: string, versionId: string) {
+  await requireRole(db, userId, projectId, "schedule.edit");
+  await db.transaction(async (tx) => {
+    const [v] = await tx.select().from(scheduleVersions).where(and(eq(scheduleVersions.id, versionId), eq(scheduleVersions.projectId, projectId)));
+    if (!v) throw new InputError("Versi tidak ditemukan.");
+    await tx.insert(scheduleVersions).values({ projectId, name: `Sebelum memulihkan "${v.name}"`, snapshot: await snapshot(tx, projectId), createdBy: userId });
+    const snap = v.snapshot;
+    const keepItems = snap.items.map((i) => i.id);
+    const keepTracks = snap.tracks.map((t) => t.id);
+    const current = await tx.select({ id: scheduleItems.id }).from(scheduleItems).where(eq(scheduleItems.projectId, projectId));
+    const dropped = current.map((c) => c.id).filter((id) => !keepItems.includes(id));
+    await dropItemExtras(tx, dropped);
+    if (current.length) await tx.delete(dependencies).where(inArray(dependencies.itemId, current.map((c) => c.id)));
+    if (dropped.length) await tx.delete(scheduleItems).where(inArray(scheduleItems.id, dropped));
+    await tx.delete(tracks).where(and(eq(tracks.projectId, projectId), keepTracks.length ? notInArray(tracks.id, keepTracks) : undefined));
+    for (const t of snap.tracks) {
+      await tx.insert(tracks).values({ ...t, projectId }).onConflictDoUpdate({ target: tracks.id, set: { name: t.name, sortOrder: t.sortOrder } });
+    }
+    // A PIC removed from the team since the version was saved cannot be pointed at any more.
+    const contacts = new Set((await tx.select({ id: teamContacts.id }).from(teamContacts).where(eq(teamContacts.projectId, projectId))).map((c) => c.id));
+    for (const i of snap.items) {
+      const row = { ...i, projectId, picContactId: i.picContactId && contacts.has(i.picContactId) ? i.picContactId : null, updatedAt: new Date() };
+      await tx.insert(scheduleItems).values(row).onConflictDoUpdate({ target: scheduleItems.id, set: row });
+    }
+    if (snap.deps.length) await tx.insert(dependencies).values(snap.deps).onConflictDoNothing();
+    await record(tx, { projectId, userId, entity: "schedule_version", entityId: versionId, action: "update", summary: `Memulihkan timeline ke versi "${v.name}"` });
   });
 }
 

@@ -28,8 +28,13 @@ describe("today dashboard", () => {
     asst = (await s.listMembers(db, projectId)).find((m) => m.role === "assistant")!.userId;
 
     // Offline Edit is due TODAY+3 and Picture Lock TODAY+4; Ingest & Sync is long past.
-    await sch.addTrack(db, sup, projectId, { name: "", template: "feature", startDate: addDays(TODAY, -45) });
+    await sch.addTrack(db, sup, projectId, { name: "Main Feature", template: "empty", startDate: "" });
     const trackId = (await sch.getSchedule(db, projectId, { includeInternal: true })).tracks[0].id;
+    const phase = (name: string, from: number, to: number) => sch.addItem(db, sup, projectId, { trackId, parentId: null, name, startDate: addDays(TODAY, from), dueDate: addDays(TODAY, to) });
+    await phase("Ingest & Sync", -45, -39);
+    await phase("Offline Edit", -38, 3);
+    await phase("Picture Lock", 4, 4);
+    await phase("Grading", 5, 18);
     await sch.addItem(db, sup, projectId, { trackId, parentId: null, name: "Review hari ini", startDate: TODAY, dueDate: TODAY });
     await sch.addItem(db, sup, projectId, { trackId, parentId: null, name: "Internal check", startDate: addDays(TODAY, 2), dueDate: addDays(TODAY, 2) });
     for (const i of (await sch.getSchedule(db, projectId, { includeInternal: true })).tracks[0].items) id.set(i.name, i.id);
@@ -77,6 +82,18 @@ describe("today dashboard", () => {
     expect(names(t.next7)).toEqual(["Rahasia cut", "Internal check", "Trailer 30s", "Offline Edit", "Picture Lock"]);
     expect(t.next7.find((e) => e.name === "Trailer 30s")).toMatchObject({ kind: "deliverable", context: "YouTube" });
     expect(t.next7.find((e) => e.name === "Offline Edit")).toMatchObject({ kind: "item", context: "Main Feature", statusLabel: "Belum mulai" });
+  });
+
+  it("week lists the Monday-first week's phases, leaves out other weeks and hides internal items from viewers", async () => {
+    const t = await admin();
+    expect(t.week.start).toBe("2027-01-11"); // TODAY is a Friday
+    expect(t.week.days.map((x) => x.date)).toEqual(Array.from({ length: 7 }, (_, n) => addDays("2027-01-11", n)));
+    expect(names(t.week.phases)).toEqual(["Offline Edit", "Review hari ini", "Internal check"]);
+    expect(t.week.phases[0]).toMatchObject({ track: "Main Feature", parent: false, status: "not_started", ph: 2 });
+    expect(names(t.week.phases)).not.toContain("Grading"); // starts after Sunday
+    expect(names(t.week.phases)).not.toContain("Ingest & Sync"); // ended before Monday
+    const v = await getToday(db, projectId, TODAY, { includeInternal: false });
+    expect(names(v.week.phases)).toEqual(["Offline Edit", "Review hari ini"]);
   });
 
   it("leaves out finished items, derived deliverables and counts delivered ones only", async () => {

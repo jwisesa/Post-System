@@ -3,6 +3,7 @@ export type Role = "supervisor" | "assistant";
 export type Action =
   | "project.view"
   | "project.edit"
+  | "project.delete"
   | "tech.edit"
   | "team.edit"
   | "access.manage"

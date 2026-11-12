@@ -33,6 +33,9 @@ export const sessions = ps.table("sessions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
 
+/** Working-day rules for the timeline. Missing keys mean the defaults in lib/schedule/workdays. */
+export type ScheduleSettings = { skipWeekends?: boolean; holidays?: { date: string; name: string }[]; cascade?: boolean; national?: boolean; jointLeave?: boolean };
+
 export const projects = ps.table("projects", {
   id: id(),
   name: text("name").notNull(),
@@ -41,6 +44,7 @@ export const projects = ps.table("projects", {
   platforms: jsonb("platforms").$type<string[]>().notNull().default([]),
   unitCount: integer("unit_count"), // episodes or reels
   status: text("status").notNull().default("active"),
+  scheduleSettings: jsonb("schedule_settings").$type<ScheduleSettings>().notNull().default({}),
   createdAt: createdAt(),
 });
 
@@ -159,9 +163,31 @@ export const scheduleItems = ps.table("schedule_items", {
   hardDeadline: boolean("hard_deadline").notNull().default(false),
   internal: boolean("internal").notNull().default(false),
   notes: text("notes").notNull().default(""),
+  color: integer("color"), // 1..8 = --ph-N; null = inherit (milestone: its phase; phase: by position)
   createdAt: createdAt(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** A named copy of the whole timeline (tracks, items, dependencies) that can be restored. */
+export const scheduleVersions = ps.table("schedule_versions", {
+  id: id(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  snapshot: jsonb("snapshot").$type<ScheduleSnapshot>().notNull(),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: createdAt(),
+});
+
+export type ScheduleSnapshot = {
+  tracks: { id: string; name: string; sortOrder: number }[];
+  items: {
+    id: string; trackId: string; parentId: string | null; name: string; startDate: string; dueDate: string; baselineStart: string; baselineDue: string;
+    status: ItemStatus; picContactId: string | null; hardDeadline: boolean; internal: boolean; notes: string; color: number | null;
+  }[];
+  deps: { itemId: string; dependsOnId: string }[];
+};
 
 /** Finish-to-start: itemId cannot start before dependsOnId is due. */
 export const dependencies = ps.table(

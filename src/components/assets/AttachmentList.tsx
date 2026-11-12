@@ -5,6 +5,7 @@ import * as actions from "@/app/admin/asset-actions";
 import { KINDS, kindLabel, VERSION_STATUSES, versionStatus } from "@/lib/assets/catalog";
 import type { Attachment, Comment } from "@/lib/assets/service";
 import { Combobox } from "../ui/controls";
+import { Icon } from "../ui/icons";
 import { useToast } from "../ui/toast";
 
 const when = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" });
@@ -41,21 +42,21 @@ export function AttachmentList({ attachments, target, slug, canEdit, canApprove,
   const [adding, setAdding] = useState(0); // bumping the key resets the add form
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {attachments.length === 0 && <p className="muted text-sm">{empty}</p>}
       {attachments.map((a) => {
         const [latest, ...older] = a.versions;
         if (!latest) return null;
         const st = versionStatus(latest.status);
         return (
-          <article key={a.id} className="rounded-lg border border-line p-3 text-sm" data-attachment={a.label}>
+          <article key={a.id} className="hairline pt-3 text-sm" data-attachment={a.label}>
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="tag">{kindLabel(a.kind)}</span>
               <span className="font-medium">{a.label}</span>
-              <span className="tag tag-accent">v{latest.number}</span>
+              <span className="tag">v{latest.number}</span>
               <span className={`tag ${st.tone}`}>{st.label}</span>
               {a.internal && <span className="tag tag-warn">Internal</span>}
-              <a href={latest.url} target="_blank" rel="noreferrer" className="btn-secondary ml-auto !min-h-7 !py-0.5">Buka ↗</a>
+              <a href={latest.url} target="_blank" rel="noreferrer" className="btn-secondary ml-auto">Buka <Icon name="external" /></a>
             </div>
             {latest.notes && <p className="mt-1.5 whitespace-pre-wrap">{latest.notes}</p>}
             <p className="muted mt-1 text-xs">{latest.author} · {fmt(latest.createdAt)}</p>
@@ -63,7 +64,7 @@ export function AttachmentList({ attachments, target, slug, canEdit, canApprove,
             {canApprove && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {VERSION_STATUSES.filter((s) => s.value !== latest.status).map((s) => (
-                  <button key={s.value} type="button" disabled={busy} className="btn-secondary !min-h-7 !py-0.5 text-xs" onClick={() => act(() => actions.setVersionStatus(slug, latest.id, s.value), `"${a.label}" v${latest.number}: ${s.label}.`)}>
+                  <button key={s.value} type="button" disabled={busy} className="btn-secondary text-xs" onClick={() => act(() => actions.setVersionStatus(slug, latest.id, s.value), `"${a.label}" v${latest.number}: ${s.label}.`)}>
                     Tandai: {s.label}
                   </button>
                 ))}
@@ -73,13 +74,13 @@ export function AttachmentList({ attachments, target, slug, canEdit, canApprove,
             {older.length > 0 && (
               <details className="mt-2">
                 <summary className="muted text-xs hover:text-ink">Riwayat versi ({older.length})</summary>
-                <ol className="mt-2 space-y-2 border-l border-line pl-3">
+                <ol className="mt-2 space-y-2 pl-3 shadow-[inset_1px_0_0_var(--line)]">
                   {older.map((v) => (
                     <li key={v.id}>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="tag">v{v.number}</span>
                         <span className={`tag ${versionStatus(v.status).tone}`}>{versionStatus(v.status).label}</span>
-                        <a href={v.url} target="_blank" rel="noreferrer" className="text-accent">Buka ↗</a>
+                        <a href={v.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline underline-offset-2">Buka <Icon name="external" /></a>
                       </div>
                       {v.notes && <p className="mt-1 whitespace-pre-wrap">{v.notes}</p>}
                       <p className="muted text-xs">{v.author} · {fmt(v.createdAt)}</p>
@@ -91,7 +92,7 @@ export function AttachmentList({ attachments, target, slug, canEdit, canApprove,
 
             {canEdit && (
               <details className="mt-2" key={`${a.id}:${latest.number}`}>
-                <summary className="text-xs text-accent">+ Versi baru (v{latest.number + 1})</summary>
+                <summary className="cursor-pointer text-xs font-medium">+ Versi baru (v{latest.number + 1})</summary>
                 <form
                   className="mt-2 space-y-2"
                   onSubmit={(e) => {
@@ -114,8 +115,8 @@ export function AttachmentList({ attachments, target, slug, canEdit, canApprove,
       })}
 
       {canEdit && (
-        <details className="rounded-lg border border-dashed border-line p-3" key={adding}>
-          <summary className="text-sm font-medium text-accent">+ Tambah link</summary>
+        <details className="hairline pt-3" key={adding}>
+          <summary className="cursor-pointer text-sm font-medium">+ Tambah link</summary>
           <form
             className="mt-3 space-y-2"
             onSubmit={(e) => {
@@ -130,7 +131,7 @@ export function AttachmentList({ attachments, target, slug, canEdit, canApprove,
             }}
           >
             <div className="grid grid-cols-[1fr_7.5rem] gap-2">
-              <div><span className="mb-1 block text-xs font-medium text-muted">Nama</span><Combobox name="label" options={labelOptions} /></div>
+              <div><span className="mb-1 block text-xs font-medium text-ink-2">Nama</span><Combobox name="label" options={labelOptions} /></div>
               <label><span>Tipe</span><select name="kind" defaultValue={defaultKind}>{KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</select></label>
             </div>
             <label><span>Link (Drive, Frame.io, Vimeo, …)</span><input name="url" type="url" required placeholder="https://…" /></label>
@@ -153,8 +154,7 @@ export function CommentThread({ comments, target, slug, me }: { comments: Commen
       {comments.length === 0 && <p className="muted">Belum ada komentar.</p>}
       <ul className="space-y-3">
         {comments.map((c) => (
-          <li key={c.id} className="flex gap-2">
-            <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-full bg-raised text-[10px] font-semibold">{c.author.slice(0, 2).toUpperCase()}</span>
+          <li key={c.id}>
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2">
                 <span className="font-medium">{c.author}</span>

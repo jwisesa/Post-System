@@ -15,6 +15,13 @@
       "when": 1794454936653,
       "tag": "0001_enable_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794485079939,
+      "tag": "0002_bent_turbo",
+      "breakpoints": true
     }
   ]
 }

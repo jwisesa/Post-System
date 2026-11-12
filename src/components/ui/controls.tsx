@@ -3,22 +3,27 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { Icon } from "./icons";
 import { useToast } from "./toast";
 
 export function ThemeToggle() {
   return (
     <button
       type="button"
-      className="btn-ghost"
+      className="btn-ghost btn-icon"
       aria-label="Ganti tema terang/gelap"
       title="Ganti tema"
       onClick={() => {
-        const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-        document.documentElement.dataset.theme = next;
+        const root = document.documentElement;
+        const next = root.dataset.theme === "dark" ? "light" : "dark";
+        root.dataset.themeSwitching = "";
+        root.dataset.theme = next;
+        requestAnimationFrame(() => delete root.dataset.themeSwitching);
         document.cookie = `theme=${next}; path=/; max-age=31536000; samesite=lax`;
       }}
     >
-      <span aria-hidden>◐</span> Tema
+      <Icon name="sun" className="hidden dark:block" />
+      <Icon name="moon" className="dark:hidden" />
     </button>
   );
 }
@@ -30,7 +35,7 @@ export function NavLink({ href, exact, children }: { href: string; exact?: boole
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`block rounded-md px-2.5 py-1.5 text-sm whitespace-nowrap transition ${active ? "bg-accent-soft font-medium text-accent" : "text-muted hover:bg-raised hover:text-ink"}`}
+      className="nav-link"
     >
       {children}
     </Link>
@@ -97,7 +102,7 @@ export function Combobox({ name, options, defaultValue = "", placeholder, onValu
         aria-controls={listId}
         aria-autocomplete="list"
         autoComplete="off"
-        className={changed ? "!border-warn" : undefined}
+        className={changed ? "is-changed" : undefined}
         onChange={(e) => { set(e.target.value); setOpen(true); setActive(-1); }}
         onFocus={() => options.length && setOpen(true)}
         onBlur={() => setOpen(false)}
@@ -109,13 +114,13 @@ export function Combobox({ name, options, defaultValue = "", placeholder, onValu
         }}
       />
       {open && shown.length > 0 && (
-        <ul id={listId} role="listbox" className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-md border border-line bg-surface py-1 shadow-lg">
+        <ul id={listId} role="listbox" className="popover absolute z-30 mt-1 max-h-56 w-full overflow-auto py-1">
           {shown.map((o, i) => (
             <li
               key={o}
               role="option"
               aria-selected={o === value}
-              className={`cursor-pointer px-2.5 py-1.5 text-sm ${i === active ? "bg-accent-soft text-accent" : o === value ? "font-medium" : ""} hover:bg-raised`}
+              className={`cursor-pointer px-2.5 py-1.5 text-sm ${i === active ? "bg-sel" : o === value ? "font-medium" : ""} hover:bg-raised`}
               onMouseDown={(e) => { e.preventDefault(); set(o); setOpen(false); }}
             >
               {o}
@@ -127,20 +132,20 @@ export function Combobox({ name, options, defaultValue = "", placeholder, onValu
   );
 }
 
-/** Right-hand side panel. Closes on Esc or the ✕ button. */
-export function Drawer({ title, onClose, children }: { title: React.ReactNode; onClose: () => void; children: React.ReactNode }) {
+/** Right-hand side panel. Closes on Esc or the close button. */
+export function Drawer({ title, onClose, ph, children }: { title: React.ReactNode; onClose: () => void; ph?: number; children: React.ReactNode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <aside role="dialog" aria-label={typeof title === "string" ? title : "Detail"} className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-line bg-surface shadow-2xl">
-      <header className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
+    <aside role="dialog" aria-label={typeof title === "string" ? title : "Detail"} className="drawer" data-ph={ph}>
+      <header>
         <h2 className="min-w-0 break-words">{title}</h2>
-        <button type="button" className="btn-ghost" aria-label="Tutup panel" onClick={onClose}>✕</button>
+        <button type="button" className="btn-ghost btn-icon" aria-label="Tutup panel" onClick={onClose}><Icon name="close" /></button>
       </header>
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">{children}</div>
+      <div>{children}</div>
     </aside>
   );
 }
@@ -149,21 +154,20 @@ export function Tabs({ tabs }: { tabs: { id: string; label: string; content: Rea
   const [current, setCurrent] = useState(tabs[0].id);
   return (
     <>
-      <div role="tablist" className="flex gap-1 border-b border-line">
+      <div role="tablist" className="seg">
         {tabs.map((t) => (
           <button
             key={t.id}
             role="tab"
             aria-selected={t.id === current}
-            className={`-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm ${t.id === current ? "border-accent font-medium text-accent" : "border-transparent text-muted hover:text-ink"}`}
-            onClick={() => setCurrent(t.id)}
+                        onClick={() => setCurrent(t.id)}
           >
             {t.label}
           </button>
         ))}
       </div>
       {tabs.map((t) => (
-        <div key={t.id} role="tabpanel" hidden={t.id !== current} className="space-y-4 pt-4">{t.content}</div>
+        <div key={t.id} role="tabpanel" hidden={t.id !== current} className="space-y-10 pt-6">{t.content}</div>
       ))}
     </>
   );

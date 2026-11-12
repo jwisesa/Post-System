@@ -61,24 +61,24 @@ export function TeamDirectory({ team, slug }: { team: Team; slug?: string }) {
           {slug && <button type="button" className="btn" onClick={() => setPanel({})}>+ Kontak</button>}
         </div>
       </div>
-      <div className="card overflow-x-auto p-0">
+      <div className="overflow-x-auto">
         {rows.length === 0 ? (
-          <p className="muted p-4 text-sm">{q || group ? "Tidak ada kontak yang cocok." : "Belum ada kontak."}</p>
+          <p className="empty muted">{q || group ? "Tidak ada kontak yang cocok." : "Belum ada kontak."}</p>
         ) : (
-          <table className="w-full">
-            <thead><tr className="border-b border-line"><th>Nama</th><th>Departemen</th><th>Jabatan</th><th>Perusahaan</th><th>Email</th><th>Telepon</th></tr></thead>
+          <table className="table">
+            <thead><tr><th>Nama</th><th>Departemen</th><th>Jabatan</th><th>Perusahaan</th><th>Email</th><th>Telepon</th></tr></thead>
             <tbody>
               {rows.map(({ c, g }) => (
-                <tr key={c.id} className="border-b border-line last:border-0 hover:bg-raised">
+                <tr key={c.id} className="hoverable">
                   <td>
-                    {slug ? <button type="button" className="cursor-pointer text-left font-medium hover:text-accent" onClick={() => setPanel({ contact: c })}>{c.name}</button> : <span className="font-medium">{c.name}</span>}{" "}
+                    {slug ? <button type="button" className="cursor-pointer text-left font-medium hover:underline" onClick={() => setPanel({ contact: c })}>{c.name}</button> : <span className="font-medium">{c.name}</span>}{" "}
                     <ContactFlags c={c} />
                     {c.notes && <div className="muted text-xs">{c.notes}</div>}
                   </td>
                   <td className="muted">{g.name}</td>
                   <td>{c.jobTitle}</td>
                   <td>{c.company}</td>
-                  <td>{c.email && <a className="text-accent" href={`mailto:${c.email}`}>{c.email}</a>}</td>
+                  <td>{c.email && <a className="underline underline-offset-2" href={`mailto:${c.email}`}>{c.email}</a>}</td>
                   <td className="whitespace-nowrap">{c.phone}</td>
                 </tr>
               ))}

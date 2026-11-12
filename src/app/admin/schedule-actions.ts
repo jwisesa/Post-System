@@ -20,44 +20,28 @@ export async function deleteTrackAction(f: FormData) {
 export async function addItemAction(f: FormData) {
   const { db, user, project } = await ctx(f);
   await finish(timeline(project.slug), () =>
-    sch.addItem(db, user.id, project.id, { trackId: str(f, "trackId"), parentId: str(f, "parentId") || null, name: str(f, "name"), startDate: str(f, "startDate"), dueDate: str(f, "dueDate") }),
+    sch.addItem(db, user.id, project.id, { trackId: str(f, "trackId"), parentId: str(f, "parentId") || null, name: str(f, "name"), startDate: str(f, "startDate"), dueDate: str(f, "dueDate"), color: Number(str(f, "color")) || null }),
   );
 }
 
-/**
- * Saves details right away. A date change that would move or collide with
- * other items goes to the preview page first; a self-contained one is applied.
- */
+/** Saves details, status and dates. Dependents move only when the form's "cascade" box is ticked. */
 export async function updateItemAction(f: FormData) {
   const { db, user, project } = await ctx(f);
   const itemId = str(f, "itemId");
-  const dates = { startDate: str(f, "startDate"), dueDate: str(f, "dueDate"), cascade: true };
+  const dates = { startDate: str(f, "startDate"), dueDate: str(f, "dueDate") };
   let target = timeline(project.slug);
   try {
     await sch.updateItemDetails(db, user.id, project.id, itemId, {
-      name: str(f, "name"), picContactId: str(f, "picContactId") || null, hardDeadline: flag(f, "hardDeadline"), internal: flag(f, "internal"),
+      name: str(f, "name"), picContactId: str(f, "picContactId") || null, hardDeadline: flag(f, "hardDeadline"), internal: flag(f, "internal"), color: Number(str(f, "color")) || null,
     });
     await sch.setItemStatus(db, user.id, project.id, itemId, { status: str(f, "status"), notes: str(f, "notes") });
-    const preview = await sch.previewShift(db, user.id, project.id, itemId, dates);
-    if (preview.moves.length > 1 || preview.conflicts.length) {
-      const q = new URLSearchParams({ item: itemId, start: dates.startDate, due: dates.dueDate, reason: str(f, "reason") });
-      target = `${target}/shift?${q}`;
-    } else if (preview.moves.length) {
-      await sch.applyShift(db, user.id, project.id, itemId, dates, str(f, "reason"));
-    }
+    await sch.applyShift(db, user.id, project.id, itemId, { ...dates, cascade: flag(f, "cascade") }, str(f, "reason"));
   } catch (e) {
     if (!isExpected(e)) throw e;
     target = `${target}?error=${encodeURIComponent(e.message)}`;
   }
   revalidatePath(timeline(project.slug));
   redirect(target);
-}
-
-export async function applyShiftAction(f: FormData) {
-  const { db, user, project } = await ctx(f);
-  await finish(timeline(project.slug), () =>
-    sch.applyShift(db, user.id, project.id, str(f, "itemId"), { startDate: str(f, "startDate"), dueDate: str(f, "dueDate"), cascade: str(f, "mode") !== "single" }, str(f, "reason")),
-  );
 }
 
 export async function setStatusAction(f: FormData) {
@@ -83,4 +67,28 @@ export async function removeDependencyAction(f: FormData) {
 export async function rebaselineAction(f: FormData) {
   const { db, user, project } = await ctx(f);
   await finish(timeline(project.slug), () => sch.rebaseline(db, user.id, project.id, str(f, "reason")));
+}
+
+export async function saveSettingsAction(f: FormData) {
+  const { db, user, project } = await ctx(f);
+  await finish(timeline(project.slug), async () => {
+    let holidays: { date: string; name: string }[] = [];
+    try { holidays = JSON.parse(str(f, "holidays") || "[]"); } catch { /* keep none */ }
+    await sch.updateScheduleSettings(db, user.id, project.id, { skipWeekends: flag(f, "skipWeekends"), cascade: flag(f, "cascade"), national: flag(f, "national"), jointLeave: flag(f, "jointLeave"), holidays: Array.isArray(holidays) ? holidays : [] });
+  });
+}
+
+export async function saveVersionAction(f: FormData) {
+  const { db, user, project } = await ctx(f);
+  await finish(timeline(project.slug), () => sch.saveVersion(db, user.id, project.id, str(f, "name")));
+}
+
+export async function restoreVersionAction(f: FormData) {
+  const { db, user, project } = await ctx(f);
+  await finish(timeline(project.slug), () => sch.restoreVersion(db, user.id, project.id, str(f, "versionId")));
+}
+
+export async function deleteVersionAction(f: FormData) {
+  const { db, user, project } = await ctx(f);
+  await finish(timeline(project.slug), () => sch.deleteVersion(db, user.id, project.id, str(f, "versionId")));
 }

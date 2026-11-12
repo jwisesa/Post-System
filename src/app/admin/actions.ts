@@ -6,7 +6,7 @@ import { getDb } from "@/db/client";
 import type { Role } from "@/lib/auth/permissions";
 import { requireUser, signIn, signOut } from "@/lib/auth/session";
 import * as s from "@/lib/services";
-import { ctx, finish, flag, str } from "./action-helpers";
+import { ctx, finish, flag, isExpected, str } from "./action-helpers";
 import { PLATFORMS, PRODUCTION_TYPES, TECH_FIELDS } from "@/lib/tech-spec/schema";
 
 function projectInput(f: FormData): s.ProjectInput {
@@ -103,4 +103,17 @@ export async function createShareLinkAction(f: FormData) {
 export async function revokeShareLinkAction(f: FormData) {
   const { db, user, project } = await ctx(f);
   await finish(`/admin/p/${project.slug}/access`, () => s.revokeShareLink(db, user.id, project.id, str(f, "linkId")));
+}
+
+export async function deleteProjectAction(f: FormData) {
+  const { db, user, project } = await ctx(f);
+  let error = "";
+  try {
+    await s.deleteProject(db, user.id, project.id, str(f, "confirmName"));
+  } catch (e) {
+    if (!isExpected(e)) throw e;
+    error = e.message;
+  }
+  revalidatePath("/admin");
+  redirect(error ? `/admin/p/${project.slug}?error=${encodeURIComponent(error)}` : "/admin");
 }

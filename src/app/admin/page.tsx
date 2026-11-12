@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "@/components/ui/icons";
 import { ProjectFields } from "@/components/project-fields";
 import { Brand, UserMenu } from "@/components/shell";
 import { ErrorBanner, productionTypeLabel } from "@/components/views";
@@ -17,33 +18,29 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
   const overview = await getProjectsOverview(db, rows.map((r) => r.project.id), todayWib());
   return (
     <>
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-2.5"><Brand /><UserMenu name={user.name} /></div>
+      <header className="board">
+        <div className="mx-auto flex h-14 max-w-[880px] items-center justify-between px-4 md:px-8"><Brand /><UserMenu name={user.name} /></div>
       </header>
-      <main className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
-        <h1>Project</h1>
+      <main className="mx-auto max-w-[880px] space-y-6 px-4 py-6 md:px-8 md:py-8">
+        <h1 className="page-title">Project</h1>
         <ErrorBanner message={error} />
-        {rows.length === 0 && <p className="card muted text-sm">Belum ada project. Buat yang pertama di bawah.</p>}
-        <ul className="grid gap-3 md:grid-cols-2">
+        {rows.length === 0 && <div className="empty"><p>Belum ada project.</p><p className="muted">Buat yang pertama di bawah.</p></div>}
+        <ul className="rows">
           {rows.map(({ project, role }) => {
             const o = overview.get(project.id)!;
             const pct = o.total ? Math.round((o.done / o.total) * 100) : 0;
             return (
               <li key={project.id}>
-                <Link href={`/admin/p/${project.slug}`} className="card block space-y-3 transition hover:border-accent">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="text-base font-semibold">{project.name}</div>
+                <Link href={`/admin/p/${project.slug}`} className="row-btn !items-start !py-4">
+                  <div className="min-w-0 flex-1">
+                      <div className="font-display text-xl font-semibold">{project.name}</div>
                       <div className="muted text-sm">{productionTypeLabel(project.productionType)} · {role}</div>
-                    </div>
-                    {o.late > 0 && <span className="tag tag-danger">{o.late} terlambat</span>}
                   </div>
-                  <div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-raised"><div className="h-full rounded-full bg-ok" style={{ width: `${pct}%` }} /></div>
-                    <div className="muted mt-1.5 flex justify-between text-xs">
-                      <span>{o.total ? `${o.done}/${o.total} item selesai` : "Belum ada jadwal"}</span>
-                      {o.next && <span>Berikutnya: {o.next.name} · {fmtDate(o.next.dueDate)}</span>}
-                    </div>
+                  <div className="w-60 shrink-0 space-y-1.5 text-end">
+                    <div className="meter"><span style={{ width: `${pct}%` }} /></div>
+                    <div className="muted text-[13px]">{o.total ? `${o.done}/${o.total} item selesai` : "Belum ada jadwal"}</div>
+                    {o.next && <div className="truncate text-[13px]">Berikutnya: {o.next.name} · {fmtDate(o.next.dueDate)}</div>}
+                    {o.late > 0 && <div><span className="tag tag-danger">{o.late} terlambat</span></div>}
                   </div>
                 </Link>
               </li>
@@ -51,7 +48,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
           })}
         </ul>
         <details className="card" open={rows.length === 0}>
-          <summary className="font-medium text-accent">+ Project baru</summary>
+          <summary className="btn-secondary inline-flex cursor-pointer list-none"><Icon name="plus" />Project baru</summary>
           <form action={createProjectAction} className="mt-4 space-y-3">
             <ProjectFields />
             <button className="btn">Buat project</button>

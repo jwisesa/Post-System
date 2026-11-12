@@ -21,14 +21,14 @@ export function CalendarCard({ slug, origin, initialToken }: { slug: string; ori
     <section className="card space-y-3 print:hidden">
       <div>
         <h2>Langganan kalender</h2>
-        <p className="muted mt-1 text-xs">Link pribadi untuk Anda. Jangan dibagikan: siapa pun yang memegangnya bisa melihat jadwal project, termasuk item internal.</p>
+        <p className="muted mt-1 text-[13px]">Link pribadi untuk Anda. Jangan dibagikan: siapa pun yang memegangnya bisa melihat jadwal project, termasuk item internal.</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-md bg-raised px-2 py-1.5 font-mono text-xs">{url}</code>
+        <code className="min-w-0 flex-1 truncate bg-raised px-2 py-1.5 font-mono text-xs">{url}</code>
         <CopyButton text={url} label="Salin link" />
         <button type="button" className="btn-danger" disabled={busy} onClick={regenerate}>Buat ulang link</button>
       </div>
-      <ul className="muted list-disc space-y-1 pl-5 text-xs">
+      <ul className="muted list-disc space-y-1 pl-5 text-[13px]">
         <li>iPhone / Mac: Kalender → Tambah Kalender Langganan, lalu tempel link.</li>
         <li>Google Calendar: Kalender lain → Dari URL, lalu tempel link.</li>
         <li>Google hanya memperbarui kalender langganan setiap beberapa jam, jadi perubahan jadwal tidak langsung muncul.</li>

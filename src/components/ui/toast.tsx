@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { Icon } from "./icons";
 
 type Toast = { id: number; message: string; tone: "ok" | "error"; action?: { label: string; run: () => void } };
 type Push = (t: Omit<Toast, "id" | "tone"> & { tone?: Toast["tone"] }) => void;
@@ -25,14 +26,14 @@ export function Toaster({ children }: { children: React.ReactNode }) {
       {children}
       <div aria-live="polite" className="pointer-events-none fixed inset-x-0 top-4 z-[60] flex flex-col items-center gap-2 px-4">
         {toasts.map((t) => (
-          <div key={t.id} role="status" className={`pointer-events-auto flex max-w-lg items-center gap-3 rounded-lg border px-3 py-2 text-sm shadow-lg ${t.tone === "error" ? "border-danger bg-danger-soft text-danger" : "border-line bg-ink text-bg"}`}>
+          <div key={t.id} role="status" className="toast pointer-events-auto" data-tone={t.tone}>
             <span>{t.message}</span>
             {t.action && (
-              <button className="cursor-pointer font-semibold underline" onClick={() => { t.action!.run(); dismiss(t.id); }}>
+              <button onClick={() => { t.action!.run(); dismiss(t.id); }}>
                 {t.action.label}
               </button>
             )}
-            <button aria-label="Tutup" className="cursor-pointer opacity-70 hover:opacity-100" onClick={() => dismiss(t.id)}>✕</button>
+            <button aria-label="Tutup" className="cursor-pointer opacity-70 hover:opacity-100" onClick={() => dismiss(t.id)}><Icon name="close" /></button>
           </div>
         ))}
       </div>

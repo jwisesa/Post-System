@@ -3,9 +3,11 @@ import type { Db } from "@/db/client";
 import { listAttachments } from "../assets/service";
 import { isDone, deliverableStatus } from "../deliverables/catalog";
 import { listDeliverables } from "../deliverables/service";
+import { phaseIndex } from "@/components/timeline/shared";
 import { addDays, diffDays } from "../schedule/dates";
 import { getSchedule } from "../schedule/service";
 import { statusLabel } from "../schedule/templates";
+import { calOf, isOff, workDays } from "../schedule/workdays";
 import { getTeam, listActivity } from "../services";
 import { versionStatus } from "../assets/catalog";
 
@@ -23,6 +25,8 @@ export type TodayEntry = {
   picName?: string | null;
   hardDeadline?: boolean;
 };
+
+const dow = (d: string) => (new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7; // Monday = 0
 
 const wibDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" });
 const byDue = (a: { dueDate: string }, b: { dueDate: string }) => a.dueDate.localeCompare(b.dueDate);
@@ -78,7 +82,31 @@ export async function getToday(db: Db, projectId: string, today: string, opts: {
     .sort(byDue)
     .map((i) => ({ id: i.id, name: i.name, track: i.trackName, dueDate: i.dueDate, daysLeft: diffDays(today, i.dueDate) }));
 
+  // The 7 days of today's week (Monday first): phases overlapping it, milestones inside it. Items come from
+  // getSchedule, so view-only callers never see internal ones.
+  const weekStart = addDays(today, -dow(today));
+  const weekEnd = addDays(weekStart, 6);
+  const cal = calOf(schedule.settings);
+  const ph = phaseIndex(schedule.tracks);
+  const inWeek = items.filter((i) => i.startDate <= weekEnd && i.dueDate >= weekStart);
+  const progress = (i: { status: string; startDate: string; dueDate: string }) => {
+    if (i.status === "not_started") return 0;
+    if (i.status === "done" || i.status === "review") return 1;
+    const total = workDays(cal, i.startDate, i.dueDate);
+    const gone = today < i.startDate ? 0 : workDays(cal, i.startDate, today < i.dueDate ? today : i.dueDate);
+    return Math.min(0.92, Math.max(0.08, gone / Math.max(1, total)));
+  };
+  const brief = (i: (typeof items)[number]) => ({ id: i.id, name: i.name, track: i.trackName, start: i.startDate, due: i.dueDate, parent: !!i.parentId, status: i.status, ph: ph(i.id) });
+  const week = {
+    start: weekStart,
+    end: weekEnd,
+    days: Array.from({ length: 7 }, (_, n) => addDays(weekStart, n)).map((date) => ({ date, off: isOff(cal, date) })),
+    phases: inWeek.filter((i) => !i.parentId).map((i) => ({ ...brief(i), p: progress(i) })),
+    milestones: inWeek.filter((i) => i.parentId).map(brief),
+  };
+
   return {
+    week,
     dueToday: entries.filter((e) => e.dueDate === today),
     late: entries.filter((e) => e.dueDate < today),
     next7: entries.filter((e) => e.dueDate > today && e.dueDate <= horizon),

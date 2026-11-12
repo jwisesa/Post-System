@@ -25,8 +25,8 @@ export default async function ViewOnly({ params }: { params: Promise<{ token: st
     <main className="mx-auto max-w-7xl space-y-5 p-4 md:p-6">
       <header className="flex items-start justify-between gap-3">
         <div className="space-y-2">
-          <span className="tag tag-accent">View only</span>
-          <h1>{data.project.name}</h1>
+          <span className="tag">View only</span>
+          <h1 className="page-title">{data.project.name}</h1>
           <ProjectSummary project={data.project} />
         </div>
         <ThemeToggle />

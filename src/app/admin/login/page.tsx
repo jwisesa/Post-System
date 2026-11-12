@@ -10,9 +10,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="grid min-h-dvh place-items-center p-4">
       <div className="w-full max-w-sm space-y-5">
-        <div className="text-center">
-          <div aria-hidden className="mx-auto mb-3 grid size-10 place-items-center rounded-xl bg-accent font-semibold text-accent-ink">PS</div>
-          <h1>Post-System Admin</h1>
+        <div>
+          <h1 className="page-title">Post-System Admin</h1>
           <p className="muted mt-1 text-sm">Masuk untuk mengelola project pasca produksi.</p>
         </div>
         <ErrorBanner message={error ? "Email atau password salah." : undefined} />

@@ -137,3 +137,15 @@ describe("team, share links, viewer", () => {
     expect(new Set(log.map((l) => l.entry.entity))).toEqual(new Set(["project", "member", "tech_spec", "team_contact", "share_link"]));
   });
 });
+
+describe("deleteProject", () => {
+  it("needs the exact name and the right role, then removes the project", async () => {
+    const p = await s.createProject(db, sup, { name: "Hapus Aku", productionType: "feature_theatrical", platforms: ["Bioskop"], unitCount: 1 });
+    await s.addMember(db, sup, p.id, { email: "a2@x.id", role: "assistant", name: "A2", password: "password1" });
+    const a2 = (await s.listMembers(db, p.id)).find((m) => m.role === "assistant")!.userId;
+    await expect(s.deleteProject(db, sup, p.id, "salah")).rejects.toBeInstanceOf(s.InputError);
+    await expect(s.deleteProject(db, a2, p.id, "Hapus Aku")).rejects.toBeInstanceOf(ForbiddenError);
+    await s.deleteProject(db, sup, p.id, "Hapus Aku");
+    expect(await s.getProjectForUser(db, sup, p.slug)).toBeNull();
+  });
+});

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { updateTechSpecAction } from "@/app/admin/actions";
-import { TECH_FIELDS, TECH_SECTIONS, type TechSpec } from "@/lib/tech-spec/schema";
+import { MAX_CAMERAS, TECH_FIELDS, TECH_SECTIONS, cameraKeys, type TechField, type TechSpec } from "@/lib/tech-spec/schema";
+import { Icon } from "./ui/icons";
 import { Combobox } from "./ui/controls";
 
 export type FieldHistory = Record<string, { who: string; when: string; from: string; to: string }[]>;
@@ -10,31 +11,56 @@ export type FieldHistory = Record<string, { who: string; when: string; from: str
 export function TechForm({ slug, spec, history }: { slug: string; spec: TechSpec; history: FieldHistory }) {
   const [values, setValues] = useState<TechSpec>(spec);
   const set = (key: string, v: string) => setValues((cur) => ({ ...cur, [key]: v }));
+  const lastWithData = Array.from({ length: MAX_CAMERAS }, (_, i) => i + 1).filter((n) => cameraKeys(n).some((k) => spec[k])).pop() ?? 1;
+  const [cams, setCams] = useState(lastWithData);
+  const visible = (f: TechField) => {
+    const n = /^cam(\d)_/.exec(f.key)?.[1] ?? (f.key === "sourceFormat" ? "1" : "");
+    return !n || Number(n) <= cams;
+  };
+  const count = (section: (typeof TECH_SECTIONS)[number]) => {
+    const fields = section.fields.filter(visible);
+    return `${fields.filter((f) => (values[f.key] ?? "").trim()).length}/${fields.length}`;
+  };
   const changed = TECH_FIELDS.filter((f) => (values[f.key] ?? "").trim() !== (spec[f.key] ?? ""));
 
   return (
     <form action={updateTechSpecAction} className="space-y-4 pb-24">
       <input type="hidden" name="slug" value={slug} />
-      <div className="grid gap-4 lg:grid-cols-2">
-        {TECH_SECTIONS.map((section) => (
-          <section key={section.title} className="card space-y-3">
-            <h2>{section.title}</h2>
-            {section.fields.map((f) => {
+      <div className="gap-8 lg:grid lg:grid-cols-[12rem_1fr]">
+        <nav className="sticky top-4 hidden max-h-[calc(100vh-8rem)] self-start overflow-y-auto lg:block">
+          <ul className="space-y-0.5">
+            {TECH_SECTIONS.map((section, i) => (
+              <li key={section.key}><a href={`#sec-${section.key}`} data-ph={(i % 8) + 1} className="index-link">{section.title}<span className="num">{count(section)}</span></a></li>
+            ))}
+          </ul>
+        </nav>
+        <div className="space-y-8">
+        {TECH_SECTIONS.map((section, i) => {
+          const fields = section.fields.filter(visible);
+          const filled = fields.filter((f) => (values[f.key] ?? "").trim()).length;
+          return (
+          <details key={section.key} id={`sec-${section.key}`} open className="card scroll-mt-4" data-ph={(i % 8) + 1}>
+            <summary className="section-band cursor-pointer">
+              <h2>{section.title}</h2>
+              <span className="section-count">{filled}/{fields.length} terisi</span>
+            </summary>
+            <div className="mt-4 grid gap-x-6 gap-y-4 md:grid-cols-2">
+            {fields.map((f) => {
               const isChanged = changed.includes(f);
               const past = history[f.key] ?? [];
               return (
-                <div key={f.key}>
+                <div key={f.key} className={f.key.endsWith("notes") ? "md:col-span-2" : undefined}>
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <label htmlFor={`f-${f.key}`} className="text-xs font-medium text-muted">
+                    <label htmlFor={`f-${f.key}`} className="text-xs font-semibold text-ink-2">
                       {f.label} {isChanged && <span className="tag tag-warn ml-1">diubah</span>}
                     </label>
                     {past.length > 0 && (
                       <details className="relative text-xs">
-                        <summary className="muted list-none hover:text-ink">Riwayat ({past.length})</summary>
-                        <ul className="absolute right-0 z-20 mt-1 w-72 space-y-2 rounded-lg border border-line bg-surface p-3 shadow-lg">
+                        <summary className="list-none text-ink-2 underline hover:text-ink">Riwayat ({past.length})</summary>
+                        <ul className="popover absolute right-0 z-20 mt-1 w-72 space-y-2 p-3">
                           {past.map((h, i) => (
                             <li key={i}>
-                              <div>{h.from || "—"} → <span className="font-medium">{h.to || "—"}</span></div>
+                              <div>{h.from || "—"} <Icon name="chevron" className="inline" /> <span className="font-medium">{h.to || "—"}</span></div>
                               <div className="muted">{h.who} · {h.when}</div>
                             </li>
                           ))}
@@ -42,8 +68,8 @@ export function TechForm({ slug, spec, history }: { slug: string; spec: TechSpec
                       </details>
                     )}
                   </div>
-                  {f.key === "notes" ? (
-                    <textarea id={`f-${f.key}`} name={f.key} rows={6} value={values[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} className={isChanged ? "!border-warn" : undefined} />
+                  {f.key.endsWith("notes") ? (
+                    <textarea id={`f-${f.key}`} name={f.key} rows={6} value={values[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} className={isChanged ? "is-changed" : undefined} />
                   ) : (
                     <div id={`f-${f.key}`}>
                       <Combobox name={f.key} options={f.options} defaultValue={spec[f.key] ?? ""} placeholder={f.hint} changed={isChanged} onValue={(v) => set(f.key, v)} />
@@ -52,10 +78,16 @@ export function TechForm({ slug, spec, history }: { slug: string; spec: TechSpec
                 </div>
               );
             })}
-          </section>
-        ))}
+            {section.key === "camera" && cams < MAX_CAMERAS && (
+              <button type="button" className="btn-secondary self-start" onClick={() => setCams(cams + 1)}>Tambah kamera</button>
+            )}
+            </div>
+          </details>
+          );
+        })}
+        </div>
       </div>
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur md:left-56">
+      <div className="board fixed inset-x-0 bottom-0 z-20 px-4 py-3 md:left-56">
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-0 flex-1 text-sm">
             {changed.length === 0 ? (
