@@ -36,7 +36,11 @@ penyimpanan dan koneksi dipakai bersama.
 4. **Branch produksi.** Vercel men-deploy branch utama repo. Kalau kode belum ada di `main`,
    buka **Settings → Environments → Production → Branch Tracking** dan pilih branch yang
    berisi kode, atau gabungkan dulu branch itu ke `main`.
-5. Klik **Deploy**.
+5. **Region**: di **Settings → Functions → Function Region**, pilih region yang sama dengan
+   database Supabase (mis. Tokyo `hnd1` untuk `ap-northeast-1`, Singapore `sin1` untuk
+   `ap-southeast-1`). Bawaan Vercel adalah US East, yang membuat setiap halaman lambat.
+6. Klik **Deploy**. Environment variable dan region baru berlaku pada deploy berikutnya,
+   jadi setelah mengubahnya lakukan **Redeploy** dari tab Deployments.
 
 ## 3. Buat akun pertama
 
