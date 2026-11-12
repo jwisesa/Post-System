@@ -136,6 +136,11 @@ log berisi tanggal lama → baru semua item terdampak.
   internal dan mati bila token dibuat ulang atau user dikeluarkan dari project; feed viewer
   mengikuti link view-only dan tidak pernah memuat item internal.
 - Setiap server action memuat project lewat keanggotaan user, lalu layanan memeriksa role lagi.
+- **Row Level Security aktif di semua tabel `post_system`, tanpa policy** (migrasi
+  `0001_enable_rls`). Aplikasi terhubung sebagai pemilik tabel, yang melewati RLS; role API
+  bawaan Supabase (`anon`, `authenticated`) tidak mendapat akses walaupun diberi hak tabel.
+  **Setiap tabel baru wajib menyertakan `ENABLE ROW LEVEL SECURITY` di migrasinya**;
+  `tests/rls.test.ts` gagal bila ada yang terlewat.
 - Rahasia tidak pernah masuk repo; `.env*` dan `.data/` di-ignore.
 
 ## 8. Tampilan dan interaksi
