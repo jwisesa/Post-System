@@ -1,90 +1,55 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 import { ProjectFields } from "@/components/project-fields";
+import { CalendarCard } from "@/components/today/CalendarCard";
+import { FollowUpList } from "@/components/today/FollowUpList";
+import { TodayCards } from "@/components/today/TodayCards";
 import { ErrorBanner, ProjectSummary } from "@/components/views";
-import { listAttachments } from "@/lib/assets/service";
 import { can } from "@/lib/auth/permissions";
-import { deliverableStatus, isDone } from "@/lib/deliverables/catalog";
-import { listDeliverables } from "@/lib/deliverables/service";
+import { getOrCreateCalendarToken } from "@/lib/calendar/service";
 import { loadProject } from "@/lib/project-context";
-import { addDays, diffDays, fmtDate, today as todayWib } from "@/lib/schedule/dates";
-import { getSchedule } from "@/lib/schedule/service";
-import { statusLabel } from "@/lib/schedule/templates";
+import { today as todayWib } from "@/lib/schedule/dates";
+import { getToday } from "@/lib/today/service";
 import { listActivity } from "@/lib/services";
 import { updateProjectAction } from "../../actions";
 
 export default async function Overview({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string }> }) {
   const { slug } = await params;
   const { error } = await searchParams;
-  const { db, project, role } = await loadProject(slug);
-  const [schedule, recent, attachments] = await Promise.all([getSchedule(db, project.id, { includeInternal: true }), listActivity(db, project.id, 6), listAttachments(db, project.id, { includeInternal: true })]);
-  const tracked = (await listDeliverables(db, project.id, { includeInternal: true })).filter((d) => d.origin === "delivered");
-  const delivered = tracked.filter((d) => isDone(d.status)).length;
-  const today0 = todayWib();
-  const dueDeliverables = tracked.filter((d) => !isDone(d.status) && d.dueDate && d.dueDate <= addDays(today0, 7)).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!));
-  const itemName = new Map(schedule.tracks.flatMap((t) => t.items.map((i) => [i.id, `${t.name} / ${i.name}`] as const)));
-  const review = attachments.filter((a) => a.versions[0]?.status !== "approved");
+  const { db, user, project, role } = await loadProject(slug);
   const today = todayWib();
-  const open = schedule.tracks.flatMap((t) => t.items.map((i) => ({ ...i, track: t.name }))).filter((i) => i.status !== "done");
-  const late = open.filter((i) => i.dueDate < today).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const soon = open.filter((i) => i.dueDate >= today && i.dueDate <= addDays(today, 7)).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const when = (d: string) => { const n = diffDays(today, d); return n === 0 ? "hari ini" : n === 1 ? "besok" : n > 0 ? `${n} hari lagi` : `${-n} hari lalu`; };
-  const list = (items: typeof open, empty: string) =>
-    items.length === 0 ? <p className="muted text-sm">{empty}</p> : (
-      <ul className="divide-y divide-line">
-        {items.map((i) => (
-          <li key={i.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-            <span className="min-w-0"><span className="font-medium">{i.name}</span> <span className="muted">· {i.track} · {statusLabel(i.status)}{i.picName && ` · ${i.picName}`}</span></span>
-            <span className="muted shrink-0 text-right">{fmtDate(i.dueDate)} <span className={i.dueDate < today ? "text-danger" : ""}>({when(i.dueDate)})</span></span>
-          </li>
-        ))}
-      </ul>
-    );
+  const [data, recent, calendarToken, h] = await Promise.all([
+    getToday(db, project.id, today, { includeInternal: true }),
+    listActivity(db, project.id, 6),
+    getOrCreateCalendarToken(db, user.id, project.id),
+    headers(),
+  ]);
+  const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
 
   return (
     <>
       <div className="space-y-2"><h1>{project.name}</h1><ProjectSummary project={project} /></div>
       <ErrorBanner message={error} />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="card">
-          <h2 className="mb-2">Terlambat {late.length > 0 && <span className="tag tag-danger ml-1">{late.length}</span>}</h2>
-          {list(late, "Tidak ada yang terlambat.")}
-        </section>
-        <section className="card">
-          <h2 className="mb-2">Due 7 hari ke depan</h2>
-          {list(soon, "Tidak ada deadline dalam 7 hari.")}
-        </section>
-      </div>
+      <TodayCards data={data} today={today} deliverablesHref={`/admin/p/${slug}/deliverables`} />
       <section className="card">
-        <div className="mb-2 flex items-center justify-between">
-          <h2>Deliverables <span className="muted ml-1 text-sm font-normal">{delivered} / {tracked.length} terkirim</span></h2>
-          <Link href={`/admin/p/${slug}/deliverables`} className="text-sm text-accent">Semua deliverables</Link>
-        </div>
-        {tracked.length > 0 && <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-raised"><div className="h-full rounded-full bg-ok" style={{ width: `${Math.round((delivered / tracked.length) * 100)}%` }} /></div>}
-        {dueDeliverables.length === 0 ? <p className="muted text-sm">{tracked.length ? "Tidak ada deliverable yang due dalam 7 hari atau terlambat." : "Belum ada deliverables."}</p> : (
-          <ul className="divide-y divide-line">
-            {dueDeliverables.map((d) => (
-              <li key={d.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                <span className="min-w-0"><span className="font-medium">{d.name}</span> <span className="muted">· {d.platform} · {deliverableStatus(d.status).label}</span></span>
-                <span className="muted shrink-0">{fmtDate(d.dueDate!)} <span className={d.dueDate! < today0 ? "text-danger" : ""}>({when(d.dueDate!)})</span></span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <h2 className="mb-2">Perlu follow-up {data.followUp.length > 0 && <span className="tag tag-warn ml-1">{data.followUp.length}</span>}</h2>
+        <p className="muted mb-1 text-xs">Item yang terlambat atau due dalam 7 hari, tanpa update lebih dari 3 hari.</p>
+        {can(role, "schedule.status") ? <FollowUpList rows={data.followUp} slug={slug} /> : <p className="muted text-sm">Anda tidak punya akses untuk mencatat follow-up.</p>}
       </section>
       <section className="card">
         <div className="mb-2 flex items-center justify-between">
-          <h2>Perlu dicek {review.length > 0 && <span className="tag tag-warn ml-1">{review.length}</span>}</h2>
+          <h2>Perlu dicek {data.review.length > 0 && <span className="tag tag-warn ml-1">{data.review.length}</span>}</h2>
           <Link href={`/admin/p/${slug}/assets`} className="text-sm text-accent">Semua aset</Link>
         </div>
-        {review.length === 0 ? <p className="muted text-sm">Tidak ada link yang menunggu review.</p> : (
+        {data.review.length === 0 ? <p className="muted text-sm">Tidak ada link yang menunggu review.</p> : (
           <ul className="divide-y divide-line">
-            {review.map((a) => (
+            {data.review.map((a) => (
               <li key={a.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                 <span className="min-w-0">
-                  <span className="font-medium">{a.label}</span> <span className="tag tag-accent">v{a.versions[0].number}</span>{" "}
-                  <span className="muted">· {a.targetType === "project" ? "Dokumen project" : itemName.get(a.targetId)} · {a.versions[0].status === "pending" ? "menunggu review" : "perlu revisi"}</span>
+                  <span className="font-medium">{a.label}</span> <span className="tag tag-accent">v{a.number}</span>{" "}
+                  <span className="muted">· {a.where} · {a.status === "pending" ? "menunggu review" : "perlu revisi"}</span>
                 </span>
-                <a href={a.versions[0].url} target="_blank" rel="noreferrer" className="btn-secondary !min-h-7 shrink-0 !py-0.5">Buka ↗</a>
+                <a href={a.url} target="_blank" rel="noreferrer" className="btn-secondary !min-h-7 shrink-0 !py-0.5">Buka ↗</a>
               </li>
             ))}
           </ul>
@@ -92,12 +57,15 @@ export default async function Overview({ params, searchParams }: { params: Promi
       </section>
       <section className="card">
         <div className="mb-2 flex items-center justify-between"><h2>Perubahan terbaru</h2><Link href={`/admin/p/${slug}/activity`} className="text-sm text-accent">Lihat semua</Link></div>
-        <ul className="divide-y divide-line">
-          {recent.map(({ entry, userName }) => (
-            <li key={entry.id} className="py-2 text-sm"><span className="font-medium">{userName ?? "—"}</span> <span className="muted">·</span> {entry.summary}</li>
-          ))}
-        </ul>
+        {recent.length === 0 ? <p className="muted text-sm">Belum ada perubahan.</p> : (
+          <ul className="divide-y divide-line">
+            {recent.map(({ entry, userName }) => (
+              <li key={entry.id} className="py-2 text-sm"><span className="font-medium">{userName ?? "—"}</span> <span className="muted">·</span> {entry.summary}</li>
+            ))}
+          </ul>
+        )}
       </section>
+      <CalendarCard slug={slug} origin={origin} initialToken={calendarToken} />
       {can(role, "project.edit") && (
         <details className="card">
           <summary className="font-medium text-accent">Ubah info project</summary>

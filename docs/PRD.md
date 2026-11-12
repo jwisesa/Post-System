@@ -141,13 +141,27 @@ Perilaku yang sudah dibangun:
 - Belum: due date deliverable belum terhubung ke timeline (tidak ikut bergeser), dan belum
   ada aksi massal (ubah status/hapus banyak item sekaligus).
 
-### 4.5 Dashboard dan notifikasi ⏳
+### 4.5 Dashboard, kalender, laporan ✅ (notifikasi ⏳)
 
-- Dashboard "Hari Ini": due hari ini, 7 hari ke depan, terlambat, dan yang perlu di-follow-up
-  (item tanpa update menjelang due).
-- Bisa di-install ke home screen (PWA).
-- Calendar feed (ICS) supaya deadline muncul di kalender dan widget kalender perangkat.
-- Notifikasi push atau email; laporan mingguan otomatis untuk producer.
+- **Hari Ini** (halaman pertama tiap project): due hari ini, terlambat, 7 hari ke depan,
+  hard deadline berikutnya beserta sisa hari, progres deliverables, link yang belum approved,
+  dan perubahan terbaru. Mencakup item jadwal dan deliverables.
+- **Perlu follow-up**: item belum selesai yang terlambat atau due dalam 7 hari dan tidak
+  di-update lebih dari 3 hari. Menampilkan PIC dengan tautan email/telepon dan tombol
+  "Sudah di-follow-up" (catatan opsional, tercatat di change log). Daftar ini internal dan
+  tidak dikirim ke link view-only.
+- **Langganan kalender (ICS)**: tiap akun punya link pribadi per project yang memuat semua
+  due date (hard deadline bertanda ⚑), termasuk item internal; bisa dibuat ulang untuk
+  mematikan link lama. Link view-only punya feed sendiri tanpa item internal. Dengan
+  berlangganan, deadline muncul di kalender dan widget kalender bawaan perangkat.
+  Catatan: Google Calendar memperbarui kalender langganan hanya setiap beberapa jam.
+- **PWA**: bisa di-install ke home screen. Belum ada mode offline.
+- **Laporan mingguan**: status dan selisih baseline per track, terlambat, deliverables, link
+  menunggu review, perubahan 7 hari terakhir; ramah cetak/PDF, plus tombol salin ringkasan
+  teks untuk WhatsApp/email.
+- Viewer mendapat tab "Hari Ini" versi baca.
+- **Belum**: notifikasi push dan email otomatis (butuh aplikasi yang sudah di-deploy, kunci
+  push, dan penyedia email), serta pengiriman laporan mingguan otomatis.
 
 ### 4.6 Tool XML/EDL ⏳
 

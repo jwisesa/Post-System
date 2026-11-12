@@ -7,7 +7,7 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   // CommonJS on purpose: resolves the globally installed Playwright.
-  { files: ["e2e/**/*.cjs"], rules: { "@typescript-eslint/no-require-imports": "off" } },
+  { files: ["e2e/**/*.cjs", "scripts/**/*.cjs"], rules: { "@typescript-eslint/no-require-imports": "off" } },
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",

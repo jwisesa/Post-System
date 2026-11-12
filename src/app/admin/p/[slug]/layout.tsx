@@ -12,19 +12,20 @@ export default async function ProjectLayout({ children, params }: { children: Re
   const base = `/admin/p/${slug}`;
   const nav = (
     <>
-      <NavLink href={base} exact>Ringkasan</NavLink>
+      <NavLink href={base} exact>Hari Ini</NavLink>
       <NavLink href={`${base}/timeline`}>Timeline</NavLink>
       <NavLink href={`${base}/deliverables`}>Deliverables</NavLink>
       <NavLink href={`${base}/assets`}>Aset & dokumen</NavLink>
       <NavLink href={`${base}/technical`}>Technical Page</NavLink>
       <NavLink href={`${base}/team`}>Tim</NavLink>
       {can(role, "access.manage") && <NavLink href={`${base}/access`}>Akses</NavLink>}
+      <NavLink href={`${base}/report`}>Laporan</NavLink>
       <NavLink href={`${base}/activity`}>Change log</NavLink>
     </>
   );
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
-      <aside className="shrink-0 border-b border-line bg-surface md:sticky md:top-0 md:h-dvh md:w-56 md:border-r md:border-b-0">
+      <aside className="shrink-0 print:hidden border-b border-line bg-surface md:sticky md:top-0 md:h-dvh md:w-56 md:border-r md:border-b-0">
         <div className="flex items-center justify-between px-4 py-3 md:block">
           <Brand />
           <div className="md:hidden"><UserMenu name={user.name} /></div>
@@ -43,7 +44,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
         <nav aria-label="Navigasi project" className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:overflow-visible">{nav}</nav>
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="hidden items-center justify-between border-b border-line bg-surface px-6 py-2 md:flex">
+        <header className="hidden print:hidden! items-center justify-between border-b border-line bg-surface px-6 py-2 md:flex">
           <span className="muted text-sm">{project.name}</span>
           <UserMenu name={user.name} role={role} />
         </header>

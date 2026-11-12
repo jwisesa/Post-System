@@ -157,6 +157,7 @@ export const scheduleItems = pgTable("schedule_items", {
   internal: boolean("internal").notNull().default(false),
   notes: text("notes").notNull().default(""),
   createdAt: createdAt(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 /** Finish-to-start: itemId cannot start before dependsOnId is due. */
@@ -248,4 +249,20 @@ export const deliverables = pgTable("deliverables", {
   presetVersion: text("preset_version"),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: createdAt(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------- calendar feed ----------
+
+export const calendarTokens = pgTable("calendar_tokens", {
+  id: id(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  createdAt: createdAt(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
 });

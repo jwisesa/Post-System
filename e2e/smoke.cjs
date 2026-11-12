@@ -294,6 +294,16 @@ const daysBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / DAY;
 
   await sup.goto(`${base}/timeline`);
   await bar(sup, "Delivery").waitFor();
+  await board(sup).locator('button:text-is("Grading")').click();
+  await sup.fill('aside form:has(input[name="parentId"]) input[name="name"]', "Rahasia Internal");
+  await sup.click("aside button:has-text('Tambah milestone')");
+  await bar(sup, "Rahasia Internal").waitFor();
+  await sup.keyboard.press("Escape");
+  await board(sup).locator('button:has-text("Rahasia Internal")').click();
+  await sup.check('aside form:has(input[name="hardDeadline"]) input[name="internal"]');
+  await sup.click("aside button:text-is('Simpan')");
+  await board(sup).locator('button:has-text("Rahasia Internal")').waitFor();
+  await sup.keyboard.press("Escape");
   await sup.selectOption('select[aria-label="Status Ingest & Sync"]', "done");
   await toast(sup, "Selesai").waitFor();
   await shot(sup, "timeline");
@@ -315,6 +325,15 @@ const daysBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / DAY;
   // ---- viewer: sees everything public, can change nothing ----
   const viewer = await (await browser.newContext(desktop)).newPage();
   await viewer.goto(viewUrl);
+  await viewer.locator('[role="tabpanel"]:not([hidden]) >> text=Hard deadline').first().waitFor(); // "Hari Ini" is the first tab
+  assert.equal(await viewer.locator("button:has-text('Sudah di-follow-up')").count(), 0);
+  const viewerFeed = await viewer.request.get(`${viewUrl}/calendar`);
+  assert.equal(viewerFeed.status(), 200);
+  assert.match(viewerFeed.headers()["content-type"], /text\/calendar/);
+  const viewerIcs = await viewerFeed.text();
+  assert.ok(viewerIcs.startsWith("BEGIN:VCALENDAR") && viewerIcs.includes("Picture Lock") && viewerIcs.includes("DPX sequence"));
+  assert.ok(!viewerIcs.includes("Rahasia Internal"), "internal schedule item leaked into viewer calendar feed");
+  await viewer.click('[role="tab"]:has-text("Timeline")');
   await bar(viewer, "Picture Lock").waitFor();
   assert.ok((await viewer.textContent("h1")).includes(name));
   await drag(viewer, "Picture Lock", 3);
@@ -375,6 +394,29 @@ const daysBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / DAY;
   assert.equal((await asst.goto(`${base}/access`)).status(), 404);
   await asst.goto(`${base}/team`);
   assert.ok((await asst.textContent("main")).includes("Vendor Rahasia"));
+
+  // ---- dashboard, calendar feed, PWA manifest, weekly report ----
+  await sup.goto(base);
+  await sup.waitForSelector("text=Langganan kalender");
+  for (const s of ["Hari ini", "Terlambat", "7 hari ke depan", "Perlu follow-up", "Perlu dicek", "Hard deadline"]) assert.ok((await sup.textContent("main")).includes(s), `dashboard missing: ${s}`);
+  const feedUrl = (await sup.textContent("main")).match(/https?:\/\/\S+\/cal\/[\w-]+\.ics/)[0];
+  const feed = await sup.request.get(feedUrl);
+  assert.equal(feed.status(), 200);
+  const ics = await feed.text();
+  assert.ok(ics.includes("Picture Lock") && ics.includes("Rahasia Internal") && ics.includes("⚑ Main Feature: Delivery"), "admin feed content");
+  assert.equal((await viewer.request.get(feedUrl)).status(), 200, "feed must work without a session (calendar apps)");
+  await sup.click("button:has-text('Buat ulang link')");
+  await toast(sup, "Link kalender").waitFor();
+  assert.equal((await sup.request.get(feedUrl)).status(), 404);
+  assert.equal((await sup.request.get(`${BASE}/cal/tidak-ada.ics`)).status(), 404);
+  await shot(sup, "today");
+  const manifest = await (await sup.request.get(`${BASE}/manifest.webmanifest`)).json();
+  assert.equal(manifest.display, "standalone");
+  assert.equal((await sup.request.get(BASE + manifest.icons[0].src)).status(), 200);
+  await sup.goto(`${base}/report`);
+  await sup.waitForSelector("button:has-text('Salin ringkasan teks')");
+  assert.ok((await sup.textContent("main")).includes("Main Feature"));
+  await shot(sup, "report");
 
   // ---- change log ----
   await sup.goto(`${base}/activity`);

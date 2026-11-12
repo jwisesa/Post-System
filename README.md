@@ -7,7 +7,7 @@ Dokumen: [PRD](docs/PRD.md) · [TRD](docs/TRD.md)
 
 ## Status
 
-Modul 1 (fondasi), 2 (timeline), 3 (link, versi, komentar), dan 4 (deliverables) dari 6 selesai:
+Modul 1 (fondasi), 2 (timeline), 3 (link, versi, komentar), 4 (deliverables), dan 5 (dashboard + kalender) dari 6 selesai:
 
 - Project dengan tipe produksi dan platform tujuan
 - **Technical Page** sebagai source of truth teknis (opsi siap-pilih + nilai custom)
@@ -35,8 +35,13 @@ Modul 1 (fondasi), 2 (timeline), 3 (link, versi, komentar), dan 4 (deliverables)
   Prime Video, OTT lain, YouTube), matriks cutdown durasi × ratio, status per item, due date,
   dan link berversi; spesifikasi mewarisi nilai dari Technical Page
 
-Berikutnya:
-dashboard + calendar feed (5), tool XML/EDL (6).
+- **Hari Ini**: due hari ini, terlambat, 7 hari ke depan, hard deadline berikutnya, item yang
+  perlu di-follow-up (dengan kontak PIC), dan link yang menunggu review
+- **Langganan kalender (ICS)** per akun dan per link view-only, supaya deadline muncul di
+  kalender dan widget kalender perangkat; bisa di-install ke home screen (PWA)
+- **Laporan mingguan** yang ramah cetak, plus ringkasan teks untuk ditempel ke chat
+
+Berikutnya: tool XML/EDL (6).
 
 ## Menjalankan
 
@@ -68,6 +73,7 @@ Tes browser end-to-end: lihat petunjuk di bagian atas `e2e/smoke.cjs`.
 - `src/lib/schedule/` — logika geser jadwal (`shift.ts`), template track, layanan timeline
 - `src/lib/assets/` — link, versi, komentar, dan katalog nama siap-pilih
 - `src/lib/deliverables/` — katalog opsi + preset platform (`catalog.ts`) dan layanannya
+- `src/lib/today/` — rangkuman dashboard dan laporan; `src/lib/calendar/` — feed ICS dan tokennya
 - `src/lib/auth/` — password, sesi, hak akses (`can()`)
 - `src/lib/tech-spec/schema.ts` — field dan opsi Technical Page, default per tipe produksi
 - `src/app/admin/` — halaman admin; `src/app/v/[token]/` — halaman view-only

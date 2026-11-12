@@ -66,6 +66,7 @@ Sudah ada:
 | `attachment_versions` | nomor, url, catatan perubahan, status review, pembuat |
 | `comments` | target `(target_type, target_id)`, user, isi |
 | `deliverables` | platform, kelompok, nama, `spec` JSONB (kunci divalidasi katalog), asal dikirim/diturunkan, status, due, track, internal, id + versi preset |
+| `calendar_tokens` | token feed kalender per user per project, bisa dicabut |
 | `audit_log` | entitas, aksi, ringkasan, before/after (JSONB), alasan, user, waktu |
 
 Tanggal jadwal disimpan sebagai `date` dan diperlakukan sebagai string `YYYY-MM-DD`;
@@ -76,7 +77,6 @@ Rancangan modul berikutnya:
 | Tabel | Isi |
 |---|---|
 | `shots`, `shot_lists` | hasil import XML/EDL: reel, timecode, track, marker, nama baru, status VFX, vendor |
-| `calendar_tokens` | token feed ICS per user/project |
 
 Attachment dan comment memakai pasangan `(target_type, target_id)` tanpa foreign key, supaya
 satu mekanisme berlaku untuk fase, milestone, dan nanti deliverable serta shot. Karena itu
@@ -86,6 +86,10 @@ Preset deliverables hidup di `src/lib/deliverables/catalog.ts`. Tiap preset waji
 `specVersion`, `verifiedAt` (atau `null` bila belum dicek), dan `source`. Nilai spec berawalan
 `@` diisi dari Technical Page saat diterapkan (`resolveSpec`). Memperbarui preset tidak
 mengubah deliverable yang sudah dibuat; tiap item menyimpan `preset_version` asalnya.
+
+`schedule_items` dan `deliverables` punya `updated_at`, disetel layanan pada setiap perubahan
+status, catatan, tanggal, atau detail. Daftar follow-up membandingkannya dengan tanggal
+"hari ini" (WIB) yang dioper ke `getToday`, bukan jam server, agar bisa dites.
 
 ## 5. Hak akses
 
@@ -123,6 +127,10 @@ log berisi tanggal lama → baru semua item terdampak.
 - Sesi: token acak 32 byte, hanya hash yang disimpan; cookie httpOnly, SameSite=Lax,
   Secure di produksi; kedaluwarsa 30 hari.
 - Link view-only: token acak 24 byte; halaman `noindex` dan `no-referrer`; token dicabut → 404.
+- Feed kalender (`/cal/<token>.ics`, `/v/<token>/calendar`) sengaja tanpa sesi, karena
+  aplikasi kalender tidak bisa login. Tokennya adalah rahasianya: feed admin memuat item
+  internal dan mati bila token dibuat ulang atau user dikeluarkan dari project; feed viewer
+  mengikuti link view-only dan tidak pernah memuat item internal.
 - Setiap server action memuat project lewat keanggotaan user, lalu layanan memeriksa role lagi.
 - Rahasia tidak pernah masuk repo; `.env*` dan `.data/` di-ignore.
 

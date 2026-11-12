@@ -311,6 +311,8 @@ export async function getViewerData(db: Db, token: string) {
   const deliverables = await listDeliverables(db, row.project.id, { includeInternal: false });
   for (const d of deliverables) visible.add(d.id);
   const attachments = (await listAttachments(db, row.project.id, { includeInternal: false })).filter((a) => a.targetType === "project" || visible.has(a.targetId));
+  const { getToday } = await import("./today/service");
+  const { today } = await import("./schedule/dates");
   return {
     project: row.project,
     label: row.label,
@@ -319,6 +321,8 @@ export async function getViewerData(db: Db, token: string) {
     schedule,
     attachments,
     deliverables,
+    // Follow-up is an internal working list (with PIC contact details); viewers never get it.
+    today: { ...(await getToday(db, row.project.id, today(), { includeInternal: false })), followUp: [] },
   };
 }
 

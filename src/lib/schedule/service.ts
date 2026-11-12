@@ -133,7 +133,7 @@ export async function updateItemDetails(db: Db, userId: string, projectId: strin
     const before = { name: item.name, picContactId: item.picContactId, hardDeadline: item.hardDeadline, internal: item.internal };
     const after = { ...input, name };
     if (JSON.stringify(before) === JSON.stringify(after)) return false;
-    await tx.update(scheduleItems).set(after).where(eq(scheduleItems.id, itemId));
+    await tx.update(scheduleItems).set({ ...after, updatedAt: new Date() }).where(eq(scheduleItems.id, itemId));
     await record(tx, { projectId, userId, entity: "schedule_item", entityId: itemId, action: "update", summary: `Mengubah detail "${name}"`, before, after });
     return true;
   });
@@ -147,8 +147,18 @@ export async function setItemStatus(db: Db, userId: string, projectId: string, i
     const item = await loadItem(tx, projectId, itemId);
     const notes = input.notes === undefined ? item.notes : input.notes.trim(); // omitted = keep
     if (item.status === status && item.notes === notes) return;
-    await tx.update(scheduleItems).set({ status, notes }).where(eq(scheduleItems.id, itemId));
+    await tx.update(scheduleItems).set({ status, notes, updatedAt: new Date() }).where(eq(scheduleItems.id, itemId));
     await record(tx, { projectId, userId, entity: "schedule_item", entityId: itemId, action: "update", summary: `Memperbarui status "${item.name}"`, before: { status: item.status, notes: item.notes }, after: { status, notes } });
+  });
+}
+
+/** Records that someone chased this item; resets its "no update" clock. */
+export async function markFollowedUp(db: Db, userId: string, projectId: string, itemId: string, note = "") {
+  await requireRole(db, userId, projectId, "schedule.status");
+  await db.transaction(async (tx) => {
+    const item = await loadItem(tx, projectId, itemId);
+    await tx.update(scheduleItems).set({ updatedAt: new Date() }).where(eq(scheduleItems.id, itemId));
+    await record(tx, { projectId, userId, entity: "schedule_item", entityId: itemId, action: "update", summary: `Follow-up "${item.name}"`, reason: note.trim() });
   });
 }
 
@@ -215,7 +225,7 @@ export async function applyShift(db: Db, userId: string, projectId: string, item
     const before: Record<string, string> = {};
     const after: Record<string, string> = {};
     for (const m of moves) {
-      await tx.update(scheduleItems).set({ startDate: m.newStart, dueDate: m.newDue }).where(eq(scheduleItems.id, m.id));
+      await tx.update(scheduleItems).set({ startDate: m.newStart, dueDate: m.newDue, updatedAt: new Date() }).where(eq(scheduleItems.id, m.id));
       const key = `${trackName.get(items.find((i) => i.id === m.id)!.trackId)} / ${m.name}`;
       before[key] = fmtRange(m.oldStart, m.oldDue);
       after[key] = fmtRange(m.newStart, m.newDue);
@@ -259,7 +269,7 @@ export async function applyMoves(db: Db, userId: string, projectId: string, move
       const item = byId.get(m.id);
       if (!item) throw new InputError("Item jadwal tidak ditemukan.");
       if (item.startDate === m.startDate && item.dueDate === m.dueDate) continue;
-      await tx.update(scheduleItems).set({ startDate: m.startDate, dueDate: m.dueDate }).where(eq(scheduleItems.id, m.id));
+      await tx.update(scheduleItems).set({ startDate: m.startDate, dueDate: m.dueDate, updatedAt: new Date() }).where(eq(scheduleItems.id, m.id));
       before[item.name] = fmtRange(item.startDate, item.dueDate);
       after[item.name] = fmtRange(m.startDate, m.dueDate);
     }

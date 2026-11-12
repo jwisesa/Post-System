@@ -134,7 +134,7 @@ export async function updateDeliverable(db: Db, userId: string, projectId: strin
     const data = await clean(tx, projectId, input);
     const before = { name: d.name, platform: d.platform, groupName: d.groupName, trackId: d.trackId, spec: d.spec, origin: d.origin, dueDate: d.dueDate, notes: d.notes, internal: d.internal };
     if (JSON.stringify(before) === JSON.stringify(data)) return;
-    await tx.update(deliverables).set(data).where(eq(deliverables.id, id));
+    await tx.update(deliverables).set({ ...data, updatedAt: new Date() }).where(eq(deliverables.id, id));
     await record(tx, { projectId, userId, entity: "deliverable", entityId: id, action: "update", summary: `Mengubah deliverable "${data.name}"`, before: { ...before, spec: JSON.stringify(before.spec) }, after: { ...data, spec: JSON.stringify(data.spec) } });
   });
 }
@@ -147,7 +147,7 @@ export async function setDeliverableStatus(db: Db, userId: string, projectId: st
     const d = await load(tx, projectId, id);
     if (d.origin === "derived") throw new InputError("Item ini diturunkan platform, tidak punya status pengiriman.");
     if (d.status === next) return;
-    await tx.update(deliverables).set({ status: next }).where(eq(deliverables.id, id));
+    await tx.update(deliverables).set({ status: next, updatedAt: new Date() }).where(eq(deliverables.id, id));
     await record(tx, { projectId, userId, entity: "deliverable", entityId: id, action: "update", summary: `Deliverable "${d.name}": ${deliverableStatus(next).label}`, before: { status: deliverableStatus(d.status).label }, after: { status: deliverableStatus(next).label } });
   });
 }
