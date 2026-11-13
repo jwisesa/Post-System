@@ -13,6 +13,7 @@ import { Icon } from "../ui/icons";
 import { useToast } from "../ui/toast";
 import CalendarView from "./CalendarView";
 import { DaysPanel } from "./DaysPanel";
+import type { FeedbackPoint } from "@/lib/feedback/service";
 import { AgendaList, ItemPanel, ManagePanel, NewItemPanel } from "./ItemPanel";
 import { durationLabel, phaseIndex, isLate, progressOf, signed, slip, type Item, type Mode } from "./shared";
 import VerticalGantt from "./VerticalGantt";
@@ -43,12 +44,12 @@ type Optimistic =
 
 type Props = {
   schedule: Schedule; mode: Mode; slug: string; today: string; contacts: { id: string; label: string }[];
-  attachments: Attachment[]; comments?: Comment[]; me?: { id: string; role: string }; versions?: VersionRow[];
+  attachments: Attachment[]; comments?: Comment[]; feedback?: FeedbackPoint[]; me?: { id: string; role: string }; versions?: VersionRow[];
 };
 
 const typing = (e: KeyboardEvent) => e.target instanceof HTMLElement && (e.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName));
 
-export function TimelineBoard({ schedule, mode, slug, today, contacts, attachments, comments = [], me, versions = [] }: Props) {
+export function TimelineBoard({ schedule, mode, slug, today, contacts, attachments, comments = [], feedback = [], me, versions = [] }: Props) {
   const toast = useToast();
   const editable = mode === "edit";
   const [, startTransition] = useTransition();
@@ -489,6 +490,8 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
 
   const linkCount = new Map<string, number>();
   for (const a of attachments) if (a.targetType === "schedule_item") linkCount.set(a.targetId, (linkCount.get(a.targetId) ?? 0) + 1);
+  const openFeedback = new Map<string, number>();
+  for (const p of feedback) if (p.status === "open") openFeedback.set(p.itemId, (openFeedback.get(p.itemId) ?? 0) + 1);
   const panelItem = panel?.kind === "item" ? byId.get(panel.id) : undefined;
   const panelTrack = panelItem ? tracks.find((t) => t.id === panelItem.trackId) : undefined;
   const others = preview && drag ? preview.moves.filter((m) => m.id !== drag.id).length : 0;
@@ -542,6 +545,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
                   { href: `/admin/p/${slug}/timeline/print`, icon: "print", label: "PDF Gantt" },
                   { href: `/admin/p/${slug}/timeline/print?view=calendar`, icon: "today", label: "PDF Kalender" },
                   { href: `/admin/p/${slug}/timeline/export`, icon: "download", label: "Excel / Sheets (CSV)", download: true },
+                  { href: `/admin/p/${slug}/timeline/export?type=feedback`, icon: "feedback", label: "Feedback (CSV)", download: true },
                 ].map((l) => (
                   <a key={l.href} role="menuitem" href={l.href} download={l.download} onClick={(e) => e.currentTarget.closest("details")?.removeAttribute("open")}><Icon name={l.icon as "print"} /> {l.label}</a>
                 ))}
@@ -740,7 +744,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
           <ItemPanel item={panelItem} track={panelTrack} mode={mode} slug={slug} today={today} allItems={allItems} deps={deps} contacts={contacts} onLink={addLink} onUnlink={removeLink}
             cal={cal} cascade={cascade} ph={ph(panelItem.id)} onAddMilestone={() => setPanel({ kind: "new", trackId: panelItem.trackId, parentId: panelItem.id, date: panelItem.dueDate })}
             attachments={attachments.filter((a) => a.targetType === "schedule_item" && a.targetId === panelItem.id)}
-            comments={comments.filter((c) => c.targetType === "schedule_item" && c.targetId === panelItem.id)} me={me} />
+            comments={comments.filter((c) => c.targetType === "schedule_item" && c.targetId === panelItem.id)} feedback={feedback} me={me} />
         </Drawer>
       )}
       {panel?.kind === "new" && (
@@ -822,6 +826,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
             {!milestone && folded && <span className="ml-1.5 text-xs font-normal text-muted tabular-nums">{children.length}</span>}
             {item.hardDeadline && <span className="ml-1.5 text-xs font-medium text-danger" title="Hard deadline: tidak ikut bergeser">hard</span>}
           </button>
+          {openFeedback.get(item.id) && <span className="flex shrink-0 items-center gap-0.5 text-xs text-warn tabular-nums" title={`${openFeedback.get(item.id)} feedback belum dicek`}><Icon name="feedback" className="size-3.5" />{openFeedback.get(item.id)}</span>}
           {linkCount.get(item.id) && <span className="flex shrink-0 items-center gap-0.5 text-xs text-muted tabular-nums" title={`${linkCount.get(item.id)} link`}><Icon name="link" className="size-3.5" />{linkCount.get(item.id)}</span>}
           <span className={`shrink-0 text-right text-xs tabular-nums ${late ? "font-medium text-danger" : "text-muted"}`} title={milestone ? (late ? "Terlambat" : undefined) : `${fmtRange(p.start, p.due)} · ${durationLabel(cal, p.start, p.due, item.workHours)}${late ? " · terlambat" : ""}`}>
             {fmtDate(p.due).replace(/ \d{4}$/, "")}

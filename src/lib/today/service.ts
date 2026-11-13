@@ -5,6 +5,7 @@ import { isDone, deliverableStatus } from "../deliverables/catalog";
 import { listDeliverables } from "../deliverables/service";
 import { phaseIndex } from "@/components/timeline/shared";
 import { addDays, diffDays } from "../schedule/dates";
+import { listPoints } from "../feedback/service";
 import { getSchedule } from "../schedule/service";
 import { statusLabel } from "../schedule/templates";
 import { calOf, isOff, workDays } from "../schedule/workdays";
@@ -31,12 +32,14 @@ const dow = (d: string) => (new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7; // 
 const wibDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" });
 const byDue = (a: { dueDate: string }, b: { dueDate: string }) => a.dueDate.localeCompare(b.dueDate);
 
-export async function getToday(db: Db, projectId: string, today: string, opts: { includeInternal: boolean }) {
-  const [schedule, delivs, team, allAttachments] = await Promise.all([
+export async function getToday(db: Db, projectId: string, today: string, opts: { includeInternal: boolean; feedback?: boolean }) {
+  const [schedule, delivs, team, allAttachments, points] = await Promise.all([
     getSchedule(db, projectId, opts),
     listDeliverables(db, projectId, opts),
     getTeam(db, projectId, opts),
     listAttachments(db, projectId, opts),
+    // Feedback can be sensitive: only callers that ask for it (the admin board) get it.
+    opts.feedback ? listPoints(db, projectId, opts) : Promise.resolve([]),
   ]);
   const contacts = new Map(team.flatMap((g) => g.contacts).map((c) => [c.id, c]));
 
@@ -105,8 +108,15 @@ export async function getToday(db: Db, projectId: string, today: string, opts: {
     milestones: inWeek.filter((i) => i.parentId).map(brief),
   };
 
+  const feedback = items
+    .map((i) => ({ i, open: points.filter((p) => p.itemId === i.id && p.status === "open") }))
+    .filter((g) => g.open.length)
+    .map(({ i, open }) => ({ id: i.id, name: i.name, track: i.trackName, dueDate: i.dueDate, count: open.length, points: open.slice(0, 5).map((p) => ({ id: p.id, ref: p.ref, body: p.body })) }))
+    .sort(byDue);
+
   return {
     week,
+    feedback,
     dueToday: entries.filter((e) => e.dueDate === today),
     late: entries.filter((e) => e.dueDate < today),
     next7: entries.filter((e) => e.dueDate > today && e.dueDate <= horizon),

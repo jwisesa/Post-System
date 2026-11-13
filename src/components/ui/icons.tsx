@@ -24,6 +24,8 @@ const paths = {
   report: "M4 2.5h6l2.5 2.5v8.5H4zM6 8h4.5M6 10.5h4.5",
   activity: "M2 8h3l2-4.5 2.5 9L11 8h3",
   minus: "M3 8h10",
+  feedback: "M3 3.5h10v7H8.5L5.5 13v-2.5H3zM5.5 6h5M5.5 8h3",
+  edl: "M2.5 3.5h11v9h-11zM2.5 6.5h11M2.5 9.5h11M6 3.5v9",
 } as const;
 
 export type IconName = keyof typeof paths;

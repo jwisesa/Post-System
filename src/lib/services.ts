@@ -346,7 +346,7 @@ export async function getViewerData(db: Db, token: string) {
     attachments,
     deliverables,
     // Follow-up is an internal working list (with PIC contact details); viewers never get it.
-    today: { ...(await getToday(db, row.project.id, today(), { includeInternal: false })), followUp: [] },
+    today: { ...(await getToday(db, row.project.id, today(), { includeInternal: false })), followUp: [], feedback: [] },
   };
 }
 

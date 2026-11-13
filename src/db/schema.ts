@@ -254,6 +254,29 @@ export const comments = ps.table("comments", {
   createdAt: createdAt(),
 });
 
+export type FeedbackStatus = "open" | "fixed" | "dropped";
+
+/** A note raised at a review milestone; cross-checked at a later milestone of the same phase. */
+export const feedbackPoints = ps.table("feedback_points", {
+  id: id(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  /** Schedule item it was raised at. No foreign key, like comments: removed with the item. */
+  itemId: uuid("item_id").notNull(),
+  body: text("body").notNull(),
+  ref: text("ref").notNull().default(""),
+  fromWho: text("from_who").notNull().default(""),
+  status: text("status").$type<FeedbackStatus>().notNull().default("open"),
+  checkedItemId: uuid("checked_item_id"),
+  checkNote: text("check_note").notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: createdAt(),
+  checkedBy: uuid("checked_by").references(() => users.id),
+  checkedAt: timestamp("checked_at", { withTimezone: true }),
+});
+
 // ---------- deliverables ----------
 
 export type DeliverableStatus = "not_started" | "in_progress" | "qc" | "delivered" | "accepted" | "rejected";

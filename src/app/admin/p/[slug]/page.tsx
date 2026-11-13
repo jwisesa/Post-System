@@ -20,7 +20,7 @@ export default async function Overview({ params, searchParams }: { params: Promi
   const { db, user, project, role } = await loadProject(slug);
   const today = todayWib();
   const [data, recent, calendarToken, h] = await Promise.all([
-    getToday(db, project.id, today, { includeInternal: true }),
+    getToday(db, project.id, today, { includeInternal: true, feedback: true }),
     listActivity(db, project.id, 6),
     getOrCreateCalendarToken(db, user.id, project.id),
     headers(),

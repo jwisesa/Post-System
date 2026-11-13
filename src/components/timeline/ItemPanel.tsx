@@ -8,8 +8,10 @@ import { addDays, fmtDate, fmtRange } from "@/lib/schedule/dates";
 import type { Dep } from "@/lib/schedule/shift";
 import { MILESTONE_NAME_OPTIONS, PHASE_COLORS, PHASE_NAME_OPTIONS, STATUSES, statusLabel, TRACK_NAME_OPTIONS, TRACK_TEMPLATES } from "@/lib/schedule/templates";
 import { snap, type Cal } from "@/lib/schedule/workdays";
+import type { FeedbackPoint } from "@/lib/feedback/service";
 import { AttachmentList, CommentThread } from "../assets/AttachmentList";
 import { ConfirmButton } from "../ui/controls";
+import { FeedbackPanel } from "./FeedbackPanel";
 import { MilestoneDate, PhaseDates } from "./DateFields";
 import { Icon } from "../ui/icons";
 import { durationLabel, isLate, slip, type Item, type Mode, type Track } from "./shared";
@@ -59,11 +61,11 @@ type ItemProps = {
   item: Item; track: Track; mode: Mode; slug: string; today: string;
   allItems: (Item & { trackName: string })[]; deps: Dep[]; contacts: { id: string; label: string }[];
   onLink: (itemId: string, dependsOnId: string) => void; onUnlink: (itemId: string, dependsOnId: string) => void;
-  attachments: Attachment[]; comments: Comment[]; me?: { id: string; role: string };
+  attachments: Attachment[]; comments: Comment[]; feedback: FeedbackPoint[]; me?: { id: string; role: string };
   cal: Cal; cascade: boolean; ph: number; onAddMilestone: () => void;
 };
 
-export function ItemPanel({ item, track, mode, slug, today, allItems, deps, contacts, onLink, onUnlink, attachments, comments, me, cal, cascade, ph, onAddMilestone }: ItemProps) {
+export function ItemPanel({ item, track, mode, slug, today, allItems, deps, contacts, onLink, onUnlink, attachments, comments, feedback, me, cal, cascade, ph, onAddMilestone }: ItemProps) {
   const stones = allItems.filter((o) => o.parentId === item.id);
   const nameOf = (id: string) => { const i = allItems.find((x) => x.id === id); return i ? `${i.trackName} / ${i.name}` : "—"; };
   const preds = deps.filter((d) => d.itemId === item.id);
@@ -111,6 +113,8 @@ export function ItemPanel({ item, track, mode, slug, today, allItems, deps, cont
         <h3>Link & versi</h3>
         <AttachmentList attachments={attachments} target={{ type: "schedule_item", id: item.id }} slug={slug} canEdit={mode !== "view"} canApprove={mode === "edit"} labelOptions={LINK_LABELS} />
       </section>
+
+      {me && <FeedbackPanel item={item} allItems={allItems} points={feedback} mode={mode} slug={slug} />}
 
       {mode !== "view" && me && (
         <section className="space-y-2 hairline pt-4">
@@ -263,6 +267,7 @@ export function ManagePanel({ slug, tracks, today, hasItems, onOpen }: { slug: s
             <a className="btn-secondary" href={`/admin/p/${slug}/timeline/print`}><Icon name="print" /> PDF Gantt</a>
             <a className="btn-secondary" href={`/admin/p/${slug}/timeline/print?view=calendar`}><Icon name="today" /> PDF Kalender</a>
             <a className="btn-secondary" href={`/admin/p/${slug}/timeline/export`} download><Icon name="download" /> Excel / Sheets (CSV)</a>
+            <a className="btn-secondary" href={`/admin/p/${slug}/timeline/export?type=feedback`} download><Icon name="feedback" /> Feedback (CSV)</a>
           </div>
         </section>
       )}

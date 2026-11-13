@@ -101,6 +101,33 @@ function WeekStrip({ week, today }: { week: TodayData["week"]; today: string }) 
   );
 }
 
+/** Open feedback points still to be cross-checked: top 5, grouped by the milestone they were raised at. */
+function FeedbackList({ groups, base }: { groups: TodayData["feedback"]; base?: string }) {
+  const total = groups.reduce((n, g) => n + g.count, 0);
+  const before = (n: number) => groups.slice(0, n).reduce((a, g) => a + g.points.length, 0);
+  const shown = groups.map((g, n) => ({ ...g, pts: g.points.slice(0, Math.max(0, 5 - before(n))) })).filter((g) => g.pts.length);
+  return (
+    <section>
+      <ListHead title="Feedback belum dicek" count={total} href={base ? `${base}/timeline` : undefined} link="Timeline" />
+      <ul>
+        {shown.map((g) => (
+          <li key={g.id}>
+            <div className="due-row">
+              <span className="due-date">{short(g.dueDate)}</span>
+              <span className="due-name">{g.name} <span className="due-ctx">· {g.track}</span></span>
+              <span className="due-when">{g.count} poin</span>
+            </div>
+            <ul className="pb-1 ps-[4.25rem] text-[13px] text-ink-2">
+              {g.pts.map((p) => <li key={p.id} className="truncate">{p.ref && <span className="tabular-nums">{p.ref} </span>}{p.body}</li>)}
+            </ul>
+          </li>
+        ))}
+      </ul>
+      {total > 5 && <p className="mt-1 px-1 text-[13px] text-ink-2">+{total - 5} poin lainnya</p>}
+    </section>
+  );
+}
+
 function Stat({ base, tone, empty, children }: { base?: string; tone?: string; empty?: boolean; children: React.ReactNode }) {
   const p = { className: "stat", "data-tone": tone, "data-empty": empty || undefined };
   return base === undefined ? <div {...p}>{children}</div> : <Link href={`${base}/timeline`} {...p}>{children}</Link>;
@@ -151,7 +178,10 @@ export function TodayBoard({ data, today, base, aside }: { data: TodayData; toda
               : <p className="mt-1 px-1 text-[13px] text-ink-2">+{due.length - DUE_CAP} lainnya</p>
           )}
         </section>
-        <div className="min-w-0 space-y-6">{aside}</div>
+        <div className="min-w-0 space-y-6">
+          {data.feedback.length > 0 && <FeedbackList groups={data.feedback} base={base} />}
+          {aside}
+        </div>
       </div>
     </div>
   );
