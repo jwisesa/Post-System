@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { updateTechSpecAction } from "@/app/admin/actions";
-import { MAX_CAMERAS, TECH_FIELDS, TECH_SECTIONS, cameraKeys, type TechField, type TechSpec } from "@/lib/tech-spec/schema";
+import { MAX_CAMERAS, TECH_FIELDS, TECH_SECTIONS, cameraKeys, fieldApplies, type TechField, type TechSpec } from "@/lib/tech-spec/schema";
 import { Icon } from "./ui/icons";
 import { Combobox } from "./ui/controls";
 
@@ -15,7 +15,8 @@ export function TechForm({ slug, spec, history }: { slug: string; spec: TechSpec
   const [cams, setCams] = useState(lastWithData);
   const visible = (f: TechField) => {
     const n = /^cam(\d)_/.exec(f.key)?.[1] ?? (f.key === "sourceFormat" ? "1" : "");
-    return !n || Number(n) <= cams;
+    if (n && Number(n) > cams) return false;
+    return !n || fieldApplies(f, values[`cam${n}_media`]);
   };
   const count = (section: (typeof TECH_SECTIONS)[number]) => {
     const fields = section.fields.filter(visible);
@@ -26,6 +27,8 @@ export function TechForm({ slug, spec, history }: { slug: string; spec: TechSpec
   return (
     <form action={updateTechSpecAction} className="space-y-4 pb-32 md:pb-24">
       <input type="hidden" name="slug" value={slug} />
+      {/* hidden fields (other media, unused cameras) keep their stored values */}
+      {TECH_FIELDS.filter((f) => !visible(f) && values[f.key]).map((f) => <input key={f.key} type="hidden" name={f.key} value={values[f.key]} />)}
       <div className="gap-8 lg:grid lg:grid-cols-[12rem_1fr]">
         <nav className="sticky top-4 hidden max-h-[calc(100dvh-8rem)] self-start overflow-y-auto lg:block">
           <ul className="space-y-0.5">
@@ -87,7 +90,7 @@ export function TechForm({ slug, spec, history }: { slug: string; spec: TechSpec
         })}
         </div>
       </div>
-      <div className="board fixed inset-x-0 bottom-0 z-20 px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:left-56 md:pt-3 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+      <div className="board fixed inset-x-0 bottom-0 z-20 px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:left-(--sidebar-w) md:pt-3 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         <div className="flex items-end gap-2 md:flex-wrap md:gap-3">
           <div className="hidden min-w-0 flex-1 text-sm md:block">
             {changed.length === 0 ? (

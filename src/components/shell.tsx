@@ -4,8 +4,9 @@ import { ThemeToggle } from "./ui/controls";
 
 export function Brand() {
   return (
-    <Link href="/admin" className="brand">
-      Post-System
+    <Link href="/admin" className="brand" aria-label="Post-System">
+      <span className="brand-full">Post-System</span>
+      <span className="brand-mono" aria-hidden>PS</span>
     </Link>
   );
 }

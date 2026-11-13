@@ -2,20 +2,37 @@
 // phases start and end on working days and keep their working-day length when moved.
 import type { ScheduleSettings } from "@/db/schema";
 import { addDays, diffDays } from "./dates";
-import { nationalHolidays } from "./holidays-id";
+import { nationalEntries } from "./holidays-id";
 
-export type Cal = { skipWeekends: boolean; holidays: Map<string, string> };
+export type HolidayKind = "national" | "joint" | "extra";
+export type Cal = { skipWeekends: boolean; holidays: Map<string, string>; kinds: Map<string, HolidayKind>; hoursPerDay: number };
 
-export const NO_CAL: Cal = { skipWeekends: false, holidays: new Map() };
+export const NO_CAL: Cal = { skipWeekends: false, holidays: new Map(), kinds: new Map(), hoursPerDay: 8 };
+
+export const HOLIDAY_KIND_LABEL: Record<HolidayKind, string> = { national: "Libur nasional", joint: "Cuti bersama", extra: "Libur tambahan" };
+
+/** Working hours in one day: 1..24, default 8. */
+export const hoursPerDayOf = (s: ScheduleSettings | null | undefined) => { const h = Math.round(Number(s?.hoursPerDay)); return h >= 1 && h <= 24 ? h : 8; };
 
 /** Weekends and Indonesian national holidays are blocked unless the project turned that off; the project's own holidays win on the same date. */
-export const calOf = (s: ScheduleSettings | null | undefined): Cal => ({
-  skipWeekends: s?.skipWeekends ?? true,
-  holidays: new Map([
-    ...((s?.national ?? true) ? nationalHolidays({ joint: s?.jointLeave ?? true }) : []),
-    ...(s?.holidays ?? []).map((h) => [h.date, h.name] as const),
-  ]),
-});
+export function calOf(s: ScheduleSettings | null | undefined): Cal {
+  const national = (s?.national ?? true) ? nationalEntries({ joint: s?.jointLeave ?? true }) : new Map<string, { name: string; joint: boolean }>();
+  const extra = s?.holidays ?? [];
+  return {
+    skipWeekends: s?.skipWeekends ?? true,
+    holidays: new Map([...[...national].map(([d, h]) => [d, h.name] as const), ...extra.map((h) => [h.date, h.name || "Libur"] as const)]),
+    kinds: new Map([...[...national].map(([d, h]) => [d, h.joint ? "joint" : "national"] as const), ...extra.map((h) => [h.date, "extra"] as const)]),
+    hoursPerDay: hoursPerDayOf(s),
+  };
+}
+
+/** Blocked holiday dates (not plain weekends) in [from, to], oldest first, each with its kind. */
+export function blockedEntries(cal: Cal, from: string, to: string) {
+  return [...cal.holidays]
+    .filter(([d]) => d >= from && d <= to)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, name]) => ({ date, name, kind: cal.kinds.get(date) ?? "extra" }));
+}
 
 const dow = (d: string) => new Date(`${d}T00:00:00Z`).getUTCDay();
 export const isWeekend = (d: string) => dow(d) === 0 || dow(d) === 6;
@@ -47,5 +64,8 @@ export function moveKeepingLength(cal: Cal, start: string, due: string, rawStart
   const s = snap(cal, rawStart);
   return [s, endAfter(cal, s, Math.max(1, workDays(cal, start, due)))];
 }
+
+/** Working days needed for h hours of effort. */
+export const daysForHours = (cal: Cal, h: number) => Math.max(1, Math.ceil(h / cal.hoursPerDay));
 
 export const calendarDays = (start: string, due: string) => diffDays(start, due) + 1;

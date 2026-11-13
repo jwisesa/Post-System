@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
-import { Icon } from "./icons";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Icon, type IconName } from "./icons";
 import { useToast } from "./toast";
 
 export function ThemeToggle() {
@@ -31,17 +31,53 @@ export function ThemeToggle() {
   );
 }
 
-export function NavLink({ href, exact, children }: { href: string; exact?: boolean; children: React.ReactNode }) {
+export function NavLink({ href, exact, icon, children }: { href: string; exact?: boolean; icon?: IconName; children: string }) {
   const path = usePathname();
   const active = exact ? path === href : path === href || path.startsWith(`${href}/`);
   return (
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
+      aria-label={icon ? children : undefined}
+      title={icon ? children : undefined}
       className="nav-link"
     >
-      {children}
+      {icon && <Icon name={icon} className="nav-icon" />}
+      <span className="nav-label">{children}</span>
     </Link>
+  );
+}
+
+const setSidebar = (shell: Element, collapsed: boolean) => {
+  if (collapsed) shell.setAttribute("data-collapsed", ""); else shell.removeAttribute("data-collapsed");
+  document.cookie = `sidebar=${collapsed ? "collapsed" : "open"}; path=/; max-age=31536000; samesite=lax`;
+};
+
+/** md+ only. State lives in the `data-collapsed` attribute of `.shell` (server-rendered from the cookie). */
+export function SidebarToggle({ initial }: { initial: boolean }) {
+  const [collapsed, setCollapsed] = useState(initial);
+  const toggle = useCallback((to: boolean) => {
+    const shell = document.querySelector(".shell");
+    if (shell) setSidebar(shell, to);
+    setCollapsed(to);
+  }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== "b") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      e.preventDefault();
+      toggle(!document.querySelector(".shell")?.hasAttribute("data-collapsed"));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggle]);
+  const label = collapsed ? "Buka sidebar" : "Ciutkan sidebar";
+  return (
+    <button type="button" className="nav-link sidebar-toggle" aria-expanded={!collapsed} aria-controls="project-sidebar" aria-keyshortcuts="Control+B Meta+B" aria-label={label} title={`${label} (Ctrl/Cmd+B)`} onClick={() => toggle(!collapsed)}>
+      <Icon name="panel" className="nav-icon" />
+      <span className="nav-label">{label}</span>
+    </button>
   );
 }
 

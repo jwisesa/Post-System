@@ -34,7 +34,7 @@ export const sessions = ps.table("sessions", {
 });
 
 /** Working-day rules for the timeline. Missing keys mean the defaults in lib/schedule/workdays. */
-export type ScheduleSettings = { skipWeekends?: boolean; holidays?: { date: string; name: string }[]; cascade?: boolean; national?: boolean; jointLeave?: boolean };
+export type ScheduleSettings = { skipWeekends?: boolean; holidays?: { date: string; name: string }[]; cascade?: boolean; national?: boolean; jointLeave?: boolean; hoursPerDay?: number };
 
 export const projects = ps.table("projects", {
   id: id(),
@@ -164,6 +164,7 @@ export const scheduleItems = ps.table("schedule_items", {
   internal: boolean("internal").notNull().default(false),
   notes: text("notes").notNull().default(""),
   color: integer("color"), // 1..8 = --ph-N; null = inherit (milestone: its phase; phase: by position)
+  workHours: integer("work_hours"), // planned effort of a phase in working hours; null = planned in days only
   createdAt: createdAt(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -184,7 +185,7 @@ export type ScheduleSnapshot = {
   tracks: { id: string; name: string; sortOrder: number }[];
   items: {
     id: string; trackId: string; parentId: string | null; name: string; startDate: string; dueDate: string; baselineStart: string; baselineDue: string;
-    status: ItemStatus; picContactId: string | null; hardDeadline: boolean; internal: boolean; notes: string; color: number | null;
+    status: ItemStatus; picContactId: string | null; hardDeadline: boolean; internal: boolean; notes: string; color: number | null; workHours?: number | null;
   }[];
   deps: { itemId: string; dependsOnId: string }[];
 };

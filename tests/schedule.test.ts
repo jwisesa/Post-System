@@ -4,7 +4,7 @@ import { ForbiddenError } from "@/lib/auth/permissions";
 import { addDays, diffDays } from "@/lib/schedule/dates";
 import * as sch from "@/lib/schedule/service";
 import { computeMoves, computeShift, wouldCycle, type SItem } from "@/lib/schedule/shift";
-import { calOf, isOff, moveKeepingLength, snap, workDays } from "@/lib/schedule/workdays";
+import { blockedEntries, calOf, daysForHours, endAfter, isOff, moveKeepingLength, snap, workDays } from "@/lib/schedule/workdays";
 import * as s from "@/lib/services";
 import { progressOf } from "@/components/timeline/shared";
 
@@ -237,6 +237,43 @@ describe("working days, multi-move, versions", () => {
     await sch.restoreVersion(db, sup, projectId, v.id);
     expect(await shape()).toBe(before);
     expect((await sch.listVersions(db, projectId)).length).toBe(2); // the state before restoring was kept too
+  });
+});
+
+describe("planned working hours", () => {
+  it("turns hours into an end date across a weekend, using hours per day", () => {
+    const c = calOf({ national: false });
+    expect(c.hoursPerDay).toBe(8);
+    expect(daysForHours(c, 40)).toBe(5);
+    expect(daysForHours(c, 41)).toBe(6);
+    expect(endAfter(c, "2026-12-03", daysForHours(c, 24))).toBe("2026-12-07"); // Thu + 3 days: Thu, Fri, Mon
+    const c6 = calOf({ national: false, hoursPerDay: 6 });
+    expect(endAfter(c6, "2026-12-03", daysForHours(c6, 24))).toBe("2026-12-08"); // 4 days: Thu, Fri, Mon, Tue
+    expect(calOf({ hoursPerDay: 99 }).hoursPerDay).toBe(8); // out of 1..24 falls back
+  });
+
+  it("lists blocked dates with their kind", () => {
+    const c = calOf({ holidays: [{ date: "2026-12-28", name: "Tim libur" }] });
+    const e = blockedEntries(c, "2026-12-20", "2026-12-31");
+    expect(e.map((x) => [x.date, x.kind])).toEqual([["2026-12-24", "joint"], ["2026-12-25", "national"], ["2026-12-28", "extra"]]);
+  });
+
+  it("a restored version keeps workHours", async () => {
+    const db = await createPgliteDb();
+    const sup = (await s.createUser(db, { name: "Sup", email: "h@x.id", password: "password1" })).id;
+    const projectId = (await s.createProject(db, sup, { name: "H", productionType: "feature_theatrical", platforms: [], unitCount: null })).id;
+    await sch.addTrack(db, sup, projectId, { name: "T", template: "promo", startDate: "2026-12-01" });
+    const trackId = (await sch.getSchedule(db, projectId, { includeInternal: true })).tracks[0].id;
+    await sch.addItem(db, sup, projectId, { trackId, parentId: null, name: "Grade", startDate: "2027-02-01", dueDate: "2027-02-05", workHours: 36 });
+    const find = async () => (await sch.getSchedule(db, projectId, { includeInternal: true })).tracks[0].items.find((i) => i.name === "Grade")!;
+    const phase = await find();
+    expect(phase.workHours).toBe(36);
+    await sch.saveVersion(db, sup, projectId, "Dengan jam");
+    await sch.updateItemDetails(db, sup, projectId, phase.id, { name: "Grade", picContactId: null, hardDeadline: false, internal: false, workHours: null });
+    expect((await find()).workHours).toBeNull();
+    const [v] = await sch.listVersions(db, projectId);
+    await sch.restoreVersion(db, sup, projectId, v.id);
+    expect((await find()).workHours).toBe(36);
   });
 });
 

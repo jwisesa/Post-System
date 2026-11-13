@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { addDays, diffDays, fmtRange } from "@/lib/schedule/dates";
+import { fmtRange } from "@/lib/schedule/dates";
 import { statusLabel } from "@/lib/schedule/templates";
 import { isOff, type Cal } from "@/lib/schedule/workdays";
+import { DOW, HEAD, LANE, monthFmt, monthWeeks } from "./calendar-layout";
 import { type Item, type Track } from "./shared";
 
 export type ViewProps = {
@@ -15,14 +16,7 @@ export type ViewProps = {
   onOpen: (itemId: string) => void;
 };
 
-const DOW = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
-const LANE = 20; // px per bar lane
-const HEAD = 20; // px for the day number
-const monthFmt = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric", timeZone: "UTC" });
-const mondayOf = (d: string) => addDays(d, -((new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7));
 const titleOf = (i: Item) => `${i.name}, ${fmtRange(i.startDate, i.dueDate)}, ${statusLabel(i.status)}`;
-
-type Seg = { item: Item; col: number; span: number; lane: number };
 
 const Chevron = ({ dir }: { dir: "l" | "r" }) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
@@ -42,35 +36,7 @@ export default function CalendarView({ tracks, today, cal, ph, progress, onOpen 
     setMonth(d.toISOString().slice(0, 10));
   };
 
-  const weeks = useMemo(() => {
-    const next = new Date(`${month}T00:00:00Z`);
-    next.setUTCMonth(next.getUTCMonth() + 1);
-    const last = addDays(next.toISOString().slice(0, 10), -1);
-    const start = mondayOf(month);
-    const rows = Math.floor(diffDays(start, mondayOf(last)) / 7) + 1;
-    const phases = items.filter((i) => !i.parentId).sort((a, b) => a.startDate.localeCompare(b.startDate));
-    const miles = items.filter((i) => i.parentId);
-    return Array.from({ length: rows }, (_, w) => {
-      const ws = addDays(start, w * 7);
-      const we = addDays(ws, 6);
-      const ends: number[] = []; // last occupied column per lane
-      const segs: Seg[] = [];
-      for (const item of phases) {
-        if (item.startDate > we || item.dueDate < ws) continue;
-        const col = Math.max(0, diffDays(ws, item.startDate));
-        const end = Math.min(6, diffDays(ws, item.dueDate));
-        let lane = ends.findIndex((e) => e < col);
-        if (lane < 0) lane = ends.length;
-        ends[lane] = end;
-        segs.push({ item, col, span: end - col + 1, lane });
-      }
-      const days = Array.from({ length: 7 }, (_, c) => {
-        const d = addDays(ws, c);
-        return { d, miles: miles.filter((m) => m.startDate === d) };
-      });
-      return { key: ws, segs, lanes: ends.length, days };
-    });
-  }, [items, month]);
+  const weeks = useMemo(() => monthWeeks(items, month), [items, month]);
 
   return (
     <div className="text-ink">

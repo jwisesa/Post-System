@@ -1,22 +1,38 @@
 // The Technical Page: one technical source of truth per project.
 // Every field offers prepared options and still accepts a custom value.
 
-export type TechField = { key: string; label: string; options: string[]; hint?: string };
+export type TechField = { key: string; label: string; options: string[]; hint?: string; only?: "digital" | "film" };
 export type TechSection = { key: string; title: string; fields: TechField[] };
 
 const f = (key: string, label: string, options: string[] = [], hint?: string): TechField => ({ key, label, options, hint });
+const only = (kind: "digital" | "film", x: TechField): TechField => ({ ...x, only: kind });
+export const FILM_MEDIA = ["Film 35mm", "Film Super 16", "Film 16mm", "Film 65mm", "Film Super 8"];
+/** True when a camera's "Media rekam" value is a film format. */
+export const isFilm = (media?: string) => (media ?? "").trim().toLowerCase().startsWith("film");
+/** Fields of a camera that apply to its media (digital-only fields hide for film, film-only for digital/empty). */
+export const fieldApplies = (x: TechField, media?: string) => !x.only || (x.only === "film") === isFilm(media);
 const notes = (key: string): TechField => f(key === "general" ? "notes" : `${key}_notes`, "Catatan");
 
 export const MAX_CAMERAS = 4;
 /** Camera slot n (1..4). Camera 1 keeps the legacy key `sourceFormat` for its recording format. */
 const camFields = (n: number): TechField[] => [
-  f(`cam${n}_model`, "Kamera", ["ARRI Alexa 35", "ARRI Alexa Mini LF", "ARRI Alexa Mini", "RED V-Raptor", "RED Komodo", "Sony Venice 2", "Sony FX6", "Sony FX3", "Sony FX9", "Blackmagic URSA Mini Pro 12K", "Blackmagic Pocket 6K", "Canon C300 III", "Canon C70", "Panasonic S1H"]),
-  f(`cam${n}_res`, "Resolusi & mode sensor", ["4.6K 3:2 Open Gate", "4K UHD", "4K DCI", "6K", "2.8K", "2K", "1920x1080"], "Mode sensor yang dipakai merekam"),
-  f(`cam${n}_fps`, "Frame rate rekam", ["23.976", "24", "25", "29.97", "50", "59.94", "120"]),
-  n === 1
-    ? f("sourceFormat", "Format rekam / codec", ["ARRIRAW", "ARRI ProRes 4444 XQ", "REDCODE RAW (R3D)", "Sony X-OCN", "Sony XAVC", "Blackmagic RAW", "Canon Cinema RAW Light", "ProRes 422 HQ", "H.264 / H.265"])
-    : f(`cam${n}_format`, "Format rekam / codec", ["ARRIRAW", "ARRI ProRes 4444 XQ", "REDCODE RAW (R3D)", "Sony X-OCN", "Sony XAVC", "Blackmagic RAW", "Canon Cinema RAW Light", "ProRes 422 HQ", "H.264 / H.265"]),
-  f(`cam${n}_cs`, "Colorspace / gamma rekam", ["ARRI LogC3 / AWG3", "ARRI LogC4 / AWG4", "REDWideGamutRGB / Log3G10", "Sony S-Log3 / S-Gamut3.Cine", "Blackmagic Film Gen 5", "Canon Log 3 / Cinema Gamut", "Rec.709"]),
+  f(`cam${n}_model`, "Kamera", ["ARRI Alexa 35", "ARRI Alexa Mini LF", "ARRI Alexa Mini", "RED V-Raptor", "RED Komodo", "Sony Venice 2", "Sony FX6", "Sony FX3", "Sony FX9", "Blackmagic URSA Mini Pro 12K", "Blackmagic Pocket 6K", "Canon C300 III", "Canon C70", "Panasonic S1H", "ARRICAM ST", "ARRICAM LT", "ARRIFLEX 435", "ARRIFLEX 235", "ARRIFLEX 416", "ARRI SR3", "Aaton XTR Prod", "Aaton Penelope", "Panavision Millennium XL2", "Panaflex Gold II", "Bolex H16", "Krasnogorsk-3", "Beaulieu 4008"]),
+  f(`cam${n}_media`, "Media rekam", ["Digital", ...FILM_MEDIA], "Kosong = digital"),
+  only("digital", f(`cam${n}_res`, "Resolusi & mode sensor", ["4.6K 3:2 Open Gate", "4K UHD", "4K DCI", "6K", "2.8K", "2K", "1920x1080"], "Mode sensor yang dipakai merekam")),
+  f(`cam${n}_fps`, "Frame rate rekam", ["23.976", "24", "25", "29.97", "50", "59.94", "120"], "Untuk film: kecepatan kamera (fps)"),
+  only("digital", f(n === 1 ? "sourceFormat" : `cam${n}_format`, "Format rekam / codec", ["ARRIRAW", "ARRI ProRes 4444 XQ", "REDCODE RAW (R3D)", "Sony X-OCN", "Sony XAVC", "Blackmagic RAW", "Canon Cinema RAW Light", "ProRes 422 HQ", "H.264 / H.265"])),
+  only("digital", f(`cam${n}_cs`, "Colorspace / gamma rekam", ["ARRI LogC3 / AWG3", "ARRI LogC4 / AWG4", "REDWideGamutRGB / Log3G10", "Sony S-Log3 / S-Gamut3.Cine", "Blackmagic Film Gen 5", "Canon Log 3 / Cinema Gamut", "Rec.709"])),
+  only("film", f(`cam${n}_stock`, "Film stock", ["Kodak Vision3 50D 5203/7203", "Kodak Vision3 250D 5207/7207", "Kodak Vision3 200T 5213/7213", "Kodak Vision3 500T 5219/7219", "Eastman Double-X 5222/7222", "Kodak Ektachrome 100D 5294/7294"])),
+  only("film", f(`cam${n}_perf`, "Perforasi / format frame", ["2-perf", "3-perf", "4-perf", "Super 16", "Regular 16", "5-perf 65mm", "15-perf IMAX", "Super 8"])),
+  only("film", f(`cam${n}_ratio`, "Aspect ratio / ground glass", ["2.39:1", "1.85:1", "1.78:1", "1.66:1", "1.33:1"])),
+  only("film", f(`cam${n}_process`, "Processing", ["Normal", "Push 1", "Push 2", "Pull 1", "Bleach bypass", "Cross process"])),
+  only("film", f(`cam${n}_lab`, "Film lab")),
+  only("film", f(`cam${n}_scanner`, "Scanner", ["ARRISCAN XT", "Scanity HDR", "Lasergraphics ScanStation", "Lasergraphics Director", "Blackmagic Cintel", "DFT Spirit"])),
+  only("film", f(`cam${n}_scanres`, "Resolusi scan", ["2K", "3.2K", "4K", "6.5K"])),
+  only("film", f(`cam${n}_scanfmt`, "Format file scan", ["DPX 10-bit log", "DPX 16-bit", "EXR 16-bit"])),
+  only("film", f(`cam${n}_scancs`, "Colour encoding scan", ["Cineon log", "ADX10 (ACES)", "ADX16 (ACES)", "Scanner-native log"])),
+  only("film", f(`cam${n}_keycode`, "Frame count / keycode", ["Keycode di header DPX", "ALE + keycode", "Tidak ada"])),
+  only("film", f(`cam${n}_negative`, "Penyimpanan / pengembalian negatif", [], "Mis. disimpan di lab, dikembalikan ke produksi")),
 ];
 /** Keys of camera n, in the order shown in the form. */
 export const cameraKeys = (n: number) => camFields(n).map((x) => x.key);
@@ -78,7 +94,7 @@ export const TECH_SECTIONS: TechSection[] = [
     key: "dailies",
     title: "Dailies",
     fields: [
-      f("dailies_system", "Sistem transcode", ["DaVinci Resolve", "Colorfront Express Dailies", "Silverstack Lab", "Assimilate Scratch"]),
+      f("dailies_system", "Sistem transcode", ["DaVinci Resolve", "Colorfront Express Dailies", "Silverstack Lab", "Assimilate Scratch"], "Untuk kamera film: dailies dari scan lab"),
       f("dailies_by", "Dibuat oleh", ["DIT di lokasi", "Lab", "Post house", "Editor"]),
       f("dailies_pipeline", "Color pipeline dailies", ["Show LUT (camera log ke Rec.709)", "ACES", "CDL dari lokasi"]),
       f("dailies_review", "Platform review", ["Frame.io", "Google Drive", "Vimeo", "Pix", "Hard drive"]),

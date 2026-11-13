@@ -101,6 +101,13 @@ export const NATIONAL_HOLIDAYS: Record<number, H[]> = {
 
 export const HOLIDAY_YEARS = Object.keys(NATIONAL_HOLIDAYS).map(Number).sort((a, b) => a - b);
 
+/** date -> name and kind for every covered year; cuti bersama only when opts.joint. */
+export function nationalEntries(opts: { joint: boolean }) {
+  const m = new Map<string, { name: string; joint: boolean }>();
+  for (const y of HOLIDAY_YEARS) for (const h of NATIONAL_HOLIDAYS[y]) if (opts.joint || !h.joint) m.set(h.date, { name: h.name, joint: Boolean(h.joint) });
+  return m;
+}
+
 /** date -> name for every covered year; cuti bersama only when opts.joint. */
 export function nationalHolidays(opts: { joint: boolean }) {
   const m = new Map<string, string>();

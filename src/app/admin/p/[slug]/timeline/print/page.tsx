@@ -1,4 +1,6 @@
+import { CalendarMonth } from "@/components/timeline/CalendarPrint";
 import { PrintActions } from "@/components/timeline/PrintActions";
+import { phaseIndex } from "@/components/timeline/shared";
 import { loadProject } from "@/lib/project-context";
 import { addDays, diffDays, fmtDate, today as todayWib } from "@/lib/schedule/dates";
 import { getSchedule } from "@/lib/schedule/service";
@@ -55,29 +57,44 @@ function Gantt({ items }: { items: Item[] }) {
   );
 }
 
-export default async function PrintTimeline({ params }: { params: Promise<{ slug: string }> }) {
+export default async function PrintTimeline({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ view?: string }> }) {
   const { slug } = await params;
+  const { view } = await searchParams;
   const { db, project } = await loadProject(slug);
   const { tracks, settings } = await getSchedule(db, project.id, { includeInternal: true });
   const cal = calOf(settings);
+  const calendar = view === "calendar";
+  const all = tracks.flatMap((t) => t.items);
+  const months: string[] = [];
+  if (calendar && all.length) {
+    const first = all.reduce((m, i) => (i.startDate < m ? i.startDate : m), all[0].startDate);
+    const last = all.reduce((m, i) => (i.dueDate > m ? i.dueDate : m), all[0].dueDate);
+    for (let d = `${first.slice(0, 7)}-01`; d <= last && months.length < 36; ) {
+      months.push(d);
+      const [y, m] = d.split("-").map(Number);
+      d = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+    }
+  }
+  const ph = phaseIndex(tracks);
   return (
     <>
-      <style>{`@page { size: A4 landscape; margin: 12mm; } .print-track { break-inside: avoid; } @media print { body * { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }`}</style>
+      <style>{`@page { size: A4 landscape; margin: 12mm; } .print-track { break-inside: avoid; } .print-month { break-inside: avoid; } .print-month:not(:last-child) { break-after: page; } @media print { body * { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }`}</style>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <h1>{project.name}</h1>
-          <p className="text-sm">Jadwal pasca produksi</p>
+          <p className="text-sm">{calendar ? "Kalender pasca produksi" : "Jadwal pasca produksi"}</p>
           <p className="muted text-sm">Dicetak {fmtDate(todayWib())}</p>
         </div>
         <PrintActions backHref={`/admin/p/${slug}/timeline`} />
       </div>
       {tracks.length === 0 && <p className="muted text-sm">Belum ada track.</p>}
-      {tracks.map((t) => (
+      {calendar && months.map((m) => <CalendarMonth key={m} items={all} month={m} cal={cal} ph={ph} />)}
+      {!calendar && tracks.map((t) => (
         <section key={t.id} className="print-track space-y-2">
           <h2 className="border-b border-line pb-1">{t.name}</h2>
           <Gantt items={t.items} />
           <table className="w-full text-sm">
-            <thead><tr className="muted text-left"><th className="py-1 font-normal">Nama</th><th className="py-1 font-normal">Mulai</th><th className="py-1 font-normal">Selesai</th><th className="py-1 text-right font-normal">Hari kerja</th><th className="py-1 pl-4 font-normal">Status</th><th className="py-1 font-normal">PIC</th></tr></thead>
+            <thead><tr className="muted text-left"><th className="py-1 font-normal">Nama</th><th className="py-1 font-normal">Mulai</th><th className="py-1 font-normal">Selesai</th><th className="py-1 text-right font-normal">Hari kerja</th><th className="py-1 text-right font-normal">Jam</th><th className="py-1 pl-4 font-normal">Status</th><th className="py-1 font-normal">PIC</th></tr></thead>
             <tbody className="divide-y divide-line">
               {t.items.map((i) => (
                 <tr key={i.id}>
@@ -87,6 +104,7 @@ export default async function PrintTimeline({ params }: { params: Promise<{ slug
                   <td className="py-1">{fmtDate(i.startDate)}</td>
                   <td className="py-1">{fmtDate(i.dueDate)}</td>
                   <td className="py-1 text-right">{workDays(cal, i.startDate, i.dueDate)}</td>
+                  <td className="py-1 text-right">{i.workHours ?? ""}</td>
                   <td className="py-1 pl-4">{statusLabel(i.status)}</td>
                   <td className="py-1">{i.picName ?? ""}</td>
                 </tr>

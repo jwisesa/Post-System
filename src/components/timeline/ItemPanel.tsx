@@ -1,21 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import {
-  addItemAction, addTrackAction, deleteItemAction, deleteTrackAction, deleteVersionAction, rebaselineAction, restoreVersionAction,
-  saveSettingsAction, saveVersionAction, setStatusAction, updateItemAction,
-} from "@/app/admin/schedule-actions";
-import type { ScheduleSettings } from "@/db/schema";
+import { addItemAction, addTrackAction, deleteItemAction, deleteTrackAction, rebaselineAction, setStatusAction, updateItemAction } from "@/app/admin/schedule-actions";
 import { LINK_LABELS } from "@/lib/assets/catalog";
 import type { Attachment, Comment } from "@/lib/assets/service";
 import { addDays, fmtDate, fmtRange } from "@/lib/schedule/dates";
-import type { VersionRow } from "@/lib/schedule/service";
 import type { Dep } from "@/lib/schedule/shift";
 import { MILESTONE_NAME_OPTIONS, PHASE_COLORS, PHASE_NAME_OPTIONS, STATUSES, statusLabel, TRACK_NAME_OPTIONS, TRACK_TEMPLATES } from "@/lib/schedule/templates";
-import { HOLIDAY_YEARS } from "@/lib/schedule/holidays-id";
 import { snap, type Cal } from "@/lib/schedule/workdays";
 import { AttachmentList, CommentThread } from "../assets/AttachmentList";
 import { ConfirmButton } from "../ui/controls";
+import { MilestoneDate, PhaseDates } from "./DateFields";
 import { Icon } from "../ui/icons";
 import { durationLabel, isLate, slip, type Item, type Mode, type Track } from "./shared";
 
@@ -84,7 +79,7 @@ export function ItemPanel({ item, track, mode, slug, today, allItems, deps, cont
           {track.name}{item.parentId ? ` · milestone di ${allItems.find((o) => o.id === item.parentId)?.name ?? "fase"}` : " · fase"}
         </div>
         <div className="font-display text-lg font-semibold tabular-nums">{fmtRange(item.startDate, item.dueDate)}</div>
-        {!item.parentId && <div className="muted tabular-nums" data-testid="duration">{durationLabel(cal, item.startDate, item.dueDate)}</div>}
+        {!item.parentId && <div className="muted tabular-nums" data-testid="duration">{durationLabel(cal, item.startDate, item.dueDate, item.workHours)}</div>}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="status" data-status={item.status}>{statusLabel(item.status)}</span>
           {item.picName && <span className="tag">PIC {item.picName}</span>}
@@ -125,16 +120,13 @@ export function ItemPanel({ item, track, mode, slug, today, allItems, deps, cont
       )}
 
       {mode === "edit" && (
-        <form key={`${item.id}:${item.startDate}:${item.dueDate}:${item.status}`} action={updateItemAction} className="space-y-3 hairline pt-4">
+        <form key={`${item.id}:${item.startDate}:${item.dueDate}:${item.status}:${item.workHours}`} action={updateItemAction} className="space-y-3 hairline pt-4">
           {hidden}
           <label><span>Nama</span><input name="name" required defaultValue={item.name} /></label>
           {item.parentId ? (
-            <MilestoneDate value={item.startDate} />
+            <MilestoneDate value={item.startDate} cal={cal} />
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <label><span>Mulai</span><input name="startDate" type="date" required defaultValue={item.startDate} /></label>
-              <label><span>Selesai</span><input name="dueDate" type="date" required defaultValue={item.dueDate} /></label>
-            </div>
+            <PhaseDates cal={cal} start={item.startDate} due={item.dueDate} workHours={item.workHours} />
           )}
           <StatusFields item={item} />
           <label>
@@ -201,18 +193,6 @@ export function ItemPanel({ item, track, mode, slug, today, allItems, deps, cont
   );
 }
 
-/** A milestone is one date: the same value goes to both ends. */
-function MilestoneDate({ value }: { value: string }) {
-  const [d, setD] = useState(value);
-  return (
-    <label>
-      <span>Tanggal</span>
-      <input name="startDate" type="date" required value={d} onChange={(e) => setD(e.target.value)} />
-      <input type="hidden" name="dueDate" value={d} />
-    </label>
-  );
-}
-
 /** Adds a phase (a period) or a milestone (one date inside a phase) by hand; names are suggestions only. */
 export function NewItemPanel({ slug, tracks, trackId, parentId, date, cal }: { slug: string; tracks: Track[]; trackId: string; parentId: string | null; date: string; cal: Cal }) {
   const [track, setTrack] = useState(trackId);
@@ -246,12 +226,9 @@ export function NewItemPanel({ slug, tracks, trackId, parentId, date, cal }: { s
         <input name="name" required autoFocus list="item-names" placeholder={milestone ? "Mis. Test DCP, Preview 3" : "Mis. Subtitling, DCP Mastering"} autoComplete="off" />
         <datalist id="item-names">{(milestone ? MILESTONE_NAME_OPTIONS : PHASE_NAME_OPTIONS).map((n) => <option key={n} value={n} />)}</datalist>
       </label>
-      {milestone ? <MilestoneDate value={start} /> : (
+      {milestone ? <MilestoneDate value={start} cal={cal} /> : (
         <>
-          <div className="grid grid-cols-2 gap-3">
-            <label><span>Mulai</span><input name="startDate" type="date" required defaultValue={start} /></label>
-            <label><span>Selesai</span><input name="dueDate" type="date" required defaultValue={snap(cal, addDays(start, 6), -1)} /></label>
-          </div>
+          <PhaseDates cal={cal} start={start} due={snap(cal, addDays(start, 6), -1)} workHours={null} />
           <ColorField value={null} />
         </>
       )}
@@ -260,49 +237,7 @@ export function NewItemPanel({ slug, tracks, trackId, parentId, date, cal }: { s
   );
 }
 
-function SettingsForm({ slug, settings }: { slug: string; settings: ScheduleSettings }) {
-  const [holidays, setHolidays] = useState(settings.holidays ?? []);
-  const [date, setDate] = useState("");
-  const [name, setName] = useState("");
-  const add = (rows: { date: string; name: string }[]) => setHolidays((h) => [...new Map([...h, ...rows].map((r) => [r.date, r])).values()].sort((a, b) => a.date.localeCompare(b.date)));
-  return (
-    <form action={saveSettingsAction} className="space-y-3 hairline pt-4">
-      <input type="hidden" name="slug" value={slug} />
-      <input type="hidden" name="holidays" value={JSON.stringify(holidays)} />
-      <h3>Hari kerja</h3>
-      <label className="check"><input type="checkbox" name="skipWeekends" defaultChecked={settings.skipWeekends !== false} /> Blokir Sabtu dan Minggu</label>
-      <label className="check"><input type="checkbox" name="national" defaultChecked={settings.national !== false} /> Libur nasional Indonesia</label>
-      <label className="check"><input type="checkbox" name="jointLeave" defaultChecked={settings.jointLeave !== false} /> Termasuk cuti bersama</label>
-      <p className="muted text-xs">Tanggal libur nasional tersedia untuk {HOLIDAY_YEARS.join(", ")}. Tahun di luar daftar ini perlu diisi manual.</p>
-      <label className="check"><input type="checkbox" name="cascade" defaultChecked={Boolean(settings.cascade)} /> Geser otomatis item yang bergantung</label>
-      <p className="muted text-xs">Fase selalu mulai dan selesai di hari kerja, dan jumlah hari kerjanya tetap saat digeser. Jadwal yang sudah ada tidak diubah sampai Anda menggesernya.</p>
-      <div>
-        <div className="mb-1 text-xs font-semibold text-ink-2">Libur tambahan {holidays.length > 0 && `(${holidays.length})`}</div>
-        {holidays.length > 0 && (
-          <ul className="rows mb-2 max-h-44 overflow-y-auto text-sm">
-            {holidays.map((h) => (
-              <li key={h.date} className="flex items-center gap-2 py-1">
-                <span className="w-24 shrink-0 text-muted tabular-nums">{fmtDate(h.date)}</span>
-                <span className="min-w-0 flex-1 truncate">{h.name || "Libur"}</span>
-                <button type="button" className="btn-ghost !min-h-6 !px-1" aria-label={`Hapus libur ${fmtDate(h.date)}`} onClick={() => setHolidays((x) => x.filter((r) => r.date !== h.date))}><Icon name="close" /></button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-[9.5rem_1fr_auto]">
-          <input type="date" aria-label="Tanggal libur" value={date} onChange={(e) => setDate(e.target.value)} />
-          <input aria-label="Nama libur" placeholder="Nama, mis. Idul Fitri" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (date) { add([{ date, name }]); setDate(""); setName(""); } } }} />
-          <button type="button" className="btn-secondary col-span-2 sm:col-span-1" disabled={!date} onClick={() => { add([{ date, name }]); setDate(""); setName(""); }}>Tambah</button>
-        </div>
-        <p className="muted text-xs">Hari libur khusus produksi, mis. hari libur lokasi syuting atau tim.</p>
-      </div>
-      <button className="btn-secondary">Simpan aturan hari kerja</button>
-    </form>
-  );
-}
-
-export function ManagePanel({ slug, tracks, today, hasItems, settings, versions }: { slug: string; tracks: Track[]; today: string; hasItems: boolean; settings: ScheduleSettings; versions: VersionRow[]; years: number[] }) {
-  const stamp = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" });
+export function ManagePanel({ slug, tracks, today, hasItems, onOpen }: { slug: string; tracks: Track[]; today: string; hasItems: boolean; onOpen: (panel: "days" | "versions") => void }) {
   return (
     <>
       <form action={addTrackAction} className="space-y-3">
@@ -325,43 +260,24 @@ export function ManagePanel({ slug, tracks, today, hasItems, settings, versions 
         <section className="space-y-2 hairline pt-4">
           <h3>Export</h3>
           <div className="flex flex-wrap gap-2">
-            <a className="btn-secondary" href={`/admin/p/${slug}/timeline/print`}><Icon name="print" /> PDF / cetak</a>
+            <a className="btn-secondary" href={`/admin/p/${slug}/timeline/print`}><Icon name="print" /> PDF Gantt</a>
+            <a className="btn-secondary" href={`/admin/p/${slug}/timeline/print?view=calendar`}><Icon name="today" /> PDF Kalender</a>
             <a className="btn-secondary" href={`/admin/p/${slug}/timeline/export`} download><Icon name="download" /> Excel / Sheets (CSV)</a>
           </div>
         </section>
       )}
 
-      <section className="space-y-3 hairline pt-4">
+      <section className="space-y-2 hairline pt-4">
         <h3>Versi tersimpan</h3>
-        <p className="muted text-sm">Simpan keadaan timeline sekarang supaya bisa dibandingkan atau dipulihkan nanti. Memulihkan sebuah versi otomatis menyimpan keadaan saat ini lebih dulu.</p>
-        <form action={saveVersionAction} className="flex items-end gap-2">
-          <input type="hidden" name="slug" value={slug} />
-          <label className="min-w-0 flex-1"><span>Nama versi</span><input name="name" required placeholder="Mis. Draft 2 setelah meeting producer" /></label>
-          <button className="btn-secondary">Simpan versi</button>
-        </form>
-        {versions.length > 0 && (
-          <ul className="rows text-sm">
-            {versions.map((v) => (
-              <li key={v.id} className="flex items-center gap-2 py-1.5">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">{v.name}</span>
-                  <span className="muted block text-xs tabular-nums">{stamp.format(new Date(v.createdAt))}{v.by ? ` · ${v.by}` : ""} · {v.items} item</span>
-                </span>
-                <form action={restoreVersionAction}>
-                  <input type="hidden" name="slug" value={slug} /><input type="hidden" name="versionId" value={v.id} />
-                  <ConfirmButton className="btn-ghost" message={`Pulihkan timeline ke versi "${v.name}"? Keadaan sekarang disimpan dulu sebagai versi.`}>Pulihkan</ConfirmButton>
-                </form>
-                <form action={deleteVersionAction}>
-                  <input type="hidden" name="slug" value={slug} /><input type="hidden" name="versionId" value={v.id} />
-                  <ConfirmButton message={`Hapus versi "${v.name}"?`}>Hapus</ConfirmButton>
-                </form>
-              </li>
-            ))}
-          </ul>
-        )}
+        <p className="muted text-sm">Simpan dan pulihkan keadaan timeline dari tombol Versi di atas jadwal.</p>
+        <button type="button" className="btn-secondary" onClick={() => onOpen("versions")}>Buka Versi</button>
       </section>
 
-      <SettingsForm slug={slug} settings={settings} />
+      <section className="space-y-2 hairline pt-4">
+        <h3>Hari kerja & libur</h3>
+        <p className="muted text-sm">Atur hari yang diblokir dan lihat daftar hari liburnya.</p>
+        <button type="button" className="btn-secondary" onClick={() => onOpen("days")}>Buka Hari kerja & libur</button>
+      </section>
 
       {hasItems && (
         <form action={rebaselineAction} className="space-y-3 hairline pt-4">

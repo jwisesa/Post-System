@@ -29,9 +29,10 @@ export function phaseIndex(tracks: Track[]) {
 }
 
 /** "12 hari kerja · 16 hari kalender" (or just the calendar count when nothing is blocked). */
-export function durationLabel(cal: Cal, start: string, due: string) {
+export function durationLabel(cal: Cal, start: string, due: string, hours?: number | null) {
   const [c, w] = [calendarDays(start, due), workDays(cal, start, due)];
-  return c === w ? `${c} hari` : `${w} hari kerja · ${c} hari kalender`;
+  const h = hours ? ` · ${hours} jam kerja` : "";
+  return (c === w ? `${c} hari` : `${w} hari kerja · ${c} hari kalender`) + h;
 }
 
 /** 0..1 bar fill: status pins the ends; running items use finished milestones, else elapsed share of their dates. */

@@ -19,14 +19,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }
   const cal = calOf(settings);
   const all = tracks.flatMap((t) => t.items);
   const byId = new Map(all.map((i) => [i.id, i]));
-  const rows: string[][] = [["Track", "Tipe", "Fase", "Nama", "Mulai", "Selesai", "Hari kerja", "Hari kalender", "Status", "PIC", "Hard deadline", "Menunggu", "Catatan"]];
+  const rows: string[][] = [["Track", "Tipe", "Fase", "Nama", "Mulai", "Selesai", "Hari kerja", "Jam kerja", "Hari kalender", "Status", "PIC", "Hard deadline", "Menunggu", "Catatan"]];
   for (const t of tracks) {
     for (const i of t.items) {
       const parent = i.parentId ? byId.get(i.parentId) : undefined;
       const waits = deps.filter((d) => d.itemId === i.id).map((d) => byId.get(d.dependsOnId)?.name ?? "").filter(Boolean);
       rows.push([
         t.name, i.parentId ? "Milestone" : "Fase", parent?.name ?? i.name, i.name, i.startDate, i.dueDate,
-        String(workDays(cal, i.startDate, i.dueDate)), String(calendarDays(i.startDate, i.dueDate)),
+        String(workDays(cal, i.startDate, i.dueDate)), i.workHours ? String(i.workHours) : "", String(calendarDays(i.startDate, i.dueDate)),
         statusLabel(i.status), i.picName ?? "", i.hardDeadline ? "Ya" : "", waits.join("; "), i.notes,
       ]);
     }

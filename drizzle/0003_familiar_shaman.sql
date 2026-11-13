@@ -1,0 +1,1 @@
+ALTER TABLE "post_system"."schedule_items" ADD COLUMN "work_hours" integer;
