@@ -604,7 +604,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
             <div ref={scroller} className="tl hidden max-h-[74dvh] overflow-auto overscroll-contain md:block" style={{ "--row": `${ROW}px` } as React.CSSProperties} data-testid="timeline-board">
               <div className="relative" style={{ width: left + width }}>
                 <div className="tl-head sticky top-0 z-30 flex" style={{ height: HEAD }}>
-                  <div className="sticky left-0 z-10 flex shrink-0 items-end bg-bg px-3 pb-2 text-xs text-ink-2" style={{ width: left, "--gx": `${left}px` } as React.CSSProperties}>
+                  <div className="sticky left-0 z-10 flex shrink-0 items-end whitespace-nowrap bg-bg px-3 pb-2 text-xs text-ink-2" style={{ width: left, "--gx": `${left}px` } as React.CSSProperties}>
                     {filtering ? `${rowOf.size} dari ${allItems.length} item` : `${allItems.length} item`}
                     {editable && <span className="tl-grip" {...grip} />}
                   </div>
@@ -635,13 +635,13 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
                   {rows.map((r, n) =>
                     r.type === "track" ? (
                       <div key={r.track.id} data-track className="tl-row flex" style={{ top: n * ROW }}>
-                        <div className="track-band sticky left-0 z-20 flex shrink-0 items-center gap-1 px-2" style={{ width: left }}>
-                          <button type="button" aria-expanded={!collapsed.has(r.track.id)} className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left" onClick={(e) => (e.shiftKey && editable ? setSel(new Set(r.track.items.filter((i) => rowOf.has(i.id)).map((i) => i.id))) : toggle(r.track.id))}>
+                        <div className="track-band @container sticky left-0 z-20 flex shrink-0 items-center gap-1 px-2" style={{ width: left }}>
+                          <button type="button" aria-expanded={!collapsed.has(r.track.id)} className="flex flex-1 cursor-pointer items-center gap-1.5 text-left" onClick={(e) => (e.shiftKey && editable ? setSel(new Set(r.track.items.filter((i) => rowOf.has(i.id)).map((i) => i.id))) : toggle(r.track.id))}>
                             <Icon name="chevron" className={`muted transition-transform duration-150 ${collapsed.has(r.track.id) ? "" : "rotate-90"}`} />
-                            <span className="truncate">{r.track.name}</span>
-                            <span className="muted font-sans text-xs font-semibold tabular-nums">{r.track.items.filter((i) => !i.parentId).length} fase</span>
+                            <span className="min-w-[5rem] flex-1 truncate">{r.track.name}</span>
+                            <span className="muted font-sans text-xs font-semibold tabular-nums @max-[300px]:hidden">{r.track.items.filter((i) => !i.parentId).length} fase</span>
                           </button>
-                          {editable && <button type="button" className="btn-ghost !min-h-6 !px-1.5 text-xs" onClick={() => setPanel({ kind: "new", trackId: r.track.id, parentId: null, date: today })}><Icon name="plus" /> Fase</button>}
+                          {editable && <button type="button" aria-label="Fase" className="btn-ghost !min-h-6 !px-1.5 text-xs" onClick={() => setPanel({ kind: "new", trackId: r.track.id, parentId: null, date: today })}><Icon name="plus" /><span className="@max-[260px]:hidden"> Fase</span></button>}
                         </div>
                         <div
                           className="flex-1"
@@ -816,30 +816,30 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
     const selected = sel.has(item.id);
     return (
       <div key={item.id} data-ph={ph(item.id)} data-conflict={conflictIds.has(item.id) || undefined} className="tl-row flex" style={{ top }}>
-        <div className={`tl-label sticky left-0 z-20 flex shrink-0 items-center gap-2 px-2 ${milestone ? "pl-9" : ""}`} data-selected={selected || undefined} style={{ width: labelW }}>
+        <div className={`tl-label @container sticky left-0 z-20 flex shrink-0 items-center gap-2 px-2 ${milestone ? "pl-9" : ""}`} data-selected={selected || undefined} style={{ width: labelW }}>
           {!milestone && (children.length > 0
             ? <button type="button" aria-expanded={!folded} aria-label={`${folded ? "Buka" : "Ciutkan"} milestone ${item.name}`} className="cursor-pointer text-muted hover:text-ink" onClick={() => toggle(item.id)}><Icon name="chevron" className={`transition-transform duration-150 ${folded ? "" : "rotate-90"}`} /></button>
             : <span className="w-4 shrink-0" />)}
           <span aria-hidden className={milestone ? "diamond" : "ph-mark"} />
-          <button type="button" className={`min-w-0 flex-1 cursor-pointer truncate text-left hover:underline ${milestone ? "text-[13px] text-ink-2" : "text-[13px] font-medium"}`} onClick={(e) => (e.shiftKey || e.metaKey || e.ctrlKey ? pick(item.id, e) : openItem(item.id))}>
+          <button type="button" title={`${item.name} · ${fmtRange(p.start, p.due)} · ${durationLabel(cal, p.start, p.due, item.workHours)} · ${statusLabel(item.status)}`} className={`min-w-[7rem] flex-1 cursor-pointer truncate text-left hover:underline ${milestone ? "text-[13px] text-ink-2" : "text-[13px] font-medium"}`} onClick={(e) => (e.shiftKey || e.metaKey || e.ctrlKey ? pick(item.id, e) : openItem(item.id))}>
             {item.name}
             {!milestone && folded && <span className="ml-1.5 text-xs font-normal text-muted tabular-nums">{children.length}</span>}
             {item.hardDeadline && <span className="ml-1.5 text-xs font-medium text-danger" title="Hard deadline: tidak ikut bergeser">hard</span>}
           </button>
-          {openFeedback.get(item.id) && <span className="flex shrink-0 items-center gap-0.5 text-xs text-warn tabular-nums" title={`${openFeedback.get(item.id)} feedback belum dicek`}><Icon name="feedback" className="size-3.5" />{openFeedback.get(item.id)}</span>}
-          {linkCount.get(item.id) && <span className="flex shrink-0 items-center gap-0.5 text-xs text-muted tabular-nums" title={`${linkCount.get(item.id)} link`}><Icon name="link" className="size-3.5" />{linkCount.get(item.id)}</span>}
-          <span className={`shrink-0 text-right text-xs tabular-nums ${late ? "font-medium text-danger" : "text-muted"}`} title={milestone ? (late ? "Terlambat" : undefined) : `${fmtRange(p.start, p.due)} · ${durationLabel(cal, p.start, p.due, item.workHours)}${late ? " · terlambat" : ""}`}>
-            {fmtDate(p.due).replace(/ \d{4}$/, "")}
-            {!milestone && <span className="ml-1.5 inline-block min-w-9 text-muted">{workDays(cal, p.start, p.due)} hk{item.workHours ? ` · ${item.workHours} j` : ""}</span>}
-            {slip(item) && <span className="ml-1 text-warn">{slip(item)}</span>}
-          </span>
+          {openFeedback.get(item.id) && <span className="flex shrink-0 items-center gap-0.5 text-xs text-warn tabular-nums @max-[300px]:hidden" title={`${openFeedback.get(item.id)} feedback belum dicek`}><Icon name="feedback" className="size-3.5" />{openFeedback.get(item.id)}</span>}
+          {linkCount.get(item.id) && <span className="flex shrink-0 items-center gap-0.5 text-xs text-muted tabular-nums @max-[300px]:hidden" title={`${linkCount.get(item.id)} link`}><Icon name="link" className="size-3.5" />{linkCount.get(item.id)}</span>}
           {mode === "view" ? (
-            <span className="w-[5.5rem] shrink-0 text-xs text-muted">{statusLabel(item.status)}</span>
+            <span className="w-[5.5rem] shrink-0 text-xs text-muted @max-[260px]:hidden">{statusLabel(item.status)}</span>
           ) : (
-            <select aria-label={`Status ${item.name}`} className="status-select" data-status={item.status} value={item.status} onChange={(e) => setStatus([item.id], e.target.value)}>
+            <select aria-label={`Status ${item.name}`} className="status-select @max-[260px]:hidden" data-status={item.status} value={item.status} onChange={(e) => setStatus([item.id], e.target.value)}>
               {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           )}
+          <span className={`shrink-0 text-right text-xs tabular-nums ${late ? "font-medium text-danger" : "text-muted"}`} title={milestone ? (late ? "Terlambat" : undefined) : `${fmtRange(p.start, p.due)} · ${durationLabel(cal, p.start, p.due, item.workHours)}${late ? " · terlambat" : ""}`}>
+            <span className="@max-[320px]:hidden">{fmtDate(p.due).replace(/ \d{4}$/, "")}</span>
+            {!milestone && <span className="ml-1.5 inline-block min-w-9 text-muted @max-[380px]:hidden">{workDays(cal, p.start, p.due)} hk<span className="@max-[440px]:hidden">{item.workHours ? ` · ${item.workHours} j` : ""}</span></span>}
+            {slip(item) && <span className="ml-1 text-warn @max-[440px]:hidden">{slip(item)}</span>}
+          </span>
         </div>
         <div
           className="relative flex-1"
