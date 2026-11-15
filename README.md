@@ -3,7 +3,7 @@
 Sistem manajemen pasca produksi berbasis web: satu sumber data per project untuk
 teknis, tim, jadwal, aset, dan deliverables.
 
-Dokumen: [PRD](docs/PRD.md) · [TRD](docs/TRD.md) · [Panduan deploy](docs/DEPLOY.md)
+Dokumen: [PRD](docs/PRD.md) · [TRD](docs/TRD.md) · [Panduan deploy](docs/DEPLOY.md) · [Panduan Tool EDL](docs/TOOL-EDL.md)
 
 ## Status
 
