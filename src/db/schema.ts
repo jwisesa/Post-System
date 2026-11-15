@@ -5,6 +5,7 @@ import {
   jsonb,
   pgSchema,
   primaryKey,
+  unique,
   text,
   timestamp,
   uuid,
@@ -304,6 +305,41 @@ export const deliverables = ps.table("deliverables", {
   createdAt: createdAt(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------- shot tracker ----------
+
+export type ShotStatus = "not_started" | "pulled" | "in_progress" | "review" | "approved";
+
+/** VFX shots saved from the EDL tool. Re-saving a shot name updates its editorial fields and keeps the tracking ones. */
+export const shots = ps.table(
+  "shots",
+  {
+    id: id(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    reel: text("reel").notNull().default(""),
+    clipName: text("clip_name").notNull().default(""),
+    sourceFile: text("source_file").notNull().default(""),
+    srcIn: text("src_in").notNull(),
+    srcOut: text("src_out").notNull(),
+    recIn: text("rec_in").notNull(),
+    recOut: text("rec_out").notNull(),
+    durationFrames: integer("duration_frames").notNull(),
+    fps: text("fps").notNull(),
+    handles: integer("handles").notNull().default(0),
+    scope: text("scope").notNull().default(""),
+    retime: text("retime").notNull().default(""),
+    status: text("status").$type<ShotStatus>().notNull().default("not_started"),
+    vendor: text("vendor").notNull().default(""),
+    version: text("version").notNull().default(""),
+    notes: text("notes").notNull().default(""),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique().on(t.projectId, t.name)],
+);
 
 // ---------- calendar feed ----------
 

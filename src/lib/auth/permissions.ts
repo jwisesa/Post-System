@@ -13,9 +13,11 @@ export type Action =
   | "asset.approve" // version approval status
   | "comment.add"
   | "deliverable.edit" // create, define, delete
-  | "deliverable.status";
+  | "deliverable.status"
+  | "shot.edit" // save from the EDL tool, delete
+  | "shot.status"; // status, vendor, version, notes
 
-const ASSISTANT: ReadonlySet<Action> = new Set(["project.view", "team.edit", "schedule.status", "asset.edit", "comment.add", "deliverable.status"]);
+const ASSISTANT: ReadonlySet<Action> = new Set(["project.view", "team.edit", "schedule.status", "asset.edit", "comment.add", "deliverable.status", "shot.status"]);
 
 /** role = null means "not a member of this project". */
 export function can(role: Role | null, action: Action): boolean {

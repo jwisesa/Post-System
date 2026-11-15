@@ -36,6 +36,13 @@
       "when": 1794551608836,
       "tag": "0004_curvy_scream",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794650540568,
+      "tag": "0005_spooky_the_watchers",
+      "breakpoints": true
     }
   ]
 }

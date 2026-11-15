@@ -48,7 +48,11 @@ Modul 1 (fondasi), 2 (timeline), 3 (link, versi, komentar), 4 (deliverables), da
   kalender dan widget kalender perangkat; bisa di-install ke home screen (PWA)
 - **Laporan mingguan** yang ramah cetak, plus ringkasan teks untuk ditempel ke chat
 
-Berikutnya: tool XML/EDL (6).
+- **Tool EDL** (awal modul 6): import EDL CMX3600, FCP7 XML, dan FCPXML di browser, pilih shot (mis. hanya yang bermarker),
+  rename dengan pola, export Pull List CSV (dengan handles), VFX Breakdown CSV, dan EDL baru;
+  shot tracker tersimpan (status, vendor, versi per shot) yang diperbarui saat cut baru di-import
+
+Berikutnya: sisa tool XML/EDL (6): export XML.
 
 ## Menjalankan
 
