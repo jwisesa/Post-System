@@ -19,6 +19,7 @@ export const SPEC_FIELDS = [
   { key: "version", label: "Versi", options: ["Texted", "Textless", "Semi-textless", "Theatrical", "Censored / LSF", "International", "Director's Cut"] },
   { key: "resolution", label: "Resolusi", options: ["4096x1716 (4K Scope)", "3996x2160 (4K Flat)", "4096x2160 (4K DCI)", "3840x2160 (UHD)", "2048x858 (2K Scope)", "1998x1080 (2K Flat)", "1920x1080 (HD)", "1080x1920", "1080x1080", "1080x1350"] },
   { key: "aspectRatio", label: "Aspect ratio", options: ["2.39:1", "1.85:1", "16:9", "9:16", "1:1", "4:5"] },
+  { key: "frameRate", label: "Frame rate", options: ["23.976", "24", "25", "29.97", "30", "50", "59.94", "60"] },
   { key: "dynamicRange", label: "Color / range", options: ["SDR Rec.709", "DCI-P3", "P3-D65", "HDR10", "Dolby Vision"] },
   { key: "format", label: "Format", options: ["DPX sequence 16-bit", "DPX sequence 10-bit", "IMF (App 2E)", "ProRes 4444 XQ", "ProRes 4444", "ProRes 422 HQ", "MP4 H.264", "MP4 H.265", "WAV 24-bit 48 kHz", "BWAV ADM", "SRT", "IMSC 1.1 / TTML", "PDF", "XLSX"] },
   { key: "audio", label: "Audio", options: ["7.1", "5.1", "Stereo", "Dolby Atmos", "DME", "Stems", "M&E 5.1", "M&E Stereo", "Tanpa audio"] },
@@ -54,7 +55,7 @@ export type Preset = {
   note: string; rules: string[]; items: PresetItem[];
 };
 
-const master = { resolution: "@masterResolution", aspectRatio: "@aspectRatio" } as const;
+const master = { resolution: "@masterResolution", aspectRatio: "@aspectRatio", frameRate: "@frameRate" } as const;
 
 export const PRESETS: Preset[] = [
   {

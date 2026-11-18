@@ -10,6 +10,7 @@ import { can } from "@/lib/auth/permissions";
 import { getOrCreateCalendarToken } from "@/lib/calendar/service";
 import { loadProject } from "@/lib/project-context";
 import { today as todayWib } from "@/lib/schedule/dates";
+import { getChecks } from "@/lib/checks/service";
 import { getToday } from "@/lib/today/service";
 import { listActivity } from "@/lib/services";
 import { deleteProjectAction, updateProjectAction } from "../../actions";
@@ -19,11 +20,12 @@ export default async function Overview({ params, searchParams }: { params: Promi
   const { error } = await searchParams;
   const { db, user, project, role } = await loadProject(slug);
   const today = todayWib();
-  const [data, recent, calendarToken, h] = await Promise.all([
+  const [data, recent, calendarToken, h, findings] = await Promise.all([
     getToday(db, project.id, today, { includeInternal: true, feedback: true }),
     listActivity(db, project.id, 6),
     getOrCreateCalendarToken(db, user.id, project.id),
     headers(),
+    getChecks(db, project.id, slug, today),
   ]);
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
 
@@ -66,6 +68,19 @@ export default async function Overview({ params, searchParams }: { params: Promi
           </>
         }
       />
+      {findings.length > 0 && (
+        <section>
+          <ListHead title="Pemeriksaan" count={findings.length} href={`${base}/checks`} link="Semua temuan" />
+          <p className="text-[13px] text-ink-2">
+            {(["error", "warn", "info"] as const).map((s) => [findings.filter((f) => f.severity === s).length, { error: "error", warn: "peringatan", info: "info" }[s]] as const).filter(([n]) => n).map(([n, l]) => `${n} ${l}`).join(" · ")}
+          </p>
+          <ul>
+            {findings.slice(0, 3).map((f, n) => (
+              <li key={n} className="due-row"><span className="due-name">{f.title} <span className="due-ctx">· {f.detail}</span></span><Link href={f.fix.href} className="btn-secondary !min-h-7">Perbaiki</Link></li>
+            ))}
+          </ul>
+        </section>
+      )}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-10 pt-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <section className="card min-w-0">
           <div className="list-head"><h2>Perubahan terbaru</h2><Link href={`${base}/activity`} className="text-[13px] font-semibold underline underline-offset-2">Lihat semua</Link></div>
