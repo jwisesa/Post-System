@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { attachments, comments, feedbackPoints, dependencies, projects, scheduleItems, scheduleVersions, teamContacts, teamGroups, tracks, users, type ItemStatus, type ScheduleSettings, type ScheduleSnapshot } from "@/db/schema";
+import { attachments, comments, feedbackPoints, dependencies, projects, scheduleItems, signoffs, scheduleVersions, teamContacts, teamGroups, tracks, users, type ItemStatus, type ScheduleSettings, type ScheduleSnapshot } from "@/db/schema";
 import { InputError, record, requireRole, type Tx } from "../services";
 import { addDays, diffDays, fmtRange, isDate } from "./dates";
 import { computeShift, wouldCycle, type Dep } from "./shift";
@@ -61,6 +61,7 @@ async function dropItemExtras(tx: Tx, itemIds: string[]) {
   await tx.delete(attachments).where(and(eq(attachments.targetType, "schedule_item"), inArray(attachments.targetId, itemIds)));
   await tx.delete(comments).where(and(eq(comments.targetType, "schedule_item"), inArray(comments.targetId, itemIds)));
   await tx.delete(feedbackPoints).where(inArray(feedbackPoints.itemId, itemIds));
+  await tx.delete(signoffs).where(inArray(signoffs.itemId, itemIds));
   // Points that were cross-checked at a vanished milestone go back to open.
   await tx.update(feedbackPoints).set({ status: "open", checkedItemId: null, checkNote: "", checkedBy: null, checkedAt: null }).where(inArray(feedbackPoints.checkedItemId, itemIds));
 }

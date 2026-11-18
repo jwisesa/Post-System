@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/db/client";
 import type { Role } from "@/lib/auth/permissions";
 import { requireUser, signIn, signOut } from "@/lib/auth/session";
+import * as rv from "@/lib/review/service";
 import * as s from "@/lib/services";
 import { ctx, finish, flag, isExpected, str } from "./action-helpers";
 import { PLATFORMS, PRODUCTION_TYPES, TECH_FIELDS } from "@/lib/tech-spec/schema";
@@ -103,6 +104,21 @@ export async function createShareLinkAction(f: FormData) {
 export async function revokeShareLinkAction(f: FormData) {
   const { db, user, project } = await ctx(f);
   await finish(`/admin/p/${project.slug}/access`, () => s.revokeShareLink(db, user.id, project.id, str(f, "linkId")));
+}
+
+export async function createReviewerLinkAction(f: FormData) {
+  const { db, user, project } = await ctx(f);
+  await finish(`/admin/p/${project.slug}/access`, () => rv.createReviewerLink(db, user.id, project.id, { name: str(f, "name"), role: str(f, "role"), itemIds: f.getAll("itemIds").map(String) }));
+}
+
+export async function updateReviewerLinkItemsAction(f: FormData) {
+  const { db, user, project } = await ctx(f);
+  await finish(`/admin/p/${project.slug}/access`, () => rv.updateReviewerLinkItems(db, user.id, project.id, str(f, "linkId"), f.getAll("itemIds").map(String)));
+}
+
+export async function revokeReviewerLinkAction(f: FormData) {
+  const { db, user, project } = await ctx(f);
+  await finish(`/admin/p/${project.slug}/access`, () => rv.revokeReviewerLink(db, user.id, project.id, str(f, "linkId")));
 }
 
 export async function deleteProjectAction(f: FormData) {

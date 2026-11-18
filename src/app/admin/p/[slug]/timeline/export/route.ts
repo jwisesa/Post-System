@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { toCsv } from "@/lib/schedule/csv";
 import { today } from "@/lib/schedule/dates";
 import { listPoints } from "@/lib/feedback/service";
+import { listSignoffs } from "@/lib/review/service";
 import { getSchedule } from "@/lib/schedule/service";
 import { statusLabel } from "@/lib/schedule/templates";
 import { calendarDays, calOf, workDays } from "@/lib/schedule/workdays";
@@ -36,11 +37,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
     return csv(rows, "feedback");
   }
 
-  const { tracks, deps, settings } = await getSchedule(db, row.project.id, { includeInternal: true });
+  const [{ tracks, deps, settings }, signs] = await Promise.all([getSchedule(db, row.project.id, { includeInternal: true }), listSignoffs(db, row.project.id)]);
   const cal = calOf(settings);
   const all = tracks.flatMap((t) => t.items);
   const byId = new Map(all.map((i) => [i.id, i]));
-  const rows: string[][] = [["Track", "Tipe", "Fase", "Nama", "Mulai", "Selesai", "Hari kerja", "Jam kerja", "Hari kalender", "Status", "PIC", "Hard deadline", "Menunggu", "Catatan"]];
+  const rows: string[][] = [["Track", "Tipe", "Fase", "Nama", "Mulai", "Selesai", "Hari kerja", "Jam kerja", "Hari kalender", "Status", "PIC", "Hard deadline", "Menunggu", "Catatan", "Disetujui"]];
   for (const t of tracks) {
     for (const i of t.items) {
       const parent = i.parentId ? byId.get(i.parentId) : undefined;
@@ -49,6 +50,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
         t.name, i.parentId ? "Milestone" : "Fase", parent?.name ?? i.name, i.name, i.startDate, i.dueDate,
         String(workDays(cal, i.startDate, i.dueDate)), i.workHours ? String(i.workHours) : "", String(calendarDays(i.startDate, i.dueDate)),
         statusLabel(i.status), i.picName ?? "", i.hardDeadline ? "Ya" : "", waits.join("; "), i.notes,
+        signs.filter((x) => x.itemId === i.id && !x.revokedAt).map((x) => `${x.signerRole ? `${x.signerRole} ` : ""}${x.signerName} ${x.createdAt.slice(0, 10)}`).join("; "),
       ]);
     }
   }

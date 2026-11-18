@@ -15,6 +15,7 @@ import { useToast } from "../ui/toast";
 import CalendarView from "./CalendarView";
 import { DaysPanel } from "./DaysPanel";
 import type { FeedbackPoint } from "@/lib/feedback/service";
+import type { Signoff } from "@/lib/review/service";
 import { AgendaList, ItemPanel, ManagePanel, NewItemPanel } from "./ItemPanel";
 import { durationLabel, phaseIndex, isLate, progressOf, signed, slip, type Item, type Mode } from "./shared";
 import VerticalGantt from "./VerticalGantt";
@@ -46,12 +47,12 @@ type Optimistic =
 
 type Props = {
   schedule: Schedule; mode: Mode; slug: string; today: string; contacts: { id: string; label: string }[]; groups?: { id: string; name: string }[]; templates?: TemplateRow[];
-  attachments: Attachment[]; comments?: Comment[]; feedback?: FeedbackPoint[]; me?: { id: string; role: string }; versions?: VersionRow[];
+  attachments: Attachment[]; comments?: Comment[]; feedback?: FeedbackPoint[]; signoffs?: Signoff[]; me?: { id: string; role: string }; versions?: VersionRow[];
 };
 
 const typing = (e: KeyboardEvent) => e.target instanceof HTMLElement && (e.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName));
 
-export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = [], templates = [], attachments, comments = [], feedback = [], me, versions = [] }: Props) {
+export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = [], templates = [], attachments, comments = [], feedback = [], signoffs = [], me, versions = [] }: Props) {
   const toast = useToast();
   const editable = mode === "edit";
   const [, startTransition] = useTransition();
@@ -495,6 +496,8 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
   const linkCount = new Map<string, number>();
   for (const a of attachments) if (a.targetType === "schedule_item") linkCount.set(a.targetId, (linkCount.get(a.targetId) ?? 0) + 1);
   const openFeedback = new Map<string, number>();
+  const signedNames = new Map<string, string>();
+  for (const x of signoffs) if (!x.revokedAt) signedNames.set(x.itemId, [signedNames.get(x.itemId), x.signerRole || x.signerName].filter(Boolean).join(", "));
   for (const p of feedback) if (p.status === "open") openFeedback.set(p.itemId, (openFeedback.get(p.itemId) ?? 0) + 1);
   const panelItem = panel?.kind === "item" ? byId.get(panel.id) : undefined;
   const panelTrack = panelItem ? tracks.find((t) => t.id === panelItem.trackId) : undefined;
@@ -748,7 +751,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
           <ItemPanel item={panelItem} track={panelTrack} mode={mode} slug={slug} today={today} allItems={allItems} deps={deps} contacts={contacts} groups={groups} onLink={addLink} onUnlink={removeLink}
             cal={cal} cascade={cascade} ph={ph(panelItem.id)} onAddMilestone={() => setPanel({ kind: "new", trackId: panelItem.trackId, parentId: panelItem.id, date: panelItem.dueDate })}
             attachments={attachments.filter((a) => a.targetType === "schedule_item" && a.targetId === panelItem.id)}
-            comments={comments.filter((c) => c.targetType === "schedule_item" && c.targetId === panelItem.id)} feedback={feedback} me={me} />
+            comments={comments.filter((c) => c.targetType === "schedule_item" && c.targetId === panelItem.id)} feedback={feedback} signoffs={signoffs} me={me} />
         </Drawer>
       )}
       {panel?.kind === "new" && (
@@ -783,6 +786,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
   function marker(item: Item) {
     const p = at(item);
     const late = isLate(item, today);
+    const signedBy = signedNames.get(item.id);
     return (
       <div
         key={item.id}
@@ -791,11 +795,12 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
         tabIndex={0}
         aria-label={`${item.name}, ${fmtDate(p.start)}, ${statusLabel(item.status)}`}
         aria-pressed={sel.has(item.id)}
-        title={`${item.name} · ${fmtDate(p.start)} · ${statusLabel(item.status)}`}
+        title={`${item.name} · ${fmtDate(p.start)} · ${statusLabel(item.status)}${signedBy ? ` · Disetujui oleh ${signedBy}` : ""}`}
         data-ph={ph(item.id)}
         data-status={item.status}
         data-selected={sel.has(item.id) || undefined}
         data-late={late || undefined}
+        data-signed={signedBy ? "" : undefined}
         className={`milestone ${editable ? "cursor-grab touch-pan-y active:cursor-grabbing" : "cursor-pointer"}`}
         style={{ left: x(p.start) + px / 2 - 6 }}
         onKeyDown={(e) => keys(e, item)}

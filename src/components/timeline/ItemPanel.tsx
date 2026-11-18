@@ -14,6 +14,8 @@ import { saveTemplateAction } from "@/app/admin/template-actions";
 import { ConfirmButton } from "../ui/controls";
 import { useToast } from "../ui/toast";
 import { FeedbackPanel } from "./FeedbackPanel";
+import { SignoffPanel } from "./SignoffPanel";
+import type { Signoff } from "@/lib/review/service";
 import { MilestoneDate, PhaseDates } from "./DateFields";
 import { Icon } from "../ui/icons";
 import { durationLabel, isLate, slip, type Item, type Mode, type Track } from "./shared";
@@ -63,11 +65,11 @@ type ItemProps = {
   item: Item; track: Track; mode: Mode; slug: string; today: string;
   allItems: (Item & { trackName: string })[]; deps: Dep[]; contacts: { id: string; label: string }[]; groups: { id: string; name: string }[];
   onLink: (itemId: string, dependsOnId: string) => void; onUnlink: (itemId: string, dependsOnId: string) => void;
-  attachments: Attachment[]; comments: Comment[]; feedback: FeedbackPoint[]; me?: { id: string; role: string };
+  attachments: Attachment[]; comments: Comment[]; feedback: FeedbackPoint[]; signoffs?: Signoff[]; me?: { id: string; role: string };
   cal: Cal; cascade: boolean; ph: number; onAddMilestone: () => void;
 };
 
-export function ItemPanel({ item, track, mode, slug, today, allItems, deps, contacts, groups, onLink, onUnlink, attachments, comments, feedback, me, cal, cascade, ph, onAddMilestone }: ItemProps) {
+export function ItemPanel({ item, track, mode, slug, today, allItems, deps, contacts, groups, onLink, onUnlink, attachments, comments, feedback, signoffs = [], me, cal, cascade, ph, onAddMilestone }: ItemProps) {
   const stones = allItems.filter((o) => o.parentId === item.id);
   const nameOf = (id: string) => { const i = allItems.find((x) => x.id === id); return i ? `${i.trackName} / ${i.name}` : "—"; };
   const preds = deps.filter((d) => d.itemId === item.id);
@@ -118,6 +120,8 @@ export function ItemPanel({ item, track, mode, slug, today, allItems, deps, cont
       </section>
 
       {me && <FeedbackPanel item={item} allItems={allItems} points={feedback} mode={mode} slug={slug} />}
+
+      {item.parentId && me && <SignoffPanel item={item} signoffs={signoffs} mode={mode} slug={slug} />}
 
       {mode !== "view" && me && (
         <section className="space-y-2 hairline pt-4">

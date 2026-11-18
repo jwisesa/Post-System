@@ -1,5 +1,8 @@
 /** Pure helpers: pasted feedback text to points, and the cross-check list for a milestone. */
 
+/** Suggested names for "dari siapa" and reviewer roles. */
+export const WHO = ["Director", "Producer", "Executive Producer", "Client", "DOP", "Editor", "Sound", "VFX", "Colorist"];
+
 export type ParsedPoint = { ref: string; body: string };
 
 const BULLET = /^\s*(?:[-*•–]\s+|\d+[.)]\s+)/;

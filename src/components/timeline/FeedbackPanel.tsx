@@ -2,7 +2,7 @@
 
 import { useOptimistic, useState, useTransition } from "react";
 import { addFeedback, checkFeedback, deleteFeedback, updateFeedback } from "@/app/admin/feedback-actions";
-import { carryOver } from "@/lib/feedback/parse";
+import { carryOver, WHO } from "@/lib/feedback/parse";
 import type { FeedbackPoint } from "@/lib/feedback/service";
 import { fmtDate } from "@/lib/schedule/dates";
 import { FeedbackTransfer } from "./FeedbackTransfer";
@@ -10,7 +10,6 @@ import { Icon } from "../ui/icons";
 import { useToast } from "../ui/toast";
 import type { Item, Mode } from "./shared";
 
-const WHO = ["Director", "Producer", "Executive Producer", "Client", "DOP", "Editor", "Sound", "VFX", "Colorist"];
 const STATES = [["open", "Belum"], ["fixed", "Sudah"], ["dropped", "Tidak dikerjakan"]] as const;
 const LABEL = { open: "Belum dicek", fixed: "Sudah", dropped: "Tidak dikerjakan" } as const;
 const short = (d: string) => fmtDate(d).replace(/ \d{4}$/, "");

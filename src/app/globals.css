@@ -919,3 +919,7 @@ details.tl-details > summary::-webkit-details-marker { display: none; }
 
 /* ---------- phase B: feedback transfer ---------- */
 .xfer-preview { max-height: 16rem; overflow: auto; }
+
+/* ---------- phase C: reviewers ---------- */
+.milestone[data-signed] { background: var(--ok); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ok); }
+.milestone[data-signed][data-late] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ok), 0 0 0 6px var(--danger); }

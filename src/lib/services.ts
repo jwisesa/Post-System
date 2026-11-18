@@ -23,7 +23,7 @@ export class InputError extends Error {}
 
 export type Change = {
   projectId: string;
-  userId: string;
+  userId: string | null;
   entity: string;
   entityId: string;
   action: "create" | "update" | "delete";
@@ -346,7 +346,7 @@ export async function getViewerData(db: Db, token: string) {
     attachments,
     deliverables,
     // Follow-up is an internal working list (with PIC contact details); viewers never get it.
-    today: { ...(await getToday(db, row.project.id, today(), { includeInternal: false })), followUp: [], feedback: [] },
+    today: { ...(await getToday(db, row.project.id, today(), { includeInternal: false })), followUp: [], feedback: [], signoffs: [] },
   };
 }
 

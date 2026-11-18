@@ -77,6 +77,21 @@ export const shareLinks = ps.table("share_links", {
   createdAt: createdAt(),
 });
 
+/** Per-person review links. Separate from share_links on purpose: a view-only token must never open reviewer data and vice versa. */
+export const reviewerLinks = ps.table("reviewer_links", {
+  id: id(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  name: text("name").notNull(),
+  role: text("role").notNull().default(""),
+  itemIds: jsonb("item_ids").$type<string[]>().notNull().default([]),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: createdAt(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+
 export const techSpecs = ps.table("tech_specs", {
   projectId: uuid("project_id")
     .primaryKey()
@@ -285,6 +300,7 @@ export const feedbackPoints = ps.table("feedback_points", {
   body: text("body").notNull(),
   ref: text("ref").notNull().default(""),
   fromWho: text("from_who").notNull().default(""),
+  reviewerLinkId: uuid("reviewer_link_id").references(() => reviewerLinks.id, { onDelete: "set null" }),
   status: text("status").$type<FeedbackStatus>().notNull().default("open"),
   checkedItemId: uuid("checked_item_id"),
   checkNote: text("check_note").notNull().default(""),
@@ -294,6 +310,30 @@ export const feedbackPoints = ps.table("feedback_points", {
   checkedBy: uuid("checked_by").references(() => users.id),
   checkedAt: timestamp("checked_at", { withTimezone: true }),
 });
+
+/** A sign-off on a milestone. History is kept: revoking sets revokedAt. Not part of version snapshots. */
+export const signoffs = ps.table(
+  "signoffs",
+  {
+    id: id(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** No foreign key, like feedback: removed with the item. */
+    itemId: uuid("item_id").notNull(),
+    signerName: text("signer_name").notNull(),
+    signerRole: text("signer_role").notNull().default(""),
+    reviewerLinkId: uuid("reviewer_link_id").references(() => reviewerLinks.id, { onDelete: "set null" }),
+    recordedBy: uuid("recorded_by").references(() => users.id), // null = recorded through a link
+    note: text("note").notNull().default(""),
+    evidenceUrl: text("evidence_url").notNull().default(""),
+    createdAt: createdAt(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by").references(() => users.id),
+    revokeReason: text("revoke_reason").notNull().default(""),
+  },
+  (t) => [index("signoffs_project_item_idx").on(t.projectId, t.itemId)],
+);
 
 // ---------- deliverables ----------
 

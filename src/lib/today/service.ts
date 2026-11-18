@@ -5,6 +5,7 @@ import { isDone, deliverableStatus } from "../deliverables/catalog";
 import { listDeliverables } from "../deliverables/service";
 import { phaseIndex } from "@/components/timeline/shared";
 import { addDays, diffDays } from "../schedule/dates";
+import { listSignoffs } from "../review/service";
 import { listPoints } from "../feedback/service";
 import { getSchedule } from "../schedule/service";
 import { statusLabel } from "../schedule/templates";
@@ -114,9 +115,20 @@ export async function getToday(db: Db, projectId: string, today: string, opts: {
     .map(({ i, open }) => ({ id: i.id, name: i.name, track: i.trackName, dueDate: i.dueDate, count: open.length, points: open.slice(0, 5).map((p) => ({ id: p.id, ref: p.ref, body: p.body })) }))
     .sort(byDue);
 
+  // Admin only: viewers get an empty list. Last 7 days, active ones.
+  const signoffs = opts.includeInternal
+    ? (await listSignoffs(db, projectId))
+        .filter((s) => !s.revokedAt && wibDate.format(new Date(s.createdAt)) >= addDays(today, -7))
+        .flatMap((s) => {
+          const it = items.find((i) => i.id === s.itemId);
+          return it ? [{ id: s.id, name: it.name, track: it.trackName, signer: s.signerRole || s.signerName, at: s.createdAt }] : [];
+        })
+    : [];
+
   return {
     week,
     feedback,
+    signoffs,
     dueToday: entries.filter((e) => e.dueDate === today),
     late: entries.filter((e) => e.dueDate < today),
     next7: entries.filter((e) => e.dueDate > today && e.dueDate <= horizon),

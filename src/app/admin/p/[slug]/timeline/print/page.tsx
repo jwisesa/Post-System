@@ -3,6 +3,7 @@ import { PrintActions } from "@/components/timeline/PrintActions";
 import { phaseIndex } from "@/components/timeline/shared";
 import { loadProject } from "@/lib/project-context";
 import { addDays, diffDays, fmtDate, today as todayWib } from "@/lib/schedule/dates";
+import { listSignoffs } from "@/lib/review/service";
 import { getSchedule } from "@/lib/schedule/service";
 import { statusLabel } from "@/lib/schedule/templates";
 import { calOf, workDays } from "@/lib/schedule/workdays";
@@ -61,7 +62,8 @@ export default async function PrintTimeline({ params, searchParams }: { params: 
   const { slug } = await params;
   const { view } = await searchParams;
   const { db, project } = await loadProject(slug);
-  const { tracks, settings } = await getSchedule(db, project.id, { includeInternal: true });
+  const [{ tracks, settings }, signs] = await Promise.all([getSchedule(db, project.id, { includeInternal: true }), listSignoffs(db, project.id)]);
+  const signedBy = (id: string) => signs.filter((x) => x.itemId === id && !x.revokedAt).map((x) => `${x.signerRole || x.signerName} ${fmtDate(x.createdAt.slice(0, 10))}`).join("; ");
   const cal = calOf(settings);
   const calendar = view === "calendar";
   const all = tracks.flatMap((t) => t.items);
@@ -100,6 +102,7 @@ export default async function PrintTimeline({ params, searchParams }: { params: 
                 <tr key={i.id}>
                   <td className={`py-1 ${i.parentId ? "pl-4" : "font-medium"}`}>
                     {i.parentId && <span aria-hidden className="mr-2 inline-block size-1.5 rotate-45 bg-current align-middle" />}{i.name}
+                    {i.parentId && signedBy(i.id) && <span className="muted"> · Disetujui: {signedBy(i.id)}</span>}
                   </td>
                   <td className="py-1">{fmtDate(i.startDate)}</td>
                   <td className="py-1">{fmtDate(i.dueDate)}</td>

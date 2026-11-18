@@ -102,9 +102,9 @@ export function CopyButton({ text, label = "Salin", className = "btn-secondary" 
 }
 
 /** Submit button that asks first. Works inside any <form action={...}>. */
-export function ConfirmButton({ message, className = "btn-danger", children, ...rest }: { message: string } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+export function ConfirmButton({ message, className = "btn-danger", children, onClick, ...rest }: { message: string } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button {...rest} className={className} onClick={(e) => { if (!window.confirm(message)) e.preventDefault(); }}>
+    <button {...rest} className={className} onClick={(e) => { if (!window.confirm(message)) { e.preventDefault(); return; } onClick?.(e); }}>
       {children}
     </button>
   );

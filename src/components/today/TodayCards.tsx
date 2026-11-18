@@ -128,6 +128,25 @@ function FeedbackList({ groups, base }: { groups: TodayData["feedback"]; base?: 
   );
 }
 
+/** Admin only: sign-offs of the last 7 days, one line each. */
+function SignoffList({ rows }: { rows: TodayData["signoffs"] }) {
+  return (
+    <section>
+      <ListHead title="Persetujuan terbaru" count={rows.length} />
+      <ul>
+        {rows.slice(0, 5).map((s) => (
+          <li key={s.id} className="due-row">
+            <span className="due-date">{short(s.at.slice(0, 10))}</span>
+            <span className="due-name">{s.name} <span className="due-ctx">· {s.track}</span></span>
+            <span className="due-when">{s.signer}</span>
+          </li>
+        ))}
+      </ul>
+      {rows.length > 5 && <p className="mt-1 px-1 text-[13px] text-ink-2">+{rows.length - 5} lainnya</p>}
+    </section>
+  );
+}
+
 function Stat({ base, tone, empty, children }: { base?: string; tone?: string; empty?: boolean; children: React.ReactNode }) {
   const p = { className: "stat", "data-tone": tone, "data-empty": empty || undefined };
   return base === undefined ? <div {...p}>{children}</div> : <Link href={`${base}/timeline`} {...p}>{children}</Link>;
@@ -180,6 +199,7 @@ export function TodayBoard({ data, today, base, aside }: { data: TodayData; toda
         </section>
         <div className="min-w-0 space-y-6">
           {data.feedback.length > 0 && <FeedbackList groups={data.feedback} base={base} />}
+          {data.signoffs.length > 0 && <SignoffList rows={data.signoffs} />}
           {aside}
         </div>
       </div>
