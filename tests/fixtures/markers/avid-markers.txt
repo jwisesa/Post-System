@@ -1,0 +1,2 @@
+Budi	01:00:10:00	V1	red	Potong adegan 3	1
+Siti	01:01:05:12	V1	red	Ganti musik, "temp"	1

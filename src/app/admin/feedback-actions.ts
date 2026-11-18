@@ -2,6 +2,7 @@
 // Feedback points on milestones. Called from the item drawer; return results for toasts.
 
 import * as f from "@/lib/feedback/service";
+import type { Incoming } from "@/lib/feedback/import";
 import { runForClient as run } from "./action-helpers";
 
 export async function addFeedback(slug: string, itemId: string, text: string, fromWho: string) {
@@ -18,4 +19,8 @@ export async function deleteFeedback(slug: string, pointId: string) {
 
 export async function checkFeedback(slug: string, pointId: string, status: string, checkedItemId: string, note: string) {
   return run(slug, async (db, userId, projectId) => { await f.checkPoint(db, userId, projectId, pointId, { status, checkedItemId, note }); return {}; });
+}
+
+export async function importFeedback(slug: string, itemId: string, rows: Incoming[], source: string) {
+  return run(slug, async (db, userId, projectId) => f.importPoints(db, userId, projectId, itemId, rows, source));
 }

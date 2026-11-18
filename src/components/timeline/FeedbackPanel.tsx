@@ -5,6 +5,7 @@ import { addFeedback, checkFeedback, deleteFeedback, updateFeedback } from "@/ap
 import { carryOver } from "@/lib/feedback/parse";
 import type { FeedbackPoint } from "@/lib/feedback/service";
 import { fmtDate } from "@/lib/schedule/dates";
+import { FeedbackTransfer } from "./FeedbackTransfer";
 import { Icon } from "../ui/icons";
 import { useToast } from "../ui/toast";
 import type { Item, Mode } from "./shared";
@@ -84,6 +85,7 @@ export function FeedbackPanel({ item, allItems, points, mode, slug }: { item: It
   const [busy, start] = useTransition();
   const [text, setText] = useState("");
   const [who, setWho] = useState("");
+  const [xfer, setXfer] = useState<"import" | "export" | null>(null);
   const [shown, mark] = useOptimistic(points, (cur, c: Check) =>
     cur.map((p) => (p.id === c.id ? { ...p, status: c.status, checkedItemId: c.status === "open" ? null : c.at, checkNote: c.status === "open" ? "" : c.note } : p)),
   );
@@ -157,6 +159,13 @@ export function FeedbackPanel({ item, allItems, points, mode, slug }: { item: It
             ))}
           </ul>
         )}
+        {mode !== "view" && (
+          <div className="flex gap-2">
+            <button type="button" className="btn-secondary !min-h-6 text-xs" onClick={() => setXfer("import")}>Impor</button>
+            <button type="button" className="btn-secondary !min-h-6 text-xs" onClick={() => setXfer("export")}>Export marker</button>
+          </div>
+        )}
+        {xfer && <FeedbackTransfer key={xfer} kind={xfer} item={item} slug={slug} own={own} onClose={() => setXfer(null)} />}
         {mode !== "view" && (
           <div className="space-y-2">
             <label>

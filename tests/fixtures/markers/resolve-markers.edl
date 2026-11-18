@@ -1,0 +1,14 @@
+TITLE: Example Video
+FCM: NON-DROP FRAME
+
+001  001      V     C        00:00:00:00 00:00:00:01 00:00:00:00 00:00:00:01  
+ |C:ResolveColorBlue |M:Intro |D:1
+
+002  001      V     C        00:02:10:15 00:02:10:16 00:02:10:15 00:02:10:16  
+ |C:ResolveColorBlue |M:Stuff |D:1
+
+003  001      V     C        00:01:03:54 00:02:10:16 00:02:10:15 00:02:10:16  
+ |C:ResolveColorGreen |M:Don't export this! |D:1
+
+004  001      V     C        00:04:32:13 00:04:32:14 00:04:32:13 00:04:32:14  
+ |C:ResolveColorBlue |M:Outro |D:1

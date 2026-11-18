@@ -2,6 +2,7 @@ import { and, asc, eq, max } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import { feedbackPoints, scheduleItems, users, type FeedbackStatus } from "@/db/schema";
 import { InputError, record, requireRole, type Tx } from "../services";
+import { dedupeKey, markDuplicates, type Incoming } from "./import";
 import { parsePoints } from "./parse";
 
 export { carryOver, parsePoints } from "./parse";
@@ -54,6 +55,31 @@ export async function addPoints(db: Db, userId: string, projectId: string, itemI
       .returning({ id: feedbackPoints.id });
     await record(tx, { projectId, userId, entity: "feedback", entityId: rows[0].id, action: "create", summary: `Menambah ${rows.length} poin feedback di "${item.name}"`, after: { points: parsed.slice(0, 20), fromWho } });
     return rows.length;
+  });
+}
+
+/** Saves reviewed rows from a paste or file. Duplicates (against the milestone and within the batch) are dropped here again. */
+export async function importPoints(db: Db, userId: string, projectId: string, itemId: string, rows: Incoming[], source: string): Promise<{ added: number; skipped: number }> {
+  await requireRole(db, userId, projectId, "comment.add");
+  if (rows.length > 2000) throw new InputError("Maksimal 2000 poin per impor.");
+  const clean = rows
+    .map((r) => ({ ref: String(r.ref ?? "").trim().slice(0, 40), body: String(r.body ?? "").trim().slice(0, 1000), fromWho: String(r.fromWho ?? "").trim().slice(0, 60) }))
+    .filter((r) => r.body);
+  if (!clean.length) throw new InputError("Tidak ada poin untuk disimpan.");
+  const src = source.trim().slice(0, 60) || "file";
+  return db.transaction(async (tx) => {
+    const item = await loadItem(tx, projectId, itemId);
+    const existing = await tx.select({ ref: feedbackPoints.ref, body: feedbackPoints.body }).from(feedbackPoints).where(eq(feedbackPoints.itemId, itemId));
+    const fresh = markDuplicates(existing, clean).filter((r) => !r.dup);
+    const skipped = clean.length - fresh.length;
+    if (!fresh.length) return { added: 0, skipped };
+    const [{ top }] = await tx.select({ top: max(feedbackPoints.sortOrder) }).from(feedbackPoints).where(eq(feedbackPoints.itemId, itemId));
+    const ins = await tx
+      .insert(feedbackPoints)
+      .values(fresh.map((p, n) => ({ projectId, itemId, body: p.body, ref: p.ref, fromWho: p.fromWho, sortOrder: (top ?? 0) + n + 1, createdBy: userId })))
+      .returning({ id: feedbackPoints.id });
+    await record(tx, { projectId, userId, entity: "feedback", entityId: ins[0].id, action: "create", summary: `Mengimpor ${ins.length} poin dari ${src} di "${item.name}"`, after: { points: fresh.slice(0, 20).map((p) => dedupeKey(p)), skipped } });
+    return { added: ins.length, skipped };
   });
 }
 

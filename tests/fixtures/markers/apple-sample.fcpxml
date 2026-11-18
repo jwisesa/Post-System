@@ -1,0 +1,17 @@
+<fcpxml version="1.10">
+    <resources>
+        <format id="r1" name="FFVideoFormat1080p30"/>
+        <asset id="r2" start="0s" duration="10s" hasVideo="1" hasAudio="1" format="r1" audioSources="1" audioChannels="2" audioRate="48000">
+            <media-rep kind="original-media" src="file:///Volumes/Media/MyMovie1.mov"/>
+        </asset>
+    </resources>
+    <project name="MyProjectWithMarkers">
+        <sequence format="r1">
+            <spine>
+                <asset-clip name="MyMovie1" ref="r2" start="0s" duration="5s" audioRole="dialogue">
+                    <marker start="2s" duration="1000/30000s" value="My Marker 1"/>
+                </asset-clip>
+            </spine>
+        </sequence>
+    </project>
+</fcpxml>
