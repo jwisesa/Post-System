@@ -5,6 +5,7 @@ import { InputError, record, requireRole, type Tx } from "../services";
 import { addDays, diffDays, fmtRange, isDate } from "./dates";
 import { computeShift, wouldCycle, type Dep } from "./shift";
 import { PHASE_COLORS, STATUSES, TRACK_TEMPLATES } from "./templates";
+import { diffSnapshots } from "./compare";
 import { calOf, hoursPerDayOf, snap } from "./workdays";
 
 export type Item = typeof scheduleItems.$inferSelect;
@@ -361,6 +362,8 @@ export async function snapshot(tx: Tx | Db, projectId: string): Promise<Schedule
   return { tracks: t, items, deps };
 }
 
+export const getSnapshot = snapshot;
+
 export async function saveVersion(db: Db, userId: string, projectId: string, name: string) {
   await requireRole(db, userId, projectId, "schedule.edit");
   const label = name.trim();
@@ -434,4 +437,21 @@ export async function getProjectsOverview(db: Db, projectIds: string[], today: s
       return [id, { total: items.length, done: items.length - open.length, late: open.filter((i) => i.dueDate < today).length, next: next ? { name: next.name, dueDate: next.dueDate } : null }];
     }),
   );
+}
+
+/** Compares two saved versions, or one against the live schedule ("now"). */
+export async function getComparison(db: Db, projectId: string, a: string, b: string) {
+  const [saved, [project]] = await Promise.all([
+    db.select({ id: scheduleVersions.id, name: scheduleVersions.name, snapshot: scheduleVersions.snapshot }).from(scheduleVersions).where(eq(scheduleVersions.projectId, projectId)),
+    db.select({ settings: projects.scheduleSettings }).from(projects).where(eq(projects.id, projectId)),
+  ]);
+  const side = async (id: string) => {
+    if (id === "now") return { label: "Sekarang", snapshot: await snapshot(db, projectId) };
+    const v = saved.find((x) => x.id === id);
+    if (!v) throw new InputError("Versi tidak ditemukan.");
+    return { label: v.name, snapshot: v.snapshot };
+  };
+  const [sa, sb] = await Promise.all([side(a), side(b)]);
+  const cal = calOf(project?.settings);
+  return { a: sa, b: sb, rows: diffSnapshots(sa.snapshot, sb.snapshot, cal), cal };
 }

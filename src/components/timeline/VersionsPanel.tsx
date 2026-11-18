@@ -29,6 +29,7 @@ export function VersionsPanel({ slug, versions }: { slug: string; versions: Vers
                 <span className="block truncate font-medium">{v.name}</span>
                 <span className="muted block text-xs tabular-nums">{stamp.format(new Date(v.createdAt))}{v.by ? ` · ${v.by}` : ""} · {v.items} item</span>
               </span>
+              <a className="btn-ghost" href={`/admin/p/${slug}/timeline/compare?a=${v.id}&b=now`}>Bandingkan</a>
               <form action={restoreVersionAction}>
                 <input type="hidden" name="slug" value={slug} /><input type="hidden" name="versionId" value={v.id} />
                 <ConfirmButton className="btn-ghost" message={`Pulihkan timeline ke versi "${v.name}"? Keadaan sekarang disimpan dulu sebagai versi.`}>Pulihkan</ConfirmButton>
