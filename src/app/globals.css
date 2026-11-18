@@ -926,3 +926,5 @@ details.tl-details > summary::-webkit-details-marker { display: none; }
 
 /* ---------- phase D: compare ---------- */
 .compare select { min-width: 14rem; }
+
+/* ---------- phase F: drives ---------- */

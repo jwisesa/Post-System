@@ -1,0 +1,1 @@
+ALTER TABLE "post_system"."projects" ADD COLUMN "drive_tracker_project_id" uuid;

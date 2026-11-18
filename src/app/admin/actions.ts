@@ -6,6 +6,7 @@ import { getDb } from "@/db/client";
 import type { Role } from "@/lib/auth/permissions";
 import { requireUser, signIn, signOut } from "@/lib/auth/session";
 import * as rv from "@/lib/review/service";
+import { linkDriveTracker } from "@/lib/drive-tracker/service";
 import * as s from "@/lib/services";
 import { ctx, finish, flag, isExpected, str } from "./action-helpers";
 import { PLATFORMS, PRODUCTION_TYPES, TECH_FIELDS } from "@/lib/tech-spec/schema";
@@ -132,4 +133,10 @@ export async function deleteProjectAction(f: FormData) {
   }
   revalidatePath("/admin");
   redirect(error ? `/admin/p/${project.slug}?error=${encodeURIComponent(error)}` : "/admin");
+}
+
+export async function linkDriveTrackerAction(f: FormData) {
+  const { db, user, project } = await ctx(f);
+  const id = f.get("unlink") ? null : str(f, "dtProjectId");
+  await finish(`/admin/p/${project.slug}`, () => linkDriveTracker(db, user.id, project.id, id));
 }

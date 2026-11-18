@@ -11,6 +11,8 @@ import { getOrCreateCalendarToken } from "@/lib/calendar/service";
 import { loadProject } from "@/lib/project-context";
 import { today as todayWib } from "@/lib/schedule/dates";
 import { getChecks } from "@/lib/checks/service";
+import { DriveCard } from "@/components/today/DriveCard";
+import { getDriveSummary, listDriveTrackerProjects } from "@/lib/drive-tracker/service";
 import { getToday } from "@/lib/today/service";
 import { listActivity } from "@/lib/services";
 import { deleteProjectAction, updateProjectAction } from "../../actions";
@@ -20,12 +22,15 @@ export default async function Overview({ params, searchParams }: { params: Promi
   const { error } = await searchParams;
   const { db, user, project, role } = await loadProject(slug);
   const today = todayWib();
-  const [data, recent, calendarToken, h, findings] = await Promise.all([
+  const edit = can(role, "project.edit");
+  const [data, recent, calendarToken, h, findings, drives, dtOptions] = await Promise.all([
     getToday(db, project.id, today, { includeInternal: true, feedback: true }),
     listActivity(db, project.id, 6),
     getOrCreateCalendarToken(db, user.id, project.id),
     headers(),
     getChecks(db, project.id, slug, today),
+    getDriveSummary(db, project.driveTrackerProjectId),
+    edit ? listDriveTrackerProjects(db) : Promise.resolve([]),
   ]);
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
 
@@ -50,6 +55,7 @@ export default async function Overview({ params, searchParams }: { params: Promi
               {can(role, "schedule.status") ? <FollowUpList rows={followUp} slug={slug} /> : <p className="py-2 text-[13px] text-ink-2">Anda tidak punya akses untuk mencatat follow-up.</p>}
               {data.followUp.length > followUp.length && <p className="mt-1 px-1 text-[13px] text-ink-2">+{data.followUp.length - followUp.length} lainnya</p>}
             </section>
+            <DriveCard summary={drives} slug={slug} options={dtOptions} linkedId={project.driveTrackerProjectId} canEdit={edit} />
             <section>
               <ListHead title="Perlu dicek" count={data.review.length} href={`${base}/assets`} link="Semua aset" />
               {data.review.length === 0 ? <p className="py-2 text-[13px] text-ink-2">Tidak ada link yang menunggu review.</p> : (

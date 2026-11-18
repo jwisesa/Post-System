@@ -47,6 +47,7 @@ export const projects = ps.table("projects", {
   platforms: jsonb("platforms").$type<string[]>().notNull().default([]),
   unitCount: integer("unit_count"), // episodes or reels
   status: text("status").notNull().default("active"),
+  driveTrackerProjectId: uuid("drive_tracker_project_id"), // points into another app's table: no FK
   scheduleSettings: jsonb("schedule_settings").$type<ScheduleSettings>().notNull().default({}),
   createdAt: createdAt(),
 });

@@ -16,6 +16,7 @@ import CalendarView from "./CalendarView";
 import { DaysPanel } from "./DaysPanel";
 import type { FeedbackPoint } from "@/lib/feedback/service";
 import type { Signoff } from "@/lib/review/service";
+import type { DriveSummary } from "@/lib/drive-tracker/service";
 import { AgendaList, ItemPanel, ManagePanel, NewItemPanel } from "./ItemPanel";
 import { durationLabel, phaseIndex, isLate, progressOf, signed, slip, type Item, type Mode } from "./shared";
 import VerticalGantt from "./VerticalGantt";
@@ -47,12 +48,12 @@ type Optimistic =
 
 type Props = {
   schedule: Schedule; mode: Mode; slug: string; today: string; contacts: { id: string; label: string }[]; groups?: { id: string; name: string }[]; templates?: TemplateRow[];
-  attachments: Attachment[]; comments?: Comment[]; feedback?: FeedbackPoint[]; signoffs?: Signoff[]; me?: { id: string; role: string }; versions?: VersionRow[];
+  attachments: Attachment[]; comments?: Comment[]; feedback?: FeedbackPoint[]; signoffs?: Signoff[]; me?: { id: string; role: string }; versions?: VersionRow[]; drives?: DriveSummary;
 };
 
 const typing = (e: KeyboardEvent) => e.target instanceof HTMLElement && (e.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName));
 
-export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = [], templates = [], attachments, comments = [], feedback = [], signoffs = [], me, versions = [] }: Props) {
+export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = [], templates = [], attachments, comments = [], feedback = [], signoffs = [], me, versions = [], drives }: Props) {
   const toast = useToast();
   const editable = mode === "edit";
   const [, startTransition] = useTransition();
@@ -751,7 +752,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
           <ItemPanel item={panelItem} track={panelTrack} mode={mode} slug={slug} today={today} allItems={allItems} deps={deps} contacts={contacts} groups={groups} onLink={addLink} onUnlink={removeLink}
             cal={cal} cascade={cascade} ph={ph(panelItem.id)} onAddMilestone={() => setPanel({ kind: "new", trackId: panelItem.trackId, parentId: panelItem.id, date: panelItem.dueDate })}
             attachments={attachments.filter((a) => a.targetType === "schedule_item" && a.targetId === panelItem.id)}
-            comments={comments.filter((c) => c.targetType === "schedule_item" && c.targetId === panelItem.id)} feedback={feedback} signoffs={signoffs} me={me} />
+            comments={comments.filter((c) => c.targetType === "schedule_item" && c.targetId === panelItem.id)} feedback={feedback} signoffs={signoffs} me={me} drives={drives} />
         </Drawer>
       )}
       {panel?.kind === "new" && (

@@ -1,5 +1,6 @@
 "use client";
 
+import type { DriveSummary } from "@/lib/drive-tracker/service";
 import { useState } from "react";
 import { addItemAction, addTrackAction, deleteItemAction, deleteTrackAction, rebaselineAction, setStatusAction, updateItemAction } from "@/app/admin/schedule-actions";
 import { LINK_LABELS } from "@/lib/assets/catalog";
@@ -66,10 +67,10 @@ type ItemProps = {
   allItems: (Item & { trackName: string })[]; deps: Dep[]; contacts: { id: string; label: string }[]; groups: { id: string; name: string }[];
   onLink: (itemId: string, dependsOnId: string) => void; onUnlink: (itemId: string, dependsOnId: string) => void;
   attachments: Attachment[]; comments: Comment[]; feedback: FeedbackPoint[]; signoffs?: Signoff[]; me?: { id: string; role: string };
-  cal: Cal; cascade: boolean; ph: number; onAddMilestone: () => void;
+  cal: Cal; cascade: boolean; ph: number; onAddMilestone: () => void; drives?: DriveSummary;
 };
 
-export function ItemPanel({ item, track, mode, slug, today, allItems, deps, contacts, groups, onLink, onUnlink, attachments, comments, feedback, signoffs = [], me, cal, cascade, ph, onAddMilestone }: ItemProps) {
+export function ItemPanel({ item, track, mode, slug, today, allItems, deps, contacts, groups, onLink, onUnlink, attachments, comments, feedback, signoffs = [], me, cal, cascade, ph, onAddMilestone, drives }: ItemProps) {
   const stones = allItems.filter((o) => o.parentId === item.id);
   const nameOf = (id: string) => { const i = allItems.find((x) => x.id === id); return i ? `${i.trackName} / ${i.name}` : "—"; };
   const preds = deps.filter((d) => d.itemId === item.id);
@@ -94,6 +95,15 @@ export function ItemPanel({ item, track, mode, slug, today, allItems, deps, cont
         </div>
         {slip(item) && <div className="muted text-xs">Baseline: {fmtRange(item.baselineStart, item.baselineDue)}</div>}
       </div>
+
+      {!item.parentId && drives && /ingest|backup|data|dailies/i.test(item.name) && (
+        <section className="hairline pt-4 text-sm">
+          <h3>Drive (drive-tracker)</h3>
+          {drives.state === "ok" ? (
+            <p className="num text-ink-2">Keluar {drives.outstanding} · Tersedia {drives.byStatus.available} · Selesai {drives.byStatus.completed} · Arsip {drives.byStatus.archived} · Rusak {drives.byStatus.damaged} · Backup {drives.backupDrives}</p>
+          ) : <p className="muted">Belum terhubung{drives.state === "unavailable" ? `: ${drives.reason}` : "."}</p>}
+        </section>
+      )}
 
       {!item.parentId && (
         <section className="space-y-2 hairline pt-4 text-sm">
