@@ -69,10 +69,12 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
 
   const [view, setView] = useState<View>("gantt");
   const [px, setPx] = useState(PX_DEFAULT);
-  const [left, setLeft] = useState(LEFT_DEFAULT);
-  const labelW = left; // renderRow has its own `left` (the bar's x), so rows use this name
+  const [leftPref, setLeft] = useState(LEFT_DEFAULT);
   const [coarse, setCoarse] = useState(false);
   const [vw, setVw] = useState(1200);
+  // On a narrow board (phone in landscape, small tablet) the label column may take 40% at most, so the bars stay visible.
+  const left = Math.min(leftPref, Math.max(140, Math.round(vw * 0.4)));
+  const labelW = left; // renderRow has its own `left` (the bar's x), so rows use this name
   const [gripping, setGripping] = useState(false);
   const live = useRef({ px: PX_DEFAULT, left: LEFT_DEFAULT });
   const anchor = useRef<{ day: number; ax: number } | null>(null);
