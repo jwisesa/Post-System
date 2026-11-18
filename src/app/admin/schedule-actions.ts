@@ -32,7 +32,7 @@ export async function updateItemAction(f: FormData) {
   let target = timeline(project.slug);
   try {
     await sch.updateItemDetails(db, user.id, project.id, itemId, {
-      name: str(f, "name"), picContactId: str(f, "picContactId") || null, hardDeadline: flag(f, "hardDeadline"), internal: flag(f, "internal"), color: Number(str(f, "color")) || null, workHours: Number(str(f, "workHours")) || null,
+      name: str(f, "name"), picContactId: str(f, "picContactId") || null, picGroupId: str(f, "picGroupId") || null, hardDeadline: flag(f, "hardDeadline"), internal: flag(f, "internal"), color: Number(str(f, "color")) || null, workHours: Number(str(f, "workHours")) || null,
     });
     await sch.setItemStatus(db, user.id, project.id, itemId, { status: str(f, "status"), notes: str(f, "notes") });
     await sch.applyShift(db, user.id, project.id, itemId, { ...dates, cascade: flag(f, "cascade") }, str(f, "reason"));

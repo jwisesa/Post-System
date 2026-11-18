@@ -59,6 +59,13 @@ export function endAfter(cal: Cal, start: string, n: number) {
   return d;
 }
 
+/** The date on which a job of n working days must start to end on `due` (a working day): inverse of endAfter. */
+export function startBefore(cal: Cal, due: string, n: number) {
+  let d = due;
+  for (let left = n - 1; left > 0; ) { d = addDays(d, -1); if (!isOff(cal, d)) left--; }
+  return d;
+}
+
 /** Moves a range so it starts on/after rawStart, keeping its working-day length. */
 export function moveKeepingLength(cal: Cal, start: string, due: string, rawStart: string): [string, string] {
   const s = snap(cal, rawStart);

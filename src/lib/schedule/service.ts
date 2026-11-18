@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { attachments, comments, feedbackPoints, dependencies, projects, scheduleItems, scheduleVersions, teamContacts, tracks, users, type ItemStatus, type ScheduleSettings, type ScheduleSnapshot } from "@/db/schema";
+import { attachments, comments, feedbackPoints, dependencies, projects, scheduleItems, scheduleVersions, teamContacts, teamGroups, tracks, users, type ItemStatus, type ScheduleSettings, type ScheduleSnapshot } from "@/db/schema";
 import { InputError, record, requireRole, type Tx } from "../services";
 import { addDays, diffDays, fmtRange, isDate } from "./dates";
 import { computeShift, wouldCycle, type Dep } from "./shift";
@@ -11,10 +11,11 @@ export type Item = typeof scheduleItems.$inferSelect;
 
 /** Tracks with their items (phases by start date, milestones under their phase) plus dependencies. */
 export async function getSchedule(db: Db, projectId: string, opts: { includeInternal: boolean }) {
-  const [trackRows, itemRows, contacts, [project]] = await Promise.all([
+  const [trackRows, itemRows, contacts, groups, [project]] = await Promise.all([
     db.select().from(tracks).where(eq(tracks.projectId, projectId)).orderBy(asc(tracks.sortOrder), asc(tracks.createdAt)),
     db.select().from(scheduleItems).where(eq(scheduleItems.projectId, projectId)).orderBy(asc(scheduleItems.startDate), asc(scheduleItems.createdAt)),
     db.select({ id: teamContacts.id, name: teamContacts.name, internal: teamContacts.internal }).from(teamContacts).where(eq(teamContacts.projectId, projectId)),
+    db.select({ id: teamGroups.id, name: teamGroups.name }).from(teamGroups).where(eq(teamGroups.projectId, projectId)),
     db.select({ settings: projects.scheduleSettings }).from(projects).where(eq(projects.id, projectId)),
   ]);
   const hidden = new Set<string>();
@@ -28,7 +29,8 @@ export async function getSchedule(db: Db, projectId: string, opts: { includeInte
     ? (await db.select().from(dependencies).where(inArray(dependencies.itemId, [...ids]))).filter((d) => ids.has(d.dependsOnId))
     : [];
   const pic = new Map(contacts.filter((c) => opts.includeInternal || !c.internal).map((c) => [c.id, c.name]));
-  const withPic = (i: Item) => ({ ...i, picName: i.picContactId ? (pic.get(i.picContactId) ?? null) : null });
+  const groupName = new Map(groups.map((g) => [g.id, g.name]));
+  const withPic = (i: Item) => ({ ...i, picName: i.picContactId ? (pic.get(i.picContactId) ?? null) : null, picGroupName: i.picGroupId ? (groupName.get(i.picGroupId) ?? null) : null });
   return {
     tracks: trackRows.map((t) => {
       const own = items.filter((i) => i.trackId === t.id);
@@ -137,7 +139,7 @@ export async function addItem(db: Db, userId: string, projectId: string, input: 
   });
 }
 
-export type ItemDetails = { name: string; picContactId: string | null; hardDeadline: boolean; internal: boolean; color?: number | null; workHours?: number | null };
+export type ItemDetails = { name: string; picContactId: string | null; picGroupId?: string | null; hardDeadline: boolean; internal: boolean; color?: number | null; workHours?: number | null };
 
 /** Everything except dates and status. Returns whether anything changed. */
 export async function updateItemDetails(db: Db, userId: string, projectId: string, itemId: string, input: ItemDetails) {
@@ -150,8 +152,13 @@ export async function updateItemDetails(db: Db, userId: string, projectId: strin
       const [c] = await tx.select({ id: teamContacts.id }).from(teamContacts).where(and(eq(teamContacts.id, input.picContactId), eq(teamContacts.projectId, projectId)));
       if (!c) throw new InputError("PIC tidak ditemukan di direktori tim.");
     }
-    const before = { name: item.name, picContactId: item.picContactId, hardDeadline: item.hardDeadline, internal: item.internal, color: item.color, workHours: item.workHours };
-    const after = { name, picContactId: input.picContactId, hardDeadline: input.hardDeadline, internal: input.internal, color: input.color === undefined ? item.color : cleanColor(input.color), workHours: item.parentId || input.workHours === undefined ? item.workHours : cleanHours(input.workHours) };
+    if (input.picGroupId) {
+      const [g] = await tx.select({ id: teamGroups.id }).from(teamGroups).where(and(eq(teamGroups.id, input.picGroupId), eq(teamGroups.projectId, projectId)));
+      if (!g) throw new InputError("Departemen tidak ditemukan.");
+    }
+    const picGroupId = input.picGroupId === undefined ? item.picGroupId : input.picGroupId;
+    const before = { name: item.name, picContactId: item.picContactId, picGroupId: item.picGroupId, hardDeadline: item.hardDeadline, internal: item.internal, color: item.color, workHours: item.workHours };
+    const after = { name, picContactId: input.picContactId, picGroupId, hardDeadline: input.hardDeadline, internal: input.internal, color: input.color === undefined ? item.color : cleanColor(input.color), workHours: item.parentId || input.workHours === undefined ? item.workHours : cleanHours(input.workHours) };
     if (JSON.stringify(before) === JSON.stringify(after)) return false;
     await tx.update(scheduleItems).set({ ...after, updatedAt: new Date() }).where(eq(scheduleItems.id, itemId));
     await record(tx, { projectId, userId, entity: "schedule_item", entityId: itemId, action: "update", summary: `Mengubah detail "${name}"`, before, after });
@@ -342,12 +349,12 @@ export async function updateScheduleSettings(db: Db, userId: string, projectId: 
 
 // ---------- saved versions ----------
 
-async function snapshot(tx: Tx | Db, projectId: string): Promise<ScheduleSnapshot> {
+export async function snapshot(tx: Tx | Db, projectId: string): Promise<ScheduleSnapshot> {
   const t = await tx.select({ id: tracks.id, name: tracks.name, sortOrder: tracks.sortOrder }).from(tracks).where(eq(tracks.projectId, projectId)).orderBy(asc(tracks.sortOrder), asc(tracks.createdAt));
   const rows = await tx.select().from(scheduleItems).where(eq(scheduleItems.projectId, projectId));
   const items = rows.map((i) => ({
     id: i.id, trackId: i.trackId, parentId: i.parentId, name: i.name, startDate: i.startDate, dueDate: i.dueDate, baselineStart: i.baselineStart, baselineDue: i.baselineDue,
-    status: i.status, picContactId: i.picContactId, hardDeadline: i.hardDeadline, internal: i.internal, notes: i.notes, color: i.color, workHours: i.workHours,
+    status: i.status, picContactId: i.picContactId, picGroupId: i.picGroupId, hardDeadline: i.hardDeadline, internal: i.internal, notes: i.notes, color: i.color, workHours: i.workHours,
   }));
   const deps = items.length ? await tx.select().from(dependencies).where(inArray(dependencies.itemId, items.map((i) => i.id))) : [];
   return { tracks: t, items, deps };
@@ -405,8 +412,9 @@ export async function restoreVersion(db: Db, userId: string, projectId: string, 
     }
     // A PIC removed from the team since the version was saved cannot be pointed at any more.
     const contacts = new Set((await tx.select({ id: teamContacts.id }).from(teamContacts).where(eq(teamContacts.projectId, projectId))).map((c) => c.id));
+    const groups = new Set((await tx.select({ id: teamGroups.id }).from(teamGroups).where(eq(teamGroups.projectId, projectId))).map((g) => g.id));
     for (const i of snap.items) {
-      const row = { ...i, workHours: i.workHours ?? null, projectId, picContactId: i.picContactId && contacts.has(i.picContactId) ? i.picContactId : null, updatedAt: new Date() };
+      const row = { ...i, workHours: i.workHours ?? null, projectId, picContactId: i.picContactId && contacts.has(i.picContactId) ? i.picContactId : null, picGroupId: i.picGroupId && groups.has(i.picGroupId) ? i.picGroupId : null, updatedAt: new Date() };
       await tx.insert(scheduleItems).values(row).onConflictDoUpdate({ target: scheduleItems.id, set: row });
     }
     if (snap.deps.length) await tx.insert(dependencies).values(snap.deps).onConflictDoNothing();

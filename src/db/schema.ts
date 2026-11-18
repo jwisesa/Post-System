@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  index,
   integer,
   jsonb,
   pgSchema,
@@ -10,6 +11,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { TemplateDef } from "@/lib/schedule/backward";
 
 // Everything lives in its own schema so the app can share a database with other apps.
 const ps = pgSchema("post_system");
@@ -161,6 +163,7 @@ export const scheduleItems = ps.table("schedule_items", {
   baselineDue: date("baseline_due", { mode: "string" }).notNull(),
   status: text("status").$type<ItemStatus>().notNull().default("not_started"),
   picContactId: uuid("pic_contact_id").references(() => teamContacts.id, { onDelete: "set null" }),
+  picGroupId: uuid("pic_group_id").references(() => teamGroups.id, { onDelete: "set null" }), // department in charge when no single PIC
   hardDeadline: boolean("hard_deadline").notNull().default(false),
   internal: boolean("internal").notNull().default(false),
   notes: text("notes").notNull().default(""),
@@ -169,6 +172,20 @@ export const scheduleItems = ps.table("schedule_items", {
   createdAt: createdAt(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Account-owned timeline template: structure only (a TemplateDef), never dates, status or people. */
+export const scheduleTemplates = ps.table(
+  "schedule_templates",
+  {
+    id: id(),
+    ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    data: jsonb("data").$type<TemplateDef>().notNull(),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("schedule_templates_owner_idx").on(t.ownerId)],
+);
 
 /** A named copy of the whole timeline (tracks, items, dependencies) that can be restored. */
 export const scheduleVersions = ps.table("schedule_versions", {
@@ -186,7 +203,7 @@ export type ScheduleSnapshot = {
   tracks: { id: string; name: string; sortOrder: number }[];
   items: {
     id: string; trackId: string; parentId: string | null; name: string; startDate: string; dueDate: string; baselineStart: string; baselineDue: string;
-    status: ItemStatus; picContactId: string | null; hardDeadline: boolean; internal: boolean; notes: string; color: number | null; workHours?: number | null;
+    status: ItemStatus; picContactId: string | null; hardDeadline: boolean; internal: boolean; notes: string; color: number | null; workHours?: number | null; picGroupId?: string | null;
   }[];
   deps: { itemId: string; dependsOnId: string }[];
 };

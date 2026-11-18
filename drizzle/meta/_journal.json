@@ -43,6 +43,13 @@
       "when": 1794650540568,
       "tag": "0005_spooky_the_watchers",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794993816580,
+      "tag": "0006_hard_gabe_jones",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import { linkItems, moveItems, patchItems, quickStatus, removeItems, setCascade,
 import type { Attachment, Comment } from "@/lib/assets/service";
 import { addDays, diffDays, fmtDate, fmtRange } from "@/lib/schedule/dates";
 import type { DateMove, Schedule, VersionRow } from "@/lib/schedule/service";
+import type { TemplateRow } from "@/lib/schedule/template-service";
 import { computeMoves, wouldCycle, type Target } from "@/lib/schedule/shift";
 import { PHASE_COLORS, STATUSES, statusLabel } from "@/lib/schedule/templates";
 import { blockedEntries, calOf, endAfter, isOff, snap, workDays } from "@/lib/schedule/workdays";
@@ -17,6 +18,7 @@ import type { FeedbackPoint } from "@/lib/feedback/service";
 import { AgendaList, ItemPanel, ManagePanel, NewItemPanel } from "./ItemPanel";
 import { durationLabel, phaseIndex, isLate, progressOf, signed, slip, type Item, type Mode } from "./shared";
 import VerticalGantt from "./VerticalGantt";
+import { TemplatePanel } from "./TemplatePanel";
 import { stamp, VersionsPanel } from "./VersionsPanel";
 
 const ROW = 36;
@@ -35,7 +37,7 @@ type View = "gantt" | "vertical" | "calendar";
 
 type DragKind = "move" | "start" | "due";
 type Drag = { id: string; kind: DragKind; x0: number; delta: number };
-type Panel = { kind: "item"; id: string } | { kind: "new"; trackId: string; parentId: string | null; date: string } | { kind: "manage" } | { kind: "days" } | { kind: "versions" };
+type Panel = { kind: "item"; id: string } | { kind: "new"; trackId: string; parentId: string | null; date: string } | { kind: "manage" } | { kind: "days" } | { kind: "versions" } | { kind: "template" };
 type Step = { back: DateMove[]; fwd: DateMove[] };
 type Optimistic =
   | { type: "dates"; moves: DateMove[] }
@@ -43,13 +45,13 @@ type Optimistic =
   | { type: "remove"; ids: string[] };
 
 type Props = {
-  schedule: Schedule; mode: Mode; slug: string; today: string; contacts: { id: string; label: string }[];
+  schedule: Schedule; mode: Mode; slug: string; today: string; contacts: { id: string; label: string }[]; groups?: { id: string; name: string }[]; templates?: TemplateRow[];
   attachments: Attachment[]; comments?: Comment[]; feedback?: FeedbackPoint[]; me?: { id: string; role: string }; versions?: VersionRow[];
 };
 
 const typing = (e: KeyboardEvent) => e.target instanceof HTMLElement && (e.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName));
 
-export function TimelineBoard({ schedule, mode, slug, today, contacts, attachments, comments = [], feedback = [], me, versions = [] }: Props) {
+export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = [], templates = [], attachments, comments = [], feedback = [], me, versions = [] }: Props) {
   const toast = useToast();
   const editable = mode === "edit";
   const [, startTransition] = useTransition();
@@ -743,7 +745,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
 
       {panel?.kind === "item" && panelItem && panelTrack && (
         <Drawer ph={ph(panelItem.id)} title={panelItem.name} onClose={() => setPanel(null)}>
-          <ItemPanel item={panelItem} track={panelTrack} mode={mode} slug={slug} today={today} allItems={allItems} deps={deps} contacts={contacts} onLink={addLink} onUnlink={removeLink}
+          <ItemPanel item={panelItem} track={panelTrack} mode={mode} slug={slug} today={today} allItems={allItems} deps={deps} contacts={contacts} groups={groups} onLink={addLink} onUnlink={removeLink}
             cal={cal} cascade={cascade} ph={ph(panelItem.id)} onAddMilestone={() => setPanel({ kind: "new", trackId: panelItem.trackId, parentId: panelItem.id, date: panelItem.dueDate })}
             attachments={attachments.filter((a) => a.targetType === "schedule_item" && a.targetId === panelItem.id)}
             comments={comments.filter((c) => c.targetType === "schedule_item" && c.targetId === panelItem.id)} feedback={feedback} me={me} />
@@ -757,6 +759,11 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, attachmen
       {panel?.kind === "manage" && (
         <Drawer title="Kelola timeline" onClose={() => setPanel(null)}>
           <ManagePanel slug={slug} tracks={tracks} today={today} hasItems={allItems.length > 0} onOpen={(k) => setPanel({ kind: k })} />
+        </Drawer>
+      )}
+      {panel?.kind === "template" && editable && (
+        <Drawer title="Rencana mundur dari tanggal rilis" onClose={() => setPanel(null)}>
+          <TemplatePanel slug={slug} templates={templates} />
         </Drawer>
       )}
       {panel?.kind === "days" && (

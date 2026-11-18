@@ -10,7 +10,9 @@ import { MILESTONE_NAME_OPTIONS, PHASE_COLORS, PHASE_NAME_OPTIONS, STATUSES, sta
 import { snap, type Cal } from "@/lib/schedule/workdays";
 import type { FeedbackPoint } from "@/lib/feedback/service";
 import { AttachmentList, CommentThread } from "../assets/AttachmentList";
+import { saveTemplateAction } from "@/app/admin/template-actions";
 import { ConfirmButton } from "../ui/controls";
+import { useToast } from "../ui/toast";
 import { FeedbackPanel } from "./FeedbackPanel";
 import { MilestoneDate, PhaseDates } from "./DateFields";
 import { Icon } from "../ui/icons";
@@ -59,13 +61,13 @@ function StatusFields({ item }: { item: Item }) {
 
 type ItemProps = {
   item: Item; track: Track; mode: Mode; slug: string; today: string;
-  allItems: (Item & { trackName: string })[]; deps: Dep[]; contacts: { id: string; label: string }[];
+  allItems: (Item & { trackName: string })[]; deps: Dep[]; contacts: { id: string; label: string }[]; groups: { id: string; name: string }[];
   onLink: (itemId: string, dependsOnId: string) => void; onUnlink: (itemId: string, dependsOnId: string) => void;
   attachments: Attachment[]; comments: Comment[]; feedback: FeedbackPoint[]; me?: { id: string; role: string };
   cal: Cal; cascade: boolean; ph: number; onAddMilestone: () => void;
 };
 
-export function ItemPanel({ item, track, mode, slug, today, allItems, deps, contacts, onLink, onUnlink, attachments, comments, feedback, me, cal, cascade, ph, onAddMilestone }: ItemProps) {
+export function ItemPanel({ item, track, mode, slug, today, allItems, deps, contacts, groups, onLink, onUnlink, attachments, comments, feedback, me, cal, cascade, ph, onAddMilestone }: ItemProps) {
   const stones = allItems.filter((o) => o.parentId === item.id);
   const nameOf = (id: string) => { const i = allItems.find((x) => x.id === id); return i ? `${i.trackName} / ${i.name}` : "—"; };
   const preds = deps.filter((d) => d.itemId === item.id);
@@ -85,6 +87,7 @@ export function ItemPanel({ item, track, mode, slug, today, allItems, deps, cont
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="status" data-status={item.status}>{statusLabel(item.status)}</span>
           {item.picName && <span className="tag">PIC {item.picName}</span>}
+          {!item.picName && item.picGroupName && <span className="tag">Dept {item.picGroupName}</span>}
           <Badges item={item} today={today} />
         </div>
         {slip(item) && <div className="muted text-xs">Baseline: {fmtRange(item.baselineStart, item.baselineDue)}</div>}
@@ -138,6 +141,13 @@ export function ItemPanel({ item, track, mode, slug, today, allItems, deps, cont
             <select name="picContactId" defaultValue={item.picContactId ?? ""}>
               <option value="">—</option>
               {contacts.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Departemen</span>
+            <select name="picGroupId" defaultValue={item.picGroupId ?? ""}>
+              <option value="">—</option>
+              {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </label>
           <label className="check"><input type="checkbox" name="hardDeadline" defaultChecked={item.hardDeadline} /> Hard deadline (tidak ikut bergeser)</label>
@@ -241,7 +251,8 @@ export function NewItemPanel({ slug, tracks, trackId, parentId, date, cal }: { s
   );
 }
 
-export function ManagePanel({ slug, tracks, today, hasItems, onOpen }: { slug: string; tracks: Track[]; today: string; hasItems: boolean; onOpen: (panel: "days" | "versions") => void }) {
+export function ManagePanel({ slug, tracks, today, hasItems, onOpen }: { slug: string; tracks: Track[]; today: string; hasItems: boolean; onOpen: (panel: "days" | "versions" | "template") => void }) {
+  const toast = useToast();
   return (
     <>
       <form action={addTrackAction} className="space-y-3">
@@ -259,6 +270,28 @@ export function ManagePanel({ slug, tracks, today, hasItems, onOpen }: { slug: s
         <label><span>Tanggal mulai</span><input name="startDate" type="date" defaultValue={today} /></label>
         <button className="btn">Tambah track</button>
       </form>
+
+      <section className="space-y-2 hairline pt-4">
+        <h3>Rencana mundur dari tanggal rilis</h3>
+        <p className="muted text-sm">Terapkan template dengan menghitung mundur dari tanggal rilis, lengkap dengan pratinjau dan saran pemadatan.</p>
+        <button type="button" className="btn-secondary" onClick={() => onOpen("template")}>Buka</button>
+      </section>
+
+      {tracks.some((t) => t.items.length > 0) && (
+        <form className="space-y-3 hairline pt-4" action={async (f) => {
+          const r = await saveTemplateAction(slug, String(f.get("name") ?? ""), f.getAll("trackIds").map(String));
+          toast(r.ok ? { message: "Template disimpan." } : { message: r.error, tone: "error" });
+        }}>
+          <h3>Simpan sebagai template</h3>
+          <p className="muted text-sm">Hanya struktur yang disimpan: durasi, urutan, milestone, warna, departemen. Tanggal, status, dan PIC tidak ikut.</p>
+          <label><span>Nama template</span><input name="name" required /></label>
+          <fieldset className="space-y-1">
+            <legend className="mb-1 text-xs font-semibold text-ink-2">Track</legend>
+            {tracks.map((t) => <label key={t.id} className="check"><input type="checkbox" name="trackIds" value={t.id} defaultChecked /> {t.name}</label>)}
+          </fieldset>
+          <button className="btn-secondary">Simpan template</button>
+        </form>
+      )}
 
       {hasItems && (
         <section className="space-y-2 hairline pt-4">
