@@ -32,6 +32,7 @@ penyimpanan dan koneksi dipakai bersama.
    |---|---|
    | `DATABASE_URL` | URI dari Supabase (langkah 1) |
    | `SETUP_KEY` | kata sandi sekali pakai buatan Anda, untuk membuat akun pertama |
+| `DRIVE_TRACKER_ADMINS` | (opsional) email akun Post System yang boleh melihat dan menautkan drive-tracker, pisahkan dengan koma. Kosong berarti tidak ada yang boleh. |
 
 4. **Branch produksi.** Vercel men-deploy branch utama repo. Kalau kode belum ada di `main`,
    buka **Settings → Environments → Production → Branch Tracking** dan pilih branch yang

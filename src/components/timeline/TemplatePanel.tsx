@@ -32,11 +32,16 @@ export function TemplatePanel({ slug, templates }: { slug: string; templates: Te
     setPreview(r.preview);
     setPick("suggest");
   });
+  const [applying, setApplying] = useState(false);
   const apply = async () => {
-    const r = await applyTemplateAction(slug, toSource(source), release, usingSuggestion, createGroups);
-    if (!r.ok) return setError(r.error);
-    toast({ message: `Template diterapkan (${r.phases} fase).` });
-    reset();
+    if (applying) return;
+    setApplying(true);
+    try {
+      const r = await applyTemplateAction(slug, toSource(source), release, usingSuggestion, createGroups);
+      if (!r.ok) return setError(r.error);
+      toast({ message: `Template diterapkan (${r.phases} fase).` });
+      reset();
+    } finally { setApplying(false); }
   };
 
   const sug = preview?.plan.suggestion;
@@ -106,7 +111,7 @@ export function TemplatePanel({ slug, templates }: { slug: string; templates: Te
           )}
 
           <form action={apply}>
-            <ConfirmButton className="btn" disabled={pending} message={`Terapkan template pada rilis ${fmtDate(preview.plan.release)}? Track baru ditambahkan; keadaan sekarang disimpan dulu sebagai versi.`}>Terapkan</ConfirmButton>
+            <ConfirmButton className="btn" disabled={pending || applying} message={`Terapkan template pada rilis ${fmtDate(preview.plan.release)}? Track baru ditambahkan; keadaan sekarang disimpan dulu sebagai versi.`}>Terapkan</ConfirmButton>
           </form>
         </section>
       )}

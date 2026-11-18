@@ -90,7 +90,7 @@ export const RULES: { id: string; run: (i: CheckInput) => Finding[] }[] = [
     const item = p?.items.find((x) => x.name === d.name);
     if (!item) return [];
     const want = resolveSpec(item.spec, i.tech);
-    const keys = Object.keys(want).filter((k) => d.spec[k] !== want[k]);
+    const keys = Object.keys(want).filter((k) => k in d.spec && d.spec[k] !== want[k]);
     return keys.length ? [{ rule: "preset.deviation", severity: "info" as const, title: `${d.name} menyimpang dari preset ${p!.label}`, detail: `Beda: ${keys.join(", ")}.`, fix: fixDel(i) }] : [];
   }) },
   { id: "preset.version", run: (i) => i.deliverables.flatMap((d) => {

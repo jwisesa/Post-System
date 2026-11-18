@@ -60,6 +60,13 @@ describe("checks", () => {
     expect(f.map((x) => x.rule).sort()).toEqual(["preset.deviation", "preset.version"]);
     expect(f.find((x) => x.rule === "preset.deviation")!.detail).toContain("format");
   });
+  it("preset deviation ignores spec keys the deliverable does not have", () => {
+    const p = getPreset("cinema")!;
+    const item = p.items[0];
+    const tech = { masterResolution: "4096x1716 (4K Scope)", aspectRatio: "2.39:1", frameRate: "24" };
+    const old = del({ name: item.name, presetId: "cinema", presetVersion: p.specVersion, spec: {} });
+    expect(ids({ tech, deliverables: [old] })).toEqual([]);
+  });
   it("sorted by severity and a throwing rule does not hide others", () => {
     const f = run({ tech: { masterResolution: "2048x858 (2K Scope)", aspectRatio: "1.85:1", frameRate: "24", cam1_fps: "48" } });
     expect(f.map((x) => x.severity)).toEqual(["error", "info"]);

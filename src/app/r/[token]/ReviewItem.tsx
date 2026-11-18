@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { ConfirmButton } from "@/components/ui/controls";
 import { reviewerAddFeedback, reviewerSignoff } from "../actions";
 
-type Point = { id: string; ref: string; body: string; status: string; checkNote: string };
+type Point = { id: string; ref: string; body: string; status: string };
 type Props = {
   token: string; id: string; name: string; date: string; phaseName: string; trackName: string; statusLabel: string;
   points: Point[]; signedAt: string | null;

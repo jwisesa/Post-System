@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "signoffs_link_item_active_uq" ON "post_system"."signoffs" USING btree ("reviewer_link_id","item_id") WHERE revoked_at is null and reviewer_link_id is not null;

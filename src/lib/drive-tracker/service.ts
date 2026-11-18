@@ -72,7 +72,14 @@ export async function getDriveSummary(db: Db, linkedId: string | null): Promise<
   }
 }
 
-export async function listDriveTrackerProjects(db: Db): Promise<{ id: string; name: string }[]> {
+/** Allowlist of Post-System account emails (env DRIVE_TRACKER_ADMINS, comma separated). The app connects as the table owner, so drive-tracker's own RLS does not apply: this is the only gate. */
+export function canUseDriveTracker(email: string): boolean {
+  const list = (process.env.DRIVE_TRACKER_ADMINS ?? "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  return list.includes(email.trim().toLowerCase());
+}
+
+export async function listDriveTrackerProjects(db: Db, email: string): Promise<{ id: string; name: string }[]> {
+  if (!canUseDriveTracker(email)) return [];
   try {
     return await readOnly(db, async (tx) => {
       if (!(await hasTables(tx))) return [];
@@ -84,11 +91,21 @@ export async function listDriveTrackerProjects(db: Db): Promise<{ id: string; na
   }
 }
 
-export async function linkDriveTracker(db: Db, userId: string, projectId: string, dtProjectId: string | null) {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function linkDriveTracker(db: Db, userId: string, projectId: string, dtProjectId: string | null, email: string) {
   await requireRole(db, userId, projectId, "project.edit");
+  if (!canUseDriveTracker(email)) throw new InputError("Tidak punya akses ke drive-tracker.");
   let name = "";
-  if (dtProjectId) {
-    const found = (await listDriveTrackerProjects(db)).find((p) => p.id === dtProjectId);
+  if (dtProjectId !== null) {
+    const id = dtProjectId.trim();
+    if (!id) throw new InputError("Pilih project drive-tracker.");
+    if (!UUID.test(id)) throw new InputError("Project drive-tracker tidak ditemukan.");
+    dtProjectId = id;
+    const found = await readOnly(db, async (tx) => {
+      if (!(await hasTables(tx))) return undefined;
+      return rowsOf<{ name: string }>(await tx.execute(sql`select name from public.projects where id = ${id}`))[0];
+    }).catch(() => undefined);
     if (!found) throw new InputError("Project drive-tracker tidak ditemukan.");
     name = found.name;
   }

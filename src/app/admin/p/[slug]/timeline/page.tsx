@@ -8,7 +8,7 @@ import { loadProject } from "@/lib/project-context";
 import { today } from "@/lib/schedule/dates";
 import { getSchedule, listVersions } from "@/lib/schedule/service";
 import { listTemplates } from "@/lib/schedule/template-service";
-import { getDriveSummary } from "@/lib/drive-tracker/service";
+import { canUseDriveTracker, getDriveSummary } from "@/lib/drive-tracker/service";
 import { getTeam } from "@/lib/services";
 
 export default async function Timeline({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string }> }) {
@@ -20,7 +20,7 @@ export default async function Timeline({ params, searchParams }: { params: Promi
     listAttachments(db, project.id, { includeInternal: true }), listComments(db, project.id), listVersions(db, project.id),
     listPoints(db, project.id, { includeInternal: true }), listTemplates(db, user.id), listSignoffs(db, project.id),
   ]);
-  const drives = project.driveTrackerProjectId ? await getDriveSummary(db, project.driveTrackerProjectId) : undefined;
+  const drives = project.driveTrackerProjectId && canUseDriveTracker(user.email) ? await getDriveSummary(db, project.driveTrackerProjectId) : undefined;
   const contacts = team.flatMap((g) => g.contacts.map((c) => ({ id: c.id, label: `${c.name} (${g.name})` })));
   const mode = can(role, "schedule.edit") ? "edit" : can(role, "schedule.status") ? "status" : "view";
   return (

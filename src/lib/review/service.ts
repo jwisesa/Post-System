@@ -81,7 +81,7 @@ export async function getReviewerData(db: Db, token: string) {
     reviewer: { name: link.name, role: link.role },
     items: assigned.map(({ item: i, trackName, phaseName }) => ({
       id: i.id, name: i.name, date: i.dueDate, phaseName, trackName, statusLabel: statusLabel(i.status),
-      myPoints: points.filter((p) => p.itemId === i.id).map((p) => ({ id: p.id, ref: p.ref, body: p.body, status: p.status as string, checkNote: p.checkNote })),
+      myPoints: points.filter((p) => p.itemId === i.id).map((p) => ({ id: p.id, ref: p.ref, body: p.body, status: p.status as string })),
       mySignoff: signed.find((x) => x.itemId === i.id) ? { createdAt: signed.find((x) => x.itemId === i.id)!.createdAt.toISOString() } : null,
     })),
   };
@@ -114,12 +114,16 @@ export async function submitReviewerFeedback(db: Db, token: string, itemId: stri
 
 export async function signoffViaLink(db: Db, token: string, itemId: string, note: string) {
   const { link, item } = await authorize(db, token, itemId);
-  await db.transaction(async (tx) => {
-    const [dup] = await tx.select({ id: signoffs.id }).from(signoffs).where(and(eq(signoffs.reviewerLinkId, link.id), eq(signoffs.itemId, itemId), isNull(signoffs.revokedAt)));
-    if (dup) throw new InputError("Sudah disetujui.");
-    const [s] = await tx.insert(signoffs).values({ projectId: link.projectId, itemId, signerName: link.name, signerRole: link.role, reviewerLinkId: link.id, note: clean(note, 500) }).returning();
-    await record(tx, { projectId: link.projectId, userId: null, entity: "signoff", entityId: s.id, action: "create", summary: `${link.name} (link reviewer) menyetujui "${item.name}"` });
-  });
+  try {
+    await db.transaction(async (tx) => {
+      const [s] = await tx.insert(signoffs).values({ projectId: link.projectId, itemId, signerName: link.name, signerRole: link.role, reviewerLinkId: link.id, note: clean(note, 500) }).returning();
+      await record(tx, { projectId: link.projectId, userId: null, entity: "signoff", entityId: s.id, action: "create", summary: `${link.name} (link reviewer) menyetujui "${item.name}"` });
+    });
+  } catch (e) {
+    const err = e as { code?: string; cause?: { code?: string } };
+    if (err.code === "23505" || err.cause?.code === "23505") throw new InputError("Sudah disetujui.");
+    throw e;
+  }
 }
 
 export async function recordSignoff(db: Db, userId: string, projectId: string, itemId: string, input: { signerName: string; signerRole: string; note: string; evidenceUrl: string }) {

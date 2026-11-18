@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { createPgliteDb, type Db } from "@/db/client";
 import { feedbackPoints, reviewerLinks, scheduleItems, signoffs, teamContacts, teamGroups } from "@/db/schema";
 import { ForbiddenError } from "@/lib/auth/permissions";
+import * as f from "@/lib/feedback/service";
 import * as rv from "@/lib/review/service";
 import * as sch from "@/lib/schedule/service";
 import * as s from "@/lib/services";
@@ -40,10 +41,13 @@ describe("reviewer links and sign-offs", () => {
 
   it("DTO leaks nothing beyond the person's own items", async () => {
     await rv.submitReviewerFeedback(db, otherTok, other, "TEKS-ORANG-LAIN");
+    await rv.submitReviewerFeedback(db, tok, other, "poin rahasia-uji");
+    const [pt] = await db.select().from(feedbackPoints).where(eq(feedbackPoints.body, "poin rahasia-uji"));
+    await f.checkPoint(db, sup, projectId, pt.id, { status: "dropped", checkedItemId: other, note: "rahasia tim" });
     const data = await rv.getReviewerData(db, tok);
     expect(data!.items.map((i) => i.id).sort()).toEqual([m1, m2, other].sort());
     const json = JSON.stringify(data);
-    for (const bad of ["budi@secret.id", "0812-SECRET", "picName", "PicRahasia", "CATATAN-RAHASIA", "Item Internal Rahasia", "Klien Rudi", "TEKS-ORANG-LAIN", "notes"]) expect(json).not.toContain(bad);
+    for (const bad of ["budi@secret.id", "0812-SECRET", "picName", "PicRahasia", "CATATAN-RAHASIA", "Item Internal Rahasia", "Klien Rudi", "TEKS-ORANG-LAIN", "notes", "rahasia tim", "checkNote"]) expect(json).not.toContain(bad);
     expect(data!.reviewer).toEqual({ name: "Sutradara Ana", role: "Sutradara" });
   });
 
@@ -87,6 +91,16 @@ describe("reviewer links and sign-offs", () => {
     expect(all).toHaveLength(2);
     expect(all.filter((x) => x.revokedAt)).toHaveLength(1);
     expect(all.find((x) => x.revokedAt)!.revokeReason).toBe("Ada revisi baru");
+  });
+
+  it("two concurrent sign-offs leave exactly one active", async () => {
+    const res = await Promise.allSettled([rv.signoffViaLink(db, tok, m1, ""), rv.signoffViaLink(db, tok, m1, "")]);
+    expect(res.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const lost = res.find((r) => r.status === "rejected") as PromiseRejectedResult;
+    expect(lost.reason).toBeInstanceOf(s.InputError);
+    expect(lost.reason.message).toBe("Sudah disetujui.");
+    const active = (await rv.listSignoffs(db, projectId)).filter((x) => x.itemId === m1 && !x.revokedAt);
+    expect(active).toHaveLength(1);
   });
 
   it("recordSignoff / revokeSignoff need schedule.edit; evidence must be http(s)", async () => {

@@ -89,3 +89,14 @@ Tes browser end-to-end: lihat petunjuk di bagian atas `e2e/smoke.cjs`.
 - `src/lib/auth/` — password, sesi, hak akses (`can()`)
 - `src/lib/tech-spec/schema.ts` — field dan opsi Technical Page, default per tipe produksi
 - `src/app/admin/` — halaman admin; `src/app/v/[token]/` — halaman view-only
+
+- **Template dan rencana mundur**: simpan struktur jadwal (durasi, urutan, milestone, warna, departemen) sebagai template akun,
+  lalu terapkan dengan tanggal rilis; jadwal disusun mundur pada hari kerja dengan pratinjau kekurangan dan saran pemadatan
+- **Feedback**: impor dari teks tempelan atau berkas (Frame.io, Vimeo, Resolve, Premiere, Avid), ekspor sebagai marker
+  (EDL, daftar CSV, FCPXML) dengan frame rate dan start timecode yang selalu ditanyakan, drop-frame akurat
+- **Link reviewer** per orang (tanpa akun, bisa dicabut): menulis feedback atas nama sendiri dan menyetujui milestone;
+  sign-off juga bisa dicatat supervisor. Hanya tercatat, tanggal tidak dikunci
+- **Bandingkan versi** timeline (batang lama sebagai bayangan, daftar perubahan, CSV) dan halaman **Pemeriksaan**
+  (frame rate, resolusi vs aspect ratio, due date deliverable, preset platform)
+- **drive-tracker** (baca saja): ringkasan drive per project. Perlu `DRIVE_TRACKER_ADMINS`, lihat [docs/DEPLOY.md](docs/DEPLOY.md)
+

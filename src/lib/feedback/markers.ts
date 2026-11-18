@@ -11,7 +11,7 @@
  *  - FCPXML <marker start duration value> inside a spine clip, rational times, tcFormat DF|NDF:
  *    https://developer.apple.com/documentation/professional-video-applications/describing-final-cut-pro-items-in-fcpxml
  */
-import { framesToTc, secondsToFrames, tcToFrames, type Rate } from "../timecode";
+import { framesToTc, secondsToFrames, skip, tcToFrames, type Rate } from "../timecode";
 import { toCsv } from "../schedule/csv";
 
 export type MarkerPoint = { ref: string; body: string; fromWho: string };
@@ -21,6 +21,16 @@ export type MarkerFormat = { id: string; label: string; ext: string; mime: strin
 
 const REF = /(?<!\d)(\d{1,2}(?::\d{2}){1,2}(?:[:;]\d{2})?)(?![\d:;]|\s*[ap]\.?m\b)/i;
 const label = (p: MarkerPoint) => (p.fromWho ? `${p.body} (${p.fromWho})` : p.body).replace(/\s+/g, " ").trim();
+
+/** Like tcToFrames, but a label that only fails by landing on a dropped frame snaps to the first valid frame of that minute. */
+function tcSnap(t: string, rate: Rate): number | null {
+  const f = tcToFrames(t, rate);
+  if (f !== null || !rate.drop) return f;
+  const m = t.trim().match(/^(\d+:\d{2}:\d{2})([:;.])(\d{2})$/);
+  const d = skip(rate);
+  if (!m || Number(m[3]) >= d) return null;
+  return tcToFrames(`${m[1]}${m[2]}${String(d).padStart(2, "0")}`, rate);
+}
 
 /** Frame numbers on the timeline for the points that have a timecode; the rest are counted as skipped. */
 function place(points: MarkerPoint[], o: MarkerOptions) {
@@ -32,9 +42,9 @@ function place(points: MarkerPoint[], o: MarkerOptions) {
     let f: number | null = null;
     if (t) {
       const parts = t.split(/[:;]/).map(Number);
-      if (parts.length === 4) f = tcToFrames(t, o.rate); // frames field: a timecode at this rate
+      if (parts.length === 4) f = tcSnap(t, o.rate); // frames field: a timecode at this rate
       else if (o.mode === "offset") f = secondsToFrames(parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1], o.rate);
-      else f = tcToFrames(parts.length === 3 ? `${t}:00` : `00:${t}:00`, o.rate);
+      else f = tcSnap(parts.length === 3 ? `${t}:00` : `00:${t}:00`, o.rate);
     }
     if (f === null) { skipped++; continue; }
     placed.push({ p, frame: base + f });
@@ -76,7 +86,7 @@ const avidTxt: MarkerFormat["make"] = (points, o) => {
   return { text: tsv(placed.map(({ p, frame }) => [p.fromWho || "Post System", tc(frame, o), "V1", "red", p.body, "1"])), skipped };
 };
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
 
 /** Rational seconds for a frame count: 1001/(base*1000) per frame at NTSC rates. */
 const time = (n: number, r: Rate) => (n === 0 ? "0s" : Math.abs(r.fps - r.base) > 1e-6 ? `${n * 1001}/${r.base * 1000}s` : `${n}/${r.base}s`);

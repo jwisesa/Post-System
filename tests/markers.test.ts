@@ -118,6 +118,26 @@ describe("exporters", () => {
     expect(fx("apple-sample.fcpxml")).toMatch(/<marker start="2s" duration="1000\/30000s" value="My Marker 1"\/>/);
     expect(MARKER_FORMATS.find((x) => x.id === "fcpxml")!.make([{ ref: "00:01", body: 'a & <b> "c"', fromWho: "" }], { rate: R24, start: "00:00:00:00", mode: "offset", name: "x" }).text).toContain('value="a &amp; &lt;b&gt; &quot;c&quot;"');
   });
+  it("whole-minute references snap to the first valid drop-frame label", () => {
+    const one = (ref: string, r: Rate, mode: "offset" | "absolute" = "absolute") => MARKER_FORMATS.find((x) => x.id === "avid-txt")!.make([{ ref, body: "b", fromWho: "a" }], { rate: r, start: "00:00:00;00", mode, name: "n" });
+    expect(one("03:00", DF)).toMatchObject({ skipped: 0 });
+    expect(one("03:00", DF).text).toContain("00:03:00;02");
+    expect(one("00:14:00", DF).text).toContain("00:14:00;02");
+    expect(one("00:01:00:00", DF, "offset").text).toContain("00:01:00;02");
+    expect(one("00:10:00:00", DF).text).toContain("00:10:00;00");
+    expect(one("03:00", DF60).text).toContain("00:03:00;04");
+    expect(one("00:10:00:00", DF60).text).toContain("00:10:00;00");
+    expect(one("00:00:00:99", DF).skipped).toBe(1);
+    expect(one("garbage", DF).skipped).toBe(1);
+  });
+  it("hours wrap at 24 and 24:00:00:00 is rejected", () => {
+    expect(tcToFrames("24:00:00:00", R25)).toBeNull();
+    const r = MARKER_FORMATS.find((x) => x.id === "avid-txt")!.make([{ ref: "00:20", body: "b", fromWho: "a" }], { rate: R25, start: "23:59:50:00", mode: "offset", name: "n" });
+    expect(r.text).toContain("00:00:10:00");
+  });
+  it("strips XML-invalid control characters", () => {
+    expect(MARKER_FORMATS.find((x) => x.id === "fcpxml")!.make([{ ref: "00:01", body: "a\x01b", fromWho: "" }], { rate: R24, start: "00:00:00:00", mode: "offset", name: "x" }).text).toContain('value="ab"');
+  });
   it("offset vs absolute, frames field, skipped", () => {
     const one = (ref: string, mode: "offset" | "absolute") => MARKER_FORMATS.find((x) => x.id === "avid-txt")!.make([{ ref, body: "b", fromWho: "a" }], { rate: DF, start: "01:00:00;00", mode, name: "n" });
     expect(one("00:01:00", "offset").text).toContain("01:00:59;28"); // 60 s of real time is 1798 frames

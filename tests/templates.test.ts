@@ -155,6 +155,19 @@ describe("template service", () => {
     expect((await sch.listVersions(db, projectId)).some((v) => v.name === 'Sebelum template "Promo saya"')).toBe(true);
   });
 
+  it("never applies a suggestion that does not fit", async () => {
+    const source = { kind: "saved", id: saved } as const;
+    const past = "2020-01-08";
+    const pv = await tpl.previewTemplate(db, sup, projectId, { source, releaseDate: past });
+    expect(pv.plan.suggestion?.fits).not.toBe(true);
+    const run = async (compress: boolean) => {
+      const id = (await s.createProject(db, sup, { name: `P${compress}`, productionType: "feature_theatrical", platforms: [], unitCount: null })).id;
+      await tpl.applyTemplate(db, sup, id, { source, releaseDate: past, compress, createGroups: false });
+      return (await sch.getSchedule(db, id, { includeInternal: true })).tracks.flatMap((t) => t.items).map((i) => `${i.name} ${i.startDate} ${i.dueDate}`).sort();
+    };
+    expect(await run(true)).toEqual(await run(false));
+  });
+
   it("createGroups decides whether a missing group is created", async () => {
     const source = { kind: "saved", id: saved } as const;
     await tpl.applyTemplate(db, sup, project2, { source, releaseDate: FUTURE, compress: false, createGroups: false });

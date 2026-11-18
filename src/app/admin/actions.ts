@@ -137,6 +137,6 @@ export async function deleteProjectAction(f: FormData) {
 
 export async function linkDriveTrackerAction(f: FormData) {
   const { db, user, project } = await ctx(f);
-  const id = f.get("unlink") ? null : str(f, "dtProjectId");
-  await finish(`/admin/p/${project.slug}`, () => linkDriveTracker(db, user.id, project.id, id));
+  const id = f.get("unlink") ? null : String(f.get("dtProjectId") ?? "");
+  await finish(`/admin/p/${project.slug}`, () => linkDriveTracker(db, user.id, project.id, id, user.email));
 }

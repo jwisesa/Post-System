@@ -96,7 +96,7 @@ export async function applyTemplate(db: Db, userId: string, projectId: string, i
   await requireRole(db, userId, projectId, "schedule.edit");
   return db.transaction(async (tx) => {
     const { name, def, plan: full } = await resolve(tx, userId, projectId, input.source, input.releaseDate);
-    const plan = input.compress && full.suggestion ? { ...full, phases: full.suggestion.phases } : full;
+    const plan = input.compress && full.suggestion?.fits ? { ...full, phases: full.suggestion.phases } : full;
     await tx.insert(scheduleVersions).values({ projectId, name: `Sebelum template "${name}"`, snapshot: await snapshot(tx, projectId), createdBy: userId });
 
     const groupIds = new Map((await tx.select().from(teamGroups).where(eq(teamGroups.projectId, projectId))).map((g) => [keyOfGroup(g.name), g.id]));

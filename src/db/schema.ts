@@ -7,10 +7,12 @@ import {
   pgSchema,
   primaryKey,
   unique,
+  uniqueIndex,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import type { TemplateDef } from "@/lib/schedule/backward";
 
 // Everything lives in its own schema so the app can share a database with other apps.
@@ -333,7 +335,10 @@ export const signoffs = ps.table(
     revokedBy: uuid("revoked_by").references(() => users.id),
     revokeReason: text("revoke_reason").notNull().default(""),
   },
-  (t) => [index("signoffs_project_item_idx").on(t.projectId, t.itemId)],
+  (t) => [
+    index("signoffs_project_item_idx").on(t.projectId, t.itemId),
+    uniqueIndex("signoffs_link_item_active_uq").on(t.reviewerLinkId, t.itemId).where(sql`revoked_at is null and reviewer_link_id is not null`),
+  ],
 );
 
 // ---------- deliverables ----------

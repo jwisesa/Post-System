@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createPgliteDb, type Db } from "@/db/client";
-import { formatBytes, getDriveSummary, linkDriveTracker, listDriveTrackerProjects, readOnly } from "@/lib/drive-tracker/service";
+import { canUseDriveTracker, formatBytes, getDriveSummary, linkDriveTracker, listDriveTrackerProjects, readOnly } from "@/lib/drive-tracker/service";
 import * as s from "@/lib/services";
 
 const DT = "11111111-1111-1111-1111-111111111111";
@@ -12,9 +12,22 @@ describe("drive-tracker summary", () => {
 
   beforeAll(async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
+    process.env.DRIVE_TRACKER_ADMINS = " SUP@x.id , boss@x.id ";
     db = await createPgliteDb();
     sup = (await s.createUser(db, { name: "Sup", email: "sup@x.id", password: "password1" })).id;
     projectId = (await s.createProject(db, sup, { name: "Film", productionType: "feature_theatrical", platforms: [], unitCount: null })).id;
+  });
+
+  it("allowlist parsing is secure by default and tolerant", () => {
+    const keep = process.env.DRIVE_TRACKER_ADMINS;
+    delete process.env.DRIVE_TRACKER_ADMINS;
+    expect(canUseDriveTracker("sup@x.id")).toBe(false);
+    process.env.DRIVE_TRACKER_ADMINS = " , ";
+    expect(canUseDriveTracker("")).toBe(false);
+    process.env.DRIVE_TRACKER_ADMINS = " A@x.id , b@x.id";
+    expect(canUseDriveTracker(" a@X.ID ")).toBe(true);
+    expect(canUseDriveTracker("c@x.id")).toBe(false);
+    process.env.DRIVE_TRACKER_ADMINS = keep;
   });
 
   it("is unlinked without an id", async () => {
@@ -23,8 +36,8 @@ describe("drive-tracker summary", () => {
 
   it("is unavailable, not an error, when the tables are missing", async () => {
     expect((await getDriveSummary(db, DT)).state).toBe("unavailable");
-    expect(await listDriveTrackerProjects(db)).toEqual([]);
-    await expect(linkDriveTracker(db, sup, projectId, DT)).rejects.toThrow(s.InputError);
+    expect(await listDriveTrackerProjects(db, "sup@x.id")).toEqual([]);
+    await expect(linkDriveTracker(db, sup, projectId, DT, "sup@x.id")).rejects.toThrow(s.InputError);
   });
 
   describe("with drive-tracker tables", () => {
@@ -56,11 +69,19 @@ describe("drive-tracker summary", () => {
     });
 
     it("links, lists and unlinks with an audit entry", async () => {
-      expect(await listDriveTrackerProjects(db)).toEqual([{ id: DT, name: "DT Film" }]);
-      await linkDriveTracker(db, sup, projectId, DT);
+      expect(await listDriveTrackerProjects(db, "sup@x.id")).toEqual([{ id: DT, name: "DT Film" }]);
+      await linkDriveTracker(db, sup, projectId, DT, "sup@x.id");
       expect((await s.listActivity(db, projectId, 1))[0].entry.summary).toContain("Menautkan");
-      await linkDriveTracker(db, sup, projectId, null);
+      await linkDriveTracker(db, sup, projectId, null, "sup@x.id");
       expect((await s.listActivity(db, projectId, 1))[0].entry.summary).toContain("Memutus");
+    });
+
+    it("non-allowlisted users cannot list or link; bad ids are rejected", async () => {
+      expect(await listDriveTrackerProjects(db, "evil@x.id")).toEqual([]);
+      await expect(linkDriveTracker(db, sup, projectId, DT, "evil@x.id")).rejects.toThrow("Tidak punya akses ke drive-tracker.");
+      await expect(linkDriveTracker(db, sup, projectId, "  ", "sup@x.id")).rejects.toThrow("Pilih project drive-tracker.");
+      await expect(linkDriveTracker(db, sup, projectId, "", "sup@x.id")).rejects.toThrow("Pilih project drive-tracker.");
+      await expect(linkDriveTracker(db, sup, projectId, "not-a-uuid", "sup@x.id")).rejects.toThrow("Project drive-tracker tidak ditemukan.");
     });
 
     it("cannot write to public.* through the read-only path", async () => {

@@ -44,10 +44,19 @@ function ImportTab({ slug, item, own, onDone }: { slug: string; item: Item; own:
 
   const save = () =>
     start(async () => {
-      const r = await importFeedback(slug, item.id, chosen.map(({ ref, body, fromWho }) => ({ ref, body, fromWho })), a.source);
-      if (!r.ok) return toast({ message: r.error ?? "Gagal.", tone: "error" });
-      toast({ message: `${r.added} poin ditambahkan${r.skipped ? `, ${r.skipped} duplikat dilewati` : ""}.` });
-      onDone();
+      try {
+        const rows = chosen.map(({ ref, body, fromWho }) => ({ ref, body, fromWho }));
+        let added = 0, skipped = 0;
+        for (let i = 0; i < rows.length; i += 500) {
+          const r = await importFeedback(slug, item.id, rows.slice(i, i + 500), a.source);
+          if (!r.ok) return toast({ message: r.error ?? "Gagal.", tone: "error" });
+          added += r.added; skipped += r.skipped;
+        }
+        toast({ message: `${added} poin ditambahkan${skipped ? `, ${skipped} duplikat dilewati` : ""}.` });
+        onDone();
+      } catch {
+        toast({ message: "Gagal menyimpan impor", tone: "error" });
+      }
     });
 
   return (

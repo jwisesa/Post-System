@@ -18,14 +18,14 @@ export const RATES: { id: string; label: string; rate: Rate }[] = [
 ];
 
 /** Frame numbers skipped at the start of every minute except each tenth. */
-const skip = (x: Rate) => (x.drop ? (x.base === 60 ? 4 : 2) : 0);
+export const skip = (x: Rate) => (x.drop ? (x.base === 60 ? 4 : 2) : 0);
 
 /** `HH:MM:SS:FF` (`;` or `:` before FF) to a frame count; null when the label does not exist at this rate. */
 export function tcToFrames(tc: string, x: Rate): number | null {
   const m = tc.trim().match(/^(\d+):(\d{2}):(\d{2})[:;.](\d{2})$/);
   if (!m) return null;
   const [h, mi, s, f] = m.slice(1).map(Number);
-  if (mi > 59 || s > 59 || f >= x.base) return null;
+  if (h > 23 || mi > 59 || s > 59 || f >= x.base) return null;
   const d = skip(x);
   if (d && s === 0 && f < d && mi % 10 !== 0) return null;
   const mins = h * 60 + mi;
@@ -43,7 +43,7 @@ export function framesToTc(n: number, x: Rate): string {
     f += 9 * d * tens + (rest > d ? d * Math.floor((rest - d) / perMin) : 0);
   }
   const p = (v: number) => String(v).padStart(2, "0");
-  return `${p(Math.floor(f / (x.base * 3600)))}:${p(Math.floor(f / (x.base * 60)) % 60)}:${p(Math.floor(f / x.base) % 60)}${x.drop ? ";" : ":"}${p(f % x.base)}`;
+  return `${p(Math.floor(f / (x.base * 3600)) % 24)}:${p(Math.floor(f / (x.base * 60)) % 60)}:${p(Math.floor(f / x.base) % 60)}${x.drop ? ";" : ":"}${p(f % x.base)}`;
 }
 
 /** Real time to frames. */
