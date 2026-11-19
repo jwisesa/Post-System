@@ -8,6 +8,7 @@ import { loadProject } from "@/lib/project-context";
 import { today } from "@/lib/schedule/dates";
 import { getSchedule, listVersions } from "@/lib/schedule/service";
 import { listTemplates } from "@/lib/schedule/template-service";
+import { getPhaseNeeds } from "@/lib/script/service";
 import { canUseDriveTracker, getDriveSummary } from "@/lib/drive-tracker/service";
 import { getTeam } from "@/lib/services";
 
@@ -21,13 +22,14 @@ export default async function Timeline({ params, searchParams }: { params: Promi
     listPoints(db, project.id, { includeInternal: true }), listTemplates(db, user.id), listSignoffs(db, project.id),
   ]);
   const drives = project.driveTrackerProjectId && canUseDriveTracker(user.email) ? await getDriveSummary(db, project.driveTrackerProjectId) : undefined;
+  const scriptNeeds = (await getPhaseNeeds(db, project.id)) ?? undefined;
   const contacts = team.flatMap((g) => g.contacts.map((c) => ({ id: c.id, label: `${c.name} (${g.name})` })));
   const mode = can(role, "schedule.edit") ? "edit" : can(role, "schedule.status") ? "status" : "view";
   return (
     <>
       <h1>Timeline</h1>
       <ErrorBanner message={error} />
-      <TimelineBoard schedule={schedule} mode={mode} slug={slug} today={today()} contacts={contacts} groups={team.map((g) => ({ id: g.id, name: g.name }))} templates={templates} attachments={attachments} comments={comments} feedback={feedback} signoffs={signoffs} me={{ id: user.id, role }} versions={versions} drives={drives} openItemId={item} late={late === "1"} />
+      <TimelineBoard schedule={schedule} mode={mode} slug={slug} today={today()} contacts={contacts} groups={team.map((g) => ({ id: g.id, name: g.name }))} templates={templates} attachments={attachments} comments={comments} feedback={feedback} signoffs={signoffs} me={{ id: user.id, role }} versions={versions} drives={drives} scriptNeeds={scriptNeeds} openItemId={item} late={late === "1"} />
     </>
   );
 }

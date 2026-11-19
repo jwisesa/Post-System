@@ -1,0 +1,1 @@
+ALTER TABLE "post_system"."script_scenes" ADD COLUMN "post_tags" jsonb DEFAULT '[]'::jsonb NOT NULL;

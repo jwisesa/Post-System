@@ -25,6 +25,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
       <NavLink href={`${base}/technical`} icon="technical">Technical Page</NavLink>
       <NavLink href={`${base}/checks`} icon="check">Pemeriksaan</NavLink>
       <NavLink href={`${base}/edl`} icon="edl">Tool EDL</NavLink>
+      <NavLink href={`${base}/script`} icon="script">Naskah</NavLink>
       <NavLink href={`${base}/team`} icon="team">Tim</NavLink>
       {can(role, "access.manage") && <NavLink href={`${base}/access`} icon="access">Akses</NavLink>}
       <NavLink href={`${base}/report`} icon="report">Laporan</NavLink>

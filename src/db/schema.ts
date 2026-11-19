@@ -4,6 +4,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgSchema,
   primaryKey,
   unique,
@@ -402,6 +403,47 @@ export const shots = ps.table(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique().on(t.projectId, t.name)],
+);
+
+// ---------- script analysis ----------
+
+/** Structure only: headings, counts and estimates. Script text and the PDF are never stored. */
+export const scripts = ps.table("scripts", {
+  id: id(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  sourceName: text("source_name").notNull().default(""),
+  pages: integer("pages").notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: createdAt(),
+});
+
+export const scriptScenes = ps.table(
+  "script_scenes",
+  {
+    id: id(),
+    scriptId: uuid("script_id")
+      .notNull()
+      .references(() => scripts.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").notNull(),
+    position: integer("position").notNull(),
+    number: text("number").notNull(),
+    heading: text("heading").notNull(),
+    intExt: text("int_ext").notNull().default(""),
+    location: text("location").notNull().default(""),
+    timeOfDay: text("time_of_day").notNull().default(""),
+    pageStart: numeric("page_start", { mode: "number" }).notNull(),
+    pageEnd: numeric("page_end", { mode: "number" }).notNull(),
+    lines: integer("lines").notNull(),
+    estSeconds: integer("est_seconds").notNull(),
+    characters: jsonb("characters").$type<{ name: string; blocks: number }[]>().notNull().default([]),
+    notes: text("notes").notNull().default(""),
+    /** Post-production needs: short matched keywords and the user's notes only, never script sentences. */
+    postTags: jsonb("post_tags").$type<{ kind: "vfx" | "adr" | "musik" | "sound" | "grading" | "grafis" | "lainnya"; note: string; auto: boolean; keyword?: string; itemId?: string | null }[]>().notNull().default([]),
+  },
+  (t) => [index("script_scenes_script_pos_idx").on(t.scriptId, t.position)],
 );
 
 // ---------- calendar feed ----------

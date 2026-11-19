@@ -20,6 +20,9 @@ import { SignoffPanel } from "./SignoffPanel";
 import type { Signoff } from "@/lib/review/service";
 import { MilestoneDate, PhaseDates } from "./DateFields";
 import { Icon } from "../ui/icons";
+import { fmtDuration, TAG_LABEL } from "@/lib/script/types";
+import type { PhaseNeed } from "@/lib/script/needs";
+import Link from "next/link";
 import { durationLabel, isLate, slip, type Item, type Mode, type Track } from "./shared";
 
 /** Radio swatches; value "" lets the item take its colour from its phase or position. */
@@ -113,10 +116,10 @@ type ItemProps = {
   allItems: (Item & { trackName: string })[]; deps: Dep[]; contacts: { id: string; label: string }[]; groups: { id: string; name: string }[];
   onLink: (itemId: string, dependsOnId: string) => void; onUnlink: (itemId: string, dependsOnId: string) => void;
   attachments: Attachment[]; comments: Comment[]; feedback: FeedbackPoint[]; signoffs?: Signoff[]; me?: { id: string; role: string };
-  cal: Cal; cascade: boolean; onDates: (id: string, start: string, due: string, cascade: boolean, reason: string) => void; ph: number; onAddMilestone: () => void; drives?: DriveSummary; tab: TabId;
+  cal: Cal; cascade: boolean; onDates: (id: string, start: string, due: string, cascade: boolean, reason: string) => void; ph: number; onAddMilestone: () => void; drives?: DriveSummary; tab: TabId; needs?: PhaseNeed[]; scriptId?: string;
 };
 
-export function ItemPanel({ item, mode, slug, today, allItems, deps, contacts, groups, onLink, onUnlink, attachments, comments, feedback, signoffs = [], me, cal, cascade, onDates, onAddMilestone, drives, tab }: ItemProps) {
+export function ItemPanel({ item, mode, slug, today, allItems, deps, contacts, groups, onLink, onUnlink, attachments, comments, feedback, signoffs = [], me, cal, cascade, onDates, onAddMilestone, drives, tab, needs, scriptId }: ItemProps) {
   const stones = allItems.filter((o) => o.parentId === item.id);
   const nameOf = (id: string) => { const i = allItems.find((x) => x.id === id); return i ? `${i.trackName} / ${i.name}` : "—"; };
   const preds = deps.filter((d) => d.itemId === item.id);
@@ -208,6 +211,21 @@ export function ItemPanel({ item, mode, slug, today, allItems, deps, contacts, g
                   ))}
                 </ul>
               )}
+            </section>
+          )}
+
+          {!item.parentId && needs && needs.length > 0 && scriptId && (
+            <section className="space-y-1 text-sm">
+              <h3>Adegan terkait</h3>
+              <ul className="rows">
+                {needs.map((n) => (
+                  <li key={n.kind} className="py-1.5">
+                    <Link href={`/admin/p/${slug}/script?script=${scriptId}&tag=${n.kind}`} className="text-accent">{TAG_LABEL[n.kind]}</Link>
+                    <span className="num text-ink-2"> · {n.scenes} adegan · ~{fmtDuration(n.seconds)}</span>
+                    <span className="block text-xs text-muted">Adegan {n.numbers.join(", ")}</span>
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
 

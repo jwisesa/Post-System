@@ -15,7 +15,8 @@ export type Action =
   | "deliverable.edit" // create, define, delete
   | "deliverable.status"
   | "shot.edit" // save from the EDL tool, delete
-  | "shot.status"; // status, vendor, version, notes
+  | "shot.status" // status, vendor, version, notes
+  | "script.edit"; // import, edit and delete script breakdowns (supervisor only)
 
 const ASSISTANT: ReadonlySet<Action> = new Set(["project.view", "team.edit", "schedule.status", "asset.edit", "comment.add", "deliverable.status", "shot.status"]);
 

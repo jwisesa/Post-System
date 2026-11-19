@@ -17,6 +17,7 @@ import { DaysPanel } from "./DaysPanel";
 import type { FeedbackPoint } from "@/lib/feedback/service";
 import type { Signoff } from "@/lib/review/service";
 import type { DriveSummary } from "@/lib/drive-tracker/service";
+import type { PhaseNeed } from "@/lib/script/needs";
 import { AgendaList, ItemHead, itemTabs, ItemPanel, type TabId, ManagePanel, NewItemPanel } from "./ItemPanel";
 import { dayOffset, durationLabel, phaseIndex, isLate, progressOf, signed, slip, type Item, type Mode } from "./shared";
 import VerticalGantt from "./VerticalGantt";
@@ -46,9 +47,10 @@ type Optimistic =
   | { type: "patch"; ids: string[]; status?: Item["status"]; color?: number | null }
   | { type: "remove"; ids: string[] };
 
+type ScriptNeeds = { scriptId: string; byPhase: Record<string, PhaseNeed[]> };
 type Props = {
   schedule: Schedule; mode: Mode; slug: string; today: string; contacts: { id: string; label: string }[]; groups?: { id: string; name: string }[]; templates?: TemplateRow[];
-  attachments: Attachment[]; comments?: Comment[]; feedback?: FeedbackPoint[]; signoffs?: Signoff[]; me?: { id: string; role: string }; versions?: VersionRow[]; drives?: DriveSummary;
+  attachments: Attachment[]; comments?: Comment[]; feedback?: FeedbackPoint[]; signoffs?: Signoff[]; me?: { id: string; role: string }; versions?: VersionRow[]; drives?: DriveSummary; scriptNeeds?: ScriptNeeds;
   /** From the URL: open this item, and/or start with the Terlambat filter on (links from Hari Ini). */
   openItemId?: string; late?: boolean;
 };
@@ -73,7 +75,7 @@ const SHORTCUTS: [string, string][] = [
 
 const typing = (e: KeyboardEvent) => e.target instanceof HTMLElement && (e.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName));
 
-export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = [], templates = [], attachments, comments = [], feedback = [], signoffs = [], me, versions = [], drives, openItemId, late }: Props) {
+export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = [], templates = [], attachments, comments = [], feedback = [], signoffs = [], me, versions = [], drives, scriptNeeds, openItemId, late }: Props) {
   const toast = useToast();
   const editable = mode === "edit";
   const [, startTransition] = useTransition();
@@ -807,7 +809,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
           <ItemPanel key={panelItem.id} tab={curTab} item={panelItem} track={panelTrack} mode={mode} slug={slug} today={today} allItems={allItems} deps={deps} contacts={contacts} groups={groups} onLink={addLink} onUnlink={removeLink}
             cal={cal} cascade={cascade} onDates={setDates} ph={ph(panelItem.id)} onAddMilestone={() => setPanel({ kind: "new", trackId: panelItem.trackId, parentId: panelItem.id, date: panelItem.dueDate })}
             attachments={itemAtt}
-            comments={itemCom} feedback={feedback} signoffs={signoffs} me={me} drives={drives} />
+            comments={itemCom} feedback={feedback} signoffs={signoffs} me={me} drives={drives} needs={scriptNeeds?.byPhase[panelItem.id]} scriptId={scriptNeeds?.scriptId} />
         </Drawer>
       )}
       {panel?.kind === "new" && (

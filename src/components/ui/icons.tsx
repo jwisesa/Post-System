@@ -7,6 +7,7 @@ const paths = {
   undo: "M6 4L3 7l3 3M3 7h6.5a3.5 3.5 0 010 7H7",
   redo: "M10 4l3 3-3 3M13 7H6.5a3.5 3.5 0 000 7H9",
   link: "M6.5 9.5l3-3M7 5l1-1a2.5 2.5 0 013.5 3.5l-1 1M9 11l-1 1a2.5 2.5 0 01-3.5-3.5l1-1",
+  upload: "M8 10.5v-7M5 6L8 3l3 3M3 13h10",
   download: "M8 3v7M5 7.5L8 10.5l3-3M3 13h10",
   check: "M3 8.5l3.2 3.2L13 4.8",
   external: "M5 11l6-6M6 4.5h5.5V10",
@@ -26,6 +27,7 @@ const paths = {
   minus: "M3 8h10",
   feedback: "M3 3.5h10v7H8.5L5.5 13v-2.5H3zM5.5 6h5M5.5 8h3",
   edl: "M2.5 3.5h11v9h-11zM2.5 6.5h11M2.5 9.5h11M6 3.5v9",
+  script: "M3 6h10v7.5H3zM3 6l1-2.5h2.5L5.5 6M7.5 6l1-2.5H11L10 6M5.5 9h5",
 } as const;
 
 export type IconName = keyof typeof paths;

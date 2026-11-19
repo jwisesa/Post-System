@@ -71,6 +71,20 @@
       "when": 1795024947293,
       "tag": "0009_zippy_puff_adder",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795104782406,
+      "tag": "0010_nappy_radioactive_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795105375501,
+      "tag": "0011_thankful_scream",
+      "breakpoints": true
     }
   ]
 }
