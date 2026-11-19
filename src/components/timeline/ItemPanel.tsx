@@ -223,6 +223,11 @@ export function ItemPanel({ item, mode, slug, today, allItems, deps, contacts, g
                     <Link href={`/admin/p/${slug}/script?script=${scriptId}&tag=${n.kind}`} className="text-accent">{TAG_LABEL[n.kind]}</Link>
                     <span className="num text-ink-2"> · {n.scenes} adegan · ~{fmtDuration(n.seconds)}</span>
                     <span className="block text-xs text-muted">Adegan {n.numbers.join(", ")}</span>
+                    {mode !== "view" && n.items.filter((x) => x.excerpt).slice(0, 3).map((x) => (
+                      <Link key={x.id} href={`/admin/p/${slug}/script?script=${scriptId}&scene=${x.id}`} className="st-ctx" title={x.excerpt}>
+                        <b>{x.number}</b> {x.heading}<span>{x.excerpt}</span>
+                      </Link>
+                    ))}
                   </li>
                 ))}
               </ul>

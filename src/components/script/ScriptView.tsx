@@ -2,25 +2,28 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { deleteScript } from "@/app/admin/script-actions";
+import { deleteScript, purgeScriptText } from "@/app/admin/script-actions";
 import { Icon } from "@/components/ui/icons";
 import type { ScriptAggregate } from "@/lib/script/aggregate";
 import { fmtRange } from "@/lib/schedule/dates";
 import { phaseLabel, postNeeds, type Phase } from "@/lib/script/needs";
 import type { SceneRow } from "@/lib/script/service";
-import { fmtDuration, TAG_LABEL, type TagKind } from "@/lib/script/types";
+import { fmtDuration, TAG_KINDS, TAG_LABEL, type TagKind } from "@/lib/script/types";
+import { ConfirmButton } from "@/components/ui/controls";
 import { useToast } from "../ui/toast";
+import { Keyed } from "./SceneReader";
 import { Scenes } from "./SceneTable";
 
 type Tab = "scenes" | "characters" | "locations" | "post" | "summary";
 const TABS: [Tab, string][] = [["scenes", "Adegan"], ["characters", "Tokoh"], ["locations", "Lokasi"], ["post", "Kebutuhan post"], ["summary", "Ringkasan"]];
 const th = "px-2 py-1 text-start font-medium whitespace-nowrap";
 
-export function ScriptView({ slug, script, scenes, agg, canEdit, phases, initialTag = "" }: { slug: string; script: { id: string; title: string; sourceName: string; pages: number }; scenes: SceneRow[]; agg: ScriptAggregate; canEdit: boolean; phases: Phase[]; initialTag?: string }) {
+export function ScriptView({ slug, script, scenes, agg, canEdit, phases, initialTag = "", initialScene = "", textIds = [] }: { slug: string; script: { id: string; title: string; sourceName: string; pages: number }; scenes: SceneRow[]; agg: ScriptAggregate; canEdit: boolean; phases: Phase[]; initialTag?: string; initialScene?: string; textIds?: string[] }) {
   const toast = useToast();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("scenes");
   const [tagFilter, setTagFilter] = useState(initialTag);
+  const [sceneToOpen, setSceneToOpen] = useState(initialScene);
   const fail = (r: { ok: boolean; error?: string }) => { if (!r.ok) toast({ message: r.error ?? "Gagal menyimpan.", tone: "error" }); };
   const exportHref = (type: string) => `/admin/p/${slug}/script/export?script=${script.id}&type=${type}`;
   const pdf = (view: string) => `/admin/p/${slug}/script/print?script=${script.id}&view=${view}`;
@@ -47,14 +50,19 @@ export function ScriptView({ slug, script, scenes, agg, canEdit, phases, initial
             ))}
           </div>
         </details>
+        {canEdit && textIds.length > 0 && (
+          <form action={async () => { const r = await purgeScriptText(slug, script.id); if (r.ok) toast({ message: "Teks naskah dihapus. Adegan dan tag tetap." }); else fail(r); }}>
+            <ConfirmButton pendingLabel="Menghapus…" message="Hapus teks naskah? Teks semua adegan dan kutipan pada tag akan dihapus. Daftar adegan, tokoh, lokasi, dan tag tetap ada. Tindakan ini tidak bisa dibatalkan.">Hapus teks naskah</ConfirmButton>
+          </form>
+        )}
         {canEdit && (
           <button type="button" className="btn-danger" onClick={async () => { if (window.confirm(`Hapus naskah "${script.title}" beserta semua adegannya?`)) { const r = await deleteScript(slug, script.id); fail(r); if (r.ok) router.push(`/admin/p/${slug}/script`); } }}>Hapus naskah</button>
         )}
       </div>
-      {tab === "scenes" && <Scenes slug={slug} scriptTitle={script.title} scenes={scenes} phases={phases} canEdit={canEdit} initialTag={tagFilter} />}
+      {tab === "scenes" && <Scenes slug={slug} scriptId={script.id} textIds={textIds} initialScene={sceneToOpen} scriptTitle={script.title} scenes={scenes} phases={phases} canEdit={canEdit} initialTag={tagFilter} />}
       {tab === "characters" && <Characters agg={agg} />}
       {tab === "locations" && <Locations agg={agg} />}
-      {tab === "post" && <PostNeeds scenes={scenes} phases={phases} onShow={(k) => { setTagFilter(k); setTab("scenes"); }} />}
+      {tab === "post" && <PostNeeds scenes={scenes} phases={phases} onShow={(k) => { setTagFilter(k); setSceneToOpen(""); setTab("scenes"); }} onOpen={(id) => { setSceneToOpen(id); setTab("scenes"); }} />}
       {tab === "summary" && <Summary agg={agg} />}
     </section>
   );
@@ -147,11 +155,13 @@ function Summary({ agg }: { agg: ScriptAggregate }) {
   );
 }
 
-function PostNeeds({ scenes, phases, onShow }: { scenes: SceneRow[]; phases: Phase[]; onShow: (k: TagKind) => void }) {
+function PostNeeds({ scenes, phases, onShow, onOpen }: { scenes: SceneRow[]; phases: Phase[]; onShow: (k: TagKind) => void; onOpen: (id: string) => void }) {
+  const [ctx, setCtx] = useState(true);
   const needs = postNeeds(scenes, phases);
   if (!needs.length) return <p className="muted text-sm">Belum ada kebutuhan post. Tambahkan tag per adegan di tab Adegan; saran otomatis muncul saat naskah diimpor.</p>;
   return (
     <div className="space-y-6">
+      <button type="button" className="btn-secondary" aria-pressed={ctx} onClick={() => setCtx(!ctx)}>Tampilkan konteks</button>
       {needs.map((n) => (
         <section key={n.kind} className="space-y-2">
           <h3 className="section-band"><span>{TAG_LABEL[n.kind]}</span><span className="section-count">{n.scenes} adegan · ~{fmtDuration(n.seconds)}</span></h3>
@@ -162,6 +172,16 @@ function PostNeeds({ scenes, phases, onShow }: { scenes: SceneRow[]; phases: Pha
             </ul>
           )}
           {n.unlinked > 0 && <p className="notice" style={{ ["--tone" as string]: "var(--warn)" }}>Belum ada fase untuk {TAG_LABEL[n.kind]}{n.phases.length > 0 ? ` (${n.unlinked} adegan)` : ""}. Pilih fase di panel adegan.</p>}
+          {ctx && (
+            <ul className="rows text-sm st-needs">
+              {scenes.flatMap((x) => { const t = x.postTags.find((y) => y.kind === n.kind); return t ? [[x, t] as const] : []; }).map(([x, t]) => (
+                <li key={x.id} className="grid gap-0.5 py-1.5">
+                  <span><b className="num">{x.number}</b> <span className="text-ink-2">{x.heading}</span> <button type="button" className="btn-ghost" onClick={() => onOpen(x.id)} aria-label={`Buka adegan ${x.number}`}>Buka adegan</button></span>
+                  {(t.excerpt || t.note) && <span className="st-excerpt">{t.excerpt ? <Keyed text={t.excerpt} keyword={t.keyword} k={TAG_KINDS.indexOf(n.kind) + 1} /> : t.note}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
           <button type="button" className="btn-ghost" onClick={() => onShow(n.kind)}>Lihat adegan {TAG_LABEL[n.kind]}</button>
         </section>
       ))}

@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { confirmSceneTag, deleteScene, removeSceneTag, setSceneTags, updateScene } from "@/app/admin/script-actions";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { confirmSceneTag, deleteScene, removeSceneTag, searchScriptText, setSceneTags, updateScene } from "@/app/admin/script-actions";
 import { Drawer, SubmitButton } from "@/components/ui/controls";
 import { Icon } from "@/components/ui/icons";
 import { phaseLabel, type Phase } from "@/lib/script/needs";
-import type { SceneRow } from "@/lib/script/service";
+import type { SceneRow, SearchHit } from "@/lib/script/service";
 import { defaultPhase } from "@/lib/script/tags";
 import { fmtDuration, fmtPage, INT_EXTS, placeOf, TAG_KINDS, TAG_LABEL, TIMES_OF_DAY, type PostTag, type TagKind } from "@/lib/script/types";
 import { useToast } from "../ui/toast";
+import { SceneReader } from "./SceneReader";
 
 const natural = new Intl.Collator("id", { numeric: true });
 type Res = { ok: boolean; error?: string };
@@ -35,10 +36,10 @@ function TagMarks({ slug, scene, canEdit, stop }: { slug: string; scene: SceneRo
       {scene.postTags.map((t) => (
         <span key={t.kind} className="sa-tagm" data-k={kindNum(t.kind)} data-auto={t.auto ? "" : undefined}>
           {canEdit && t.auto ? (
-            <button type="button" title={`Saran dari naskah${t.keyword ? ` (kata kunci ${t.keyword})` : ""}. Klik untuk konfirmasi.`} aria-label={`Konfirmasi saran tag ${TAG_LABEL[t.kind]} adegan ${scene.number}`}
+            <button type="button" title={`Saran dari naskah${t.keyword ? ` (kata kunci ${t.keyword})` : ""}${t.excerpt ? `: ${t.excerpt}` : ""}. Klik untuk konfirmasi.`} aria-label={`Konfirmasi saran tag ${TAG_LABEL[t.kind]} adegan ${scene.number}`}
               onClick={() => act(confirmSceneTag(slug, scene.id, t.kind), `Tag ${TAG_LABEL[t.kind]} dikonfirmasi.`)}>{TAG_LABEL[t.kind]} ?</button>
           ) : (
-            <span title={t.auto ? `Saran dari naskah${t.keyword ? ` (kata kunci ${t.keyword})` : ""}` : t.note || undefined}>{TAG_LABEL[t.kind]}{t.auto ? " ?" : ""}</span>
+            <span title={[t.auto ? `Saran dari naskah${t.keyword ? ` (kata kunci ${t.keyword})` : ""}` : t.note, t.excerpt].filter(Boolean).join("\n") || undefined}>{TAG_LABEL[t.kind]}{t.auto ? " ?" : ""}</span>
           )}
           {canEdit && (
             <button type="button" className="sa-x" aria-label={`Hapus tag ${TAG_LABEL[t.kind]} adegan ${scene.number}`} onClick={() => act(removeSceneTag(slug, scene.id, t.kind), `Tag ${TAG_LABEL[t.kind]} dihapus.`)}><Icon name="close" /></button>
@@ -69,7 +70,35 @@ function TagForm({ phases, label, onSubmit }: { phases: Phase[]; label: string; 
   );
 }
 
-function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose }: { slug: string; scene: SceneRow; scriptTitle: string; phases: Phase[]; canEdit: boolean; onClose: () => void }) {
+type Search = { q: string; setQ: (v: string) => void; hits: SearchHit[]; busy: boolean };
+
+/** "Cari di naskah": input plus the matching scenes with the match highlighted. Clicking a hit opens the scene at that block. */
+function SearchBox({ search, results, onPick }: { search: Search; results: boolean; onPick: (id: string, block: number) => void }) {
+  const { q, setQ, hits, busy } = search;
+  const live = q.trim().length >= 2;
+  return (
+    <div className="st-search">
+      <label className="field"><span className="field-label">Cari di naskah</span>
+        <input type="search" value={q} placeholder="Kata atau kalimat di teks naskah" onChange={(e) => setQ(e.target.value)} /></label>
+      {results && live && (
+        <ul className="rows st-hits" aria-live="polite">
+          {hits.map((h) => (
+            <li key={h.sceneId} className="py-1.5">
+              <b className="num">{h.number}</b> <span className="text-ink-2">{h.heading}</span>
+              {h.matches.slice(0, 3).map((m, i) => (
+                <button key={i} type="button" className="st-hit" onClick={() => onPick(h.sceneId, m.block)}>{m.pre}<mark className="st-hl" data-q="">{m.hit}</mark>{m.post}</button>
+              ))}
+              {h.matches.length > 3 && <span className="muted text-xs">+{h.matches.length - 3} kecocokan lain</span>}
+            </li>
+          ))}
+          {!hits.length && <li className="muted py-1.5 text-sm">{busy ? "Mencari…" : "Tidak ada yang cocok di teks naskah."}</li>}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose, hasText, tab, setTab, search, onPick, focusBlock, prev, next }: { slug: string; scene: SceneRow; scriptTitle: string; phases: Phase[]; canEdit: boolean; onClose: () => void; hasText: boolean; tab: "teks" | "data"; setTab: (t: "teks" | "data") => void; search: Search; onPick: (id: string, block: number) => void; focusBlock?: number; prev?: () => void; next?: () => void }) {
   const act = useAct();
   const [deleting, setDeleting] = useState(false);
   const field = (k: "heading" | "number" | "location" | "notes", label: string, area?: boolean) => (
@@ -81,8 +110,20 @@ function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose }: { s
   const phaseName = (id?: string | null) => { const p = phases.find((x) => x.id === id); return p && phaseLabel(p); };
   const retag = (t: PostTag, itemId: string | null) => act(setSceneTags(slug, [scene.id], { kind: t.kind, note: t.note, itemId }), `Tag ${TAG_LABEL[t.kind]} disimpan.`);
   return (
-    <Drawer title={`Adegan ${scene.number}`} crumb={scriptTitle} onClose={onClose} bodyKey={scene.id}
-      head={<p className="num text-sm text-ink-2">{scene.heading} · Hal. {fmtPage(scene.pageStart)}–{fmtPage(scene.pageEnd)} · ~{fmtDuration(scene.estSeconds)}{scene.characters.length > 0 && ` · ${scene.characters.map((c) => c.name).join(", ")}`}</p>}>
+    <Drawer title={`Adegan ${scene.number}`} crumb={scriptTitle} onClose={onClose} bodyKey={`${scene.id}:${tab}`}
+      head={<>
+        <p className="num text-sm text-ink-2">{scene.heading} · Hal. {fmtPage(scene.pageStart)}–{fmtPage(scene.pageEnd)} · ~{fmtDuration(scene.estSeconds)}{scene.characters.length > 0 && ` · ${scene.characters.map((c) => c.name).join(", ")}`}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className="btn-ghost" disabled={!prev} onClick={prev} aria-label="Adegan sebelumnya (k)"><Icon name="left" /> Sebelumnya</button>
+          <button type="button" className="btn-ghost" disabled={!next} onClick={next} aria-label="Adegan berikutnya (j)">Berikutnya <Icon name="chevron" /></button>
+        </div>
+        <SearchBox search={search} results onPick={onPick} />
+      </>}
+      tabs={<>
+        <button type="button" role="tab" aria-selected={tab === "teks"} onClick={() => setTab("teks")}>Teks</button>
+        <button type="button" role="tab" aria-selected={tab === "data"} onClick={() => setTab("data")}>{canEdit ? "Ubah & tag" : "Detail"}</button>
+      </>}>
+      {tab === "teks" ? <SceneReader slug={slug} scene={scene} canEdit={canEdit} hasText={hasText} q={search.q} focusBlock={focusBlock} /> : <>
       {canEdit ? (
         <form key={`${scene.id}:${scene.heading}:${scene.number}:${scene.location}:${scene.intExt}:${scene.timeOfDay}:${scene.notes}`} className="space-y-3"
           action={async (f) => {
@@ -116,6 +157,7 @@ function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose }: { s
                 <TagMarks slug={slug} scene={{ ...scene, postTags: [t] }} canEdit={canEdit} />
                 {t.auto && t.keyword && <span className="muted text-xs">kata kunci {t.keyword}</span>}
                 {t.note && <span className="text-ink-2">{t.note}</span>}
+                {t.excerpt && <span className="st-excerpt">{t.excerpt}</span>}
               </div>
               {canEdit ? (
                 <label className="sa-inline"><span>Fase</span>
@@ -129,18 +171,25 @@ function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose }: { s
         </ul>
         {canEdit && <TagForm key={scene.id} phases={phases} label="Tambah tag" onSubmit={(v) => act(setSceneTags(slug, [scene.id], v), `Tag ${TAG_LABEL[v.kind]} ditambahkan.`)} />}
       </section>
+      </>}
     </Drawer>
   );
 }
 
-export function Scenes({ slug, scriptTitle, scenes, phases, canEdit, initialTag }: { slug: string; scriptTitle: string; scenes: SceneRow[]; phases: Phase[]; canEdit: boolean; initialTag: string }) {
+export function Scenes({ slug, scriptId, scriptTitle, scenes, phases, canEdit, initialTag, initialScene = null, textIds }: { slug: string; scriptId: string; scriptTitle: string; scenes: SceneRow[]; phases: Phase[]; canEdit: boolean; initialTag: string; initialScene?: string | null; textIds: string[] }) {
   const act = useAct();
   const [loc, setLoc] = useState("");
   const [who, setWho] = useState("");
   const [tod, setTod] = useState("");
   const [tag, setTag] = useState(initialTag);
   const [byNumber, setByNumber] = useState(false);
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(scenes.some((x) => x.id === initialScene) ? initialScene : null);
+  const [tab, setTab] = useState<"teks" | "data">(initialScene && textIds.includes(initialScene) ? "teks" : "data");
+  const [focusBlock, setFocusBlock] = useState<number | undefined>();
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<SearchHit[]>([]);
+  const [searching, setSearching] = useState(false);
+  const seq = useRef(0);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const places = useMemo(() => [...new Set(scenes.map((s) => placeOf(s.location)).filter(Boolean))].sort(), [scenes]);
   const names = useMemo(() => [...new Set(scenes.flatMap((s) => s.characters.map((c) => c.name)))].sort(), [scenes]);
@@ -154,9 +203,39 @@ export function Scenes({ slug, scriptTitle, scenes, phases, canEdit, initialTag 
   const picked = shown.filter((s) => sel.has(s.id)).map((s) => s.id);
   const toggle = (id: string) => setSel((p) => { const n = new Set(p); if (!n.delete(id)) n.add(id); return n; });
   const none = <span className="muted">—</span>;
+  const hasText = (id: string) => textIds.includes(id);
+  const openScene = (id: string, block?: number) => { setOpen(id); setFocusBlock(block); setTab(hasText(id) ? "teks" : "data"); };
+  const at = shown.findIndex((x) => x.id === open);
+  const go = (d: number) => { const n = shown[at + d]; if (n) openScene(n.id); };
+  const goRef = useRef(go);
+  useEffect(() => { goRef.current = go; });
+
+  useEffect(() => {
+    if (q.trim().length < 2) return;
+    const mine = ++seq.current;
+    const t = setTimeout(async () => {
+      setSearching(true);
+      const r = await searchScriptText(slug, scriptId, q);
+      if (mine === seq.current) { setHits(r.ok ? r.hits : []); setSearching(false); }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q, slug, scriptId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement | null)?.matches?.("input, textarea, select, [contenteditable]")) return;
+      if (e.key === "j" || e.key === "ArrowRight") { e.preventDefault(); goRef.current(1); }
+      else if (e.key === "k" || e.key === "ArrowLeft") { e.preventDefault(); goRef.current(-1); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+  const search: Search = { q, setQ, hits, busy: searching };
 
   return (
     <div className="sa-wrap space-y-3" data-drawer={current ? "" : undefined}>
+      {textIds.length > 0 && <SearchBox search={search} results={!current} onPick={openScene} />}
       <div className="flex flex-wrap items-end gap-3">
         <label className="field"><span className="field-label">Lokasi</span>
           <select value={loc} onChange={(e) => setLoc(e.target.value)}><option value="">Semua</option>{places.map((p) => <option key={p}>{p}</option>)}</select></label>
@@ -186,7 +265,7 @@ export function Scenes({ slug, scriptTitle, scenes, phases, canEdit, initialTag 
         <tbody>
           {shown.map((s) => (
             <tr key={s.id} className="hoverable sa-row" tabIndex={0} data-open={open === s.id ? "" : undefined} aria-label={`Adegan ${s.number}: ${s.heading}. Enter untuk membuka.`}
-              onClick={() => setOpen(s.id)} onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget) setOpen(s.id); }}>
+              onClick={() => openScene(s.id)} onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget) openScene(s.id); }}>
               {canEdit && <td className="sa-sel" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Pilih adegan ${s.number}`} checked={sel.has(s.id)} onChange={() => toggle(s.id)} /></td>}
               <td className="sa-num font-medium">{s.number}</td>
               <td className="sa-head">{s.heading}</td>
@@ -198,7 +277,7 @@ export function Scenes({ slug, scriptTitle, scenes, phases, canEdit, initialTag 
               <td className="sa-opt" data-l="Tokoh">{s.characters.map((c) => c.name).join(", ") || none}</td>
               <td className="sa-posts" data-l="Tag" data-nil={s.postTags.length ? undefined : ""}><TagMarks slug={slug} scene={s} canEdit={canEdit} stop /></td>
               <td className="sa-opt sa-notes" data-l="Catatan" data-nil={s.notes ? undefined : ""}>{s.notes || none}</td>
-              <td className="sa-act"><button type="button" className="btn-ghost" aria-label={`${canEdit ? "Ubah" : "Buka"} adegan ${s.number}`} onClick={(e) => { e.stopPropagation(); setOpen(s.id); }}>{canEdit ? "Ubah" : "Buka"}</button></td>
+              <td className="sa-act"><button type="button" className="btn-ghost" aria-label={`${canEdit ? "Ubah" : "Buka"} adegan ${s.number}`} onClick={(e) => { e.stopPropagation(); openScene(s.id); }}>{canEdit ? "Ubah" : "Buka"}</button></td>
             </tr>
           ))}
           {!shown.length && (
@@ -211,7 +290,7 @@ export function Scenes({ slug, scriptTitle, scenes, phases, canEdit, initialTag 
         <tfoot><tr><td colSpan={12}>Total {shown.length} adegan · ~{fmtDuration(total)}</td></tr></tfoot>
       </table>
 
-      {current && <SceneDrawer key="drawer" slug={slug} scene={current} scriptTitle={scriptTitle} phases={phases} canEdit={canEdit} onClose={() => setOpen(null)} />}
+      {current && <SceneDrawer key="drawer" slug={slug} scene={current} scriptTitle={scriptTitle} phases={phases} canEdit={canEdit} onClose={() => setOpen(null)} hasText={hasText(current.id)} tab={tab} setTab={setTab} search={search} onPick={openScene} focusBlock={focusBlock} prev={at > 0 ? () => go(-1) : undefined} next={at >= 0 && at < shown.length - 1 ? () => go(1) : undefined} />}
     </div>
   );
 }

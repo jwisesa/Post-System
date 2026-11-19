@@ -15,26 +15,41 @@ const MATCHERS = Object.entries(WORDS).map(([kind, w]) => [kind as TagKind, re(w
 const EXTENSION = /\((?:V\.?\s?O\.?|O\.?\s?S\.?|OFF)\)/i;
 const CUE_NAME = re(ADR_CUES);
 
+const MAX_EXCERPT = 240;
+
+/** The sentence (or the line, when it has no sentence break) around a match, at most 240 chars, keyword kept. */
+export function excerptOf(text: string, at: number, len: number): string {
+  const bounds = [0, ...[...text.matchAll(/[.!?…]+["')\]]*\s+/g)].map((b) => b.index + b[0].length), text.length];
+  const i = bounds.findIndex((b, k) => b <= at && at < bounds[k + 1]);
+  const from = bounds[Math.max(0, i)], sentence = text.slice(from, bounds[i + 1] ?? text.length).trim();
+  if (sentence.length <= MAX_EXCERPT) return sentence;
+  const start = Math.max(from, at - 100), end = Math.min(text.length, at + len + 100);
+  return `${start > from ? "…" : ""}${text.slice(start, end).trim()}${end < text.length ? "…" : ""}`.slice(0, MAX_EXCERPT);
+}
+
 /**
- * Suggests post tags for one scene while its text is still in memory. `lines` = every line of the scene (heading, action, dialogue),
- * `cues` = the raw character-cue lines. Only the matched keyword survives; one tag per kind.
+ * Suggests post tags for one scene while its text is still in memory. `lines` = every paragraph of the scene (heading, action, dialogue),
+ * `cues` = the raw character-cue lines, `dialogues[i]` = the first dialogue after `cues[i]`. One tag per kind, with the keyword and the sentence it came from.
  */
-export function suggestTags(lines: string[], cues: string[] = []): PostTag[] {
-  const found = new Map<TagKind, string>();
-  for (const c of cues) {
-    if (found.has("adr")) break;
+export function suggestTags(lines: string[], cues: string[] = [], dialogues: string[] = []): PostTag[] {
+  const found = new Map<TagKind, { keyword: string; excerpt: string }>();
+  cues.forEach((c, i) => {
+    if (found.has("adr")) return;
     const ext = EXTENSION.exec(c)?.[0];
     const name = CUE_NAME.exec(c.replace(/\([^)]*\)/g, " "))?.[0];
-    if (ext || name) found.set("adr", (ext ?? name!).toUpperCase().replace(/\s+/g, " "));
-  }
+    if (!ext && !name) return;
+    const who = c.replace(/\([^)]*\)/g, " ").replace(/[\^*]/g, "").replace(/[:.\s]+$/, "").replace(/\s+/g, " ").trim().toUpperCase() || c.trim(), shown = ext ? `${who} ${ext.toUpperCase().replace(/\s+/g, "")}` : who;
+    const said = (dialogues[i] ?? "").slice(0, 120).trim();
+    found.set("adr", { keyword: (ext ?? name!).toUpperCase().replace(/\s+/g, " "), excerpt: (said ? `${shown}: ${said}` : shown).slice(0, MAX_EXCERPT) });
+  });
   for (const text of lines) {
     for (const [kind, rx] of MATCHERS) {
       if (found.has(kind)) continue;
       const m = rx.exec(text);
-      if (m) found.set(kind, m[0].toUpperCase().replace(/\s+/g, " "));
+      if (m) found.set(kind, { keyword: m[0].toUpperCase().replace(/\s+/g, " "), excerpt: excerptOf(text, m.index, m[0].length) });
     }
   }
-  return TAG_KINDS.filter((k) => found.has(k)).map((kind) => ({ kind, note: "", auto: true, keyword: found.get(kind)!.slice(0, 30), itemId: null }));
+  return TAG_KINDS.filter((k) => found.has(k)).map((kind) => ({ kind, note: "", auto: true, keyword: found.get(kind)!.keyword.slice(0, 30), excerpt: found.get(kind)!.excerpt, itemId: null }));
 }
 
 const PHASE_NAME: Partial<Record<TagKind, RegExp>> = { vfx: /vfx/i, adr: /sound/i, sound: /sound/i, musik: /music|musik/i, grading: /grading/i, grafis: /vfx|graphic|grafis|online/i };

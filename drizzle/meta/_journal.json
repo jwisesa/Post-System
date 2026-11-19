@@ -85,6 +85,13 @@
       "when": 1795105375501,
       "tag": "0011_thankful_scream",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795106771863,
+      "tag": "0012_polite_mauler",
+      "breakpoints": true
     }
   ]
 }

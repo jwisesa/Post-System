@@ -407,7 +407,7 @@ export const shots = ps.table(
 
 // ---------- script analysis ----------
 
-/** Structure only: headings, counts and estimates. Script text and the PDF are never stored. */
+/** Headings, counts and estimates. The scene text lives in `script_scene_text` (members only); the PDF itself is never stored. */
 export const scripts = ps.table("scripts", {
   id: id(),
   projectId: uuid("project_id")
@@ -440,11 +440,22 @@ export const scriptScenes = ps.table(
     estSeconds: integer("est_seconds").notNull(),
     characters: jsonb("characters").$type<{ name: string; blocks: number }[]>().notNull().default([]),
     notes: text("notes").notNull().default(""),
-    /** Post-production needs: short matched keywords and the user's notes only, never script sentences. */
-    postTags: jsonb("post_tags").$type<{ kind: "vfx" | "adr" | "musik" | "sound" | "grading" | "grafis" | "lainnya"; note: string; auto: boolean; keyword?: string; itemId?: string | null }[]>().notNull().default([]),
+    /** Post-production needs: matched keyword, the user's notes and a short excerpt (context) per kind. */
+    postTags: jsonb("post_tags").$type<{ kind: "vfx" | "adr" | "musik" | "sound" | "grading" | "grafis" | "lainnya"; note: string; auto: boolean; keyword?: string; excerpt?: string; itemId?: string | null }[]>().notNull().default([]),
   },
   (t) => [index("script_scenes_script_pos_idx").on(t.scriptId, t.position)],
 );
+
+/** The scene text in reading order. Kept apart from `script_scenes` so list queries never load it. */
+export const scriptSceneText = ps.table("script_scene_text", {
+  sceneId: uuid("scene_id")
+    .primaryKey()
+    .references(() => scriptScenes.id, { onDelete: "cascade" }),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  blocks: jsonb("blocks").$type<{ t: "action" | "cue" | "paren" | "dialogue" | "transition"; text: string; ext?: string }[]>().notNull(),
+});
 
 // ---------- calendar feed ----------
 

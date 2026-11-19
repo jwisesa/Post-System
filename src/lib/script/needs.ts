@@ -2,7 +2,7 @@ import { fmtDuration, TAG_KINDS, TAG_LABEL, type PostTag, type TagKind } from ".
 
 export type Phase = { id: string; name: string; startDate: string; dueDate: string; track?: string };
 export const phaseLabel = (p: Phase) => (p.track ? `${p.name} (${p.track})` : p.name);
-type NeedScene = { number: string; heading?: string; estSeconds: number; postTags: PostTag[] };
+type NeedScene = { id?: string; number: string; heading?: string; estSeconds: number; postTags: PostTag[] };
 
 export type KindNeed = { kind: TagKind; scenes: number; suggested: number; seconds: number; numbers: string[]; phases: Phase[]; unlinked: number };
 
@@ -22,7 +22,8 @@ export function postNeeds(scenes: NeedScene[], phases: Phase[]): KindNeed[] {
   });
 }
 
-export type PhaseNeed = { kind: TagKind; scenes: number; seconds: number; numbers: string[] };
+/** `items` = the first few scenes with their one-line excerpt, for the timeline drawer. */
+export type PhaseNeed = { kind: TagKind; scenes: number; seconds: number; numbers: string[]; items: { id: string; number: string; heading: string; excerpt: string }[] };
 
 /** "Adegan terkait" for the timeline drawer: tags linked to each phase. */
 export function needsByPhase(scenes: NeedScene[]): Record<string, PhaseNeed[]> {
@@ -30,15 +31,16 @@ export function needsByPhase(scenes: NeedScene[]): Record<string, PhaseNeed[]> {
   for (const s of scenes) for (const t of s.postTags) {
     if (!t.itemId) continue;
     const m = (out[t.itemId] ??= new Map());
-    const n = m.get(t.kind) ?? { kind: t.kind, scenes: 0, seconds: 0, numbers: [] };
+    const n = m.get(t.kind) ?? { kind: t.kind, scenes: 0, seconds: 0, numbers: [], items: [] };
     n.scenes++; n.seconds += s.estSeconds; n.numbers.push(s.number);
+    if (s.id && n.items.length < 5) n.items.push({ id: s.id, number: s.number, heading: s.heading ?? "", excerpt: (t.excerpt ?? "").slice(0, 160) });
     m.set(t.kind, n);
   }
   return Object.fromEntries(Object.entries(out).map(([id, m]) => [id, TAG_KINDS.flatMap((k) => m.get(k) ?? [])]));
 }
 
 
-/** CSV rows for `type=post`: one row per scene tag. Keyword and notes only; never script text. */
+/** CSV rows for `type=post`: one row per scene tag. Keyword and notes only; never script text or excerpts. */
 export function postCsvRows(scenes: (NeedScene & { heading: string })[], phases: Phase[]): string[][] {
   const name = new Map(phases.map((p) => [p.id, phaseLabel(p)]));
   return [

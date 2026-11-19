@@ -5,8 +5,8 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@electric-sql/pglite"],
   // Migrations are read from disk at runtime (src/db/client.ts), so they must ship with every server function.
   outputFileTracingIncludes: { "/*": ["./drizzle/**/*"] },
-  // Feedback imports can reach ~2 MB; the default Server Action limit is 1 MB.
-  experimental: { serverActions: { bodySizeLimit: "3mb" } },
+  // Feedback imports can reach ~2 MB; a script with up to 2.5 MB of text round-trips preview -> save as JSON (~3.2 MB worst case). Default is 1 MB.
+  experimental: { serverActions: { bodySizeLimit: "4mb" } },
   turbopack: {
     rules: {
       "*.css": {

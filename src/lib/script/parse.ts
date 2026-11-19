@@ -1,6 +1,6 @@
 import { InputError } from "../services";
 import { suggestTags } from "./tags";
-import { placeOf, REVISION_MARK, type ParsedCharacter, type ParsedScene, type PdfPage } from "./types";
+import { MAX_BLOCK_CHARS, MAX_TEXT_BYTES, placeOf, REVISION_MARK, textBytes, type Block, type BlockType, type ParsedCharacter, type ParsedScene, type PdfPage } from "./types";
 
 const LINES_PER_PAGE = 55;
 const SECONDS_PER_PAGE = 60;
@@ -118,6 +118,38 @@ const isTransition = (t: string) => isUpper(t) && t.length <= 30 && TRANSITION.t
 
 const OMITTED = /^(?:(\d+(?:-?[A-Z]{1,2})?)\s+)?OMITTED(?:\s+(\d+(?:-?[A-Z]{1,2})?))?$/i;
 
+// ---------- blocks (the scene text) ----------
+
+/** "(MORE)", "(CONT'D)", "CONTINUED:" alone on a line: page furniture, not content. */
+const CHROME = /^(?:\(?(?:CONTINUED|CONT['’]?D|LANJUT|BERSAMBUNG|MORE)\)?:?(?:\s*\(?\d{1,3}\)?)?|\d{1,3}\s+CONTINUED:?)$/i;
+const cleanText = (t: string) => t.replace(REVISION_MARK, " ").replace(/^\*+\s*|\s*\*+$/g, "").replace(/\s+/g, " ").trim();
+type BlockAcc = { blocks: Block[]; last?: { page: number; y: number } };
+
+/** Adds one classified line to the scene: wrapped lines of the same kind join into one paragraph (a blank line or another kind starts a new one). */
+function addBlock(a: BlockAcc, r: { page: number; y: number }, kind: string, raw: string, pitch: number) {
+  const text = cleanText(raw);
+  if (!text || CHROME.test(text) || (kind === "action" && /^\d{1,3}[.)]?$/.test(text))) return;
+  const t: BlockType = kind === "parenthetical" ? "paren" : (kind as BlockType);
+  const prev = a.blocks[a.blocks.length - 1];
+  const flows = !a.last || a.last.page !== r.page || a.last.y - r.y <= pitch * 1.5;
+  a.last = r;
+  if (t === "cue") {
+    const ext = cueExtension(text).replace(/\)\s*\(/g, ", ").replace(/[()]/g, "").trim();
+    a.blocks.push({ t, text: (normalizeCue(text) || text).slice(0, MAX_BLOCK_CHARS), ...(ext ? { ext } : {}) });
+  } else if (prev && prev.t === t && t !== "transition" && flows && (t !== "paren" || !prev.text.endsWith(")"))) prev.text = `${prev.text} ${text}`.slice(0, MAX_BLOCK_CHARS);
+  else a.blocks.push({ t, text: text.slice(0, MAX_BLOCK_CHARS) });
+}
+
+/** The first dialogue after each cue, in cue order (for the ADR excerpt). */
+function firstDialogues(blocks: Block[]): string[] {
+  const out: string[] = [];
+  let open = false;
+  for (const b of blocks) {
+    if (b.t === "cue") { out.push(""); open = true; } else if (open && b.t === "dialogue") { out[out.length - 1] = b.text; open = false; }
+  }
+  return out;
+}
+
 // ---------- layout ----------
 
 type Row = { page: number; y: number; x: number; text: string; head: Heading | null };
@@ -167,7 +199,7 @@ export function parseScreenplay(pages: PdfPage[]): { scenes: ParsedScene[]; page
   const pitch = pitches.sort((a, b) => a - b)[Math.floor(pitches.length * 0.4)] || 12;
   const frac = (r: Row) => Math.min(1, Math.max(0, (top - r.y) / (top - bottom || 1)));
 
-  type Acc = { head: Heading; rows: Row[]; blocks: Map<string, number>; lastSpeaker: string; lastKind: string; cues: string[] };
+  type Acc = { head: Heading; rows: Row[]; blocks: Map<string, number>; lastSpeaker: string; lastKind: string; cues: string[]; text: BlockAcc };
   const accs: Acc[] = [];
   let cur: Acc | undefined;
   let inDialogue = false;
@@ -178,7 +210,7 @@ export function parseScreenplay(pages: PdfPage[]): { scenes: ParsedScene[]; page
       continue;
     }
     if (r.head) {
-      cur = { head: r.head, rows: [r], blocks: new Map(), lastSpeaker: "", lastKind: "heading", cues: [] };
+      cur = { head: r.head, rows: [r], blocks: new Map(), lastSpeaker: "", lastKind: "heading", cues: [], text: { blocks: [] } };
       accs.push(cur);
       inDialogue = false;
       continue;
@@ -205,6 +237,7 @@ export function parseScreenplay(pages: PdfPage[]): { scenes: ParsedScene[]; page
     }
     if (kind === "transition" || kind === "action") inDialogue = false;
     cur!.lastKind = kind;
+    addBlock(cur!.text, r, kind, t, pitch);
   }
 
   const anyNumber = accs.some((a) => a.head.number);
@@ -221,9 +254,10 @@ export function parseScreenplay(pages: PdfPage[]): { scenes: ParsedScene[]; page
     const characters: ParsedCharacter[] = [...a.blocks].map(([name, blocks]) => ({ name, blocks }));
     return {
       position: i + 1, number: h.number || String(i + 1), heading: h.heading.slice(0, 200), intExt: h.intExt, location: h.location, place: h.place, timeOfDay: h.timeOfDay,
-      pageStart: ps, pageEnd: pe, lines, estSeconds: Math.round((lines / LINES_PER_PAGE) * SECONDS_PER_PAGE), characters, postTags: suggestTags(a.rows.map((r) => r.text), a.cues),
+      pageStart: ps, pageEnd: pe, lines, estSeconds: Math.round((lines / LINES_PER_PAGE) * SECONDS_PER_PAGE), characters, postTags: suggestTags([a.rows[0].text, ...a.text.blocks.map((b) => b.text)], a.cues, firstDialogues(a.text.blocks)), blocks: a.text.blocks,
     };
   });
+  if (scenes.reduce((n, x) => n + textBytes(x.blocks), 0) > MAX_TEXT_BYTES) throw new InputError("Teks naskah lebih dari 2,5 MB, terlalu besar untuk disimpan. Periksa apakah PDF berisi teks berulang.");
   const noNumber = anyNumber ? accs.filter((a) => !a.head.number).length : 0;
   if (noNumber) warnings.push(`${noNumber} adegan tanpa nomor diberi nomor urut otomatis.`);
   const dup = scenes.find((s, i) => scenes.findIndex((x) => x.number === s.number) !== i);

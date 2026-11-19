@@ -3,12 +3,13 @@ import { can } from "@/lib/auth/permissions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { extractPages, MAX_BYTES } from "@/lib/script/extract";
 import { parseScreenplay } from "@/lib/script/parse";
+import { textBytes } from "@/lib/script/types";
 import { aggregate } from "@/lib/script/aggregate";
 import { getProjectForUser, InputError } from "@/lib/services";
 
 const json = (body: object, status = 200) => Response.json(body, { status });
 
-/** Reads the PDF in memory, returns the parsed structure as a preview. Nothing is stored, and the file is never written to disk. */
+/** Reads the PDF in memory, returns the parsed scenes and text as a preview. Nothing is stored here, and the PDF is never written to disk. */
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
   const user = await getCurrentUser();
@@ -24,7 +25,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     const agg = aggregate(scenes, pages);
     return json({
       title: file.name.replace(/\.pdf$/i, "").slice(0, 200), sourceName: file.name.slice(0, 200), pages, scenes, warnings,
-      summary: { scenes: scenes.length, characters: agg.characters.length, locations: agg.locations.length, seconds: agg.totalSeconds, topCharacters: agg.characters.slice(0, 5).map((c) => c.name) },
+      summary: { scenes: scenes.length, characters: agg.characters.length, locations: agg.locations.length, seconds: agg.totalSeconds, textBytes: scenes.reduce((n, x) => n + textBytes(x.blocks), 0), topCharacters: agg.characters.slice(0, 5).map((c) => c.name) },
     });
   } catch (e) {
     if (e instanceof InputError) return json({ error: e.message }, 400);

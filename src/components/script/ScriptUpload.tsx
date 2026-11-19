@@ -5,10 +5,10 @@ import { useRef, useState } from "react";
 import { saveScript } from "@/app/admin/script-actions";
 import { Icon } from "@/components/ui/icons";
 import { tagCounts } from "@/lib/script/tags";
-import { fmtDuration, TAG_LABEL, type ParsedScene } from "@/lib/script/types";
+import { fmtBytes, fmtDuration, TAG_LABEL, type ParsedScene } from "@/lib/script/types";
 import { useToast } from "../ui/toast";
 
-type Preview = { title: string; sourceName: string; pages: number; scenes: ParsedScene[]; warnings: string[]; summary: { scenes: number; characters: number; locations: number; seconds: number; topCharacters: string[] } };
+type Preview = { title: string; sourceName: string; pages: number; scenes: ParsedScene[]; warnings: string[]; summary: { textBytes: number; scenes: number; characters: number; locations: number; seconds: number; topCharacters: string[] } };
 
 export function ScriptUpload({ slug }: { slug: string }) {
   const toast = useToast();
@@ -42,7 +42,7 @@ export function ScriptUpload({ slug }: { slug: string }) {
   async function save() {
     if (!preview) return;
     setBusy(true);
-    const { title, sourceName, pages, scenes } = preview;
+    const { title, sourceName, pages, scenes } = preview; // scenes carry their text blocks
     const r = await saveScript(slug, { title, sourceName, pages, scenes });
     setBusy(false);
     if (!r.ok) return setError(r.error);
@@ -69,7 +69,7 @@ export function ScriptUpload({ slug }: { slug: string }) {
           </span>
           <input ref={input} id="script-file" className="sr-only" type="file" accept="application/pdf,.pdf" disabled={busy} onChange={(e) => load(e.target.files?.[0])} />
         </label>
-        <span className="field-hint">Hanya struktur adegan yang disimpan, bukan isi naskah. File PDF tidak disimpan.</span>
+        <span className="field-hint">Teks naskah disimpan dan hanya terlihat oleh anggota project; tidak tampil di link view-only atau link reviewer. File PDF-nya sendiri tidak disimpan.</span>
       </div>
       {busy && !preview && <p className="muted text-sm">Membaca naskah…</p>}
       {error && <p className="tag tag-danger">{error}</p>}
@@ -77,7 +77,7 @@ export function ScriptUpload({ slug }: { slug: string }) {
         <div className="space-y-3">
           <h3 className="section-band">Pratinjau: {preview.title}</h3>
           <p className="text-sm tabular-nums">
-            {preview.summary.scenes} adegan · {preview.pages} halaman · perkiraan {fmtDuration(preview.summary.seconds)} · {preview.summary.characters} tokoh · {preview.summary.locations} lokasi
+            {preview.summary.scenes} adegan · {preview.pages} halaman · perkiraan {fmtDuration(preview.summary.seconds)} · {preview.summary.characters} tokoh · {preview.summary.locations} lokasi · teks ± {fmtBytes(preview.summary.textBytes)}
           </p>
           {preview.summary.topCharacters.length > 0 && <p className="muted text-sm">Tokoh utama: {preview.summary.topCharacters.join(", ")}</p>}
           {tagCounts(preview.scenes).length > 0 && (

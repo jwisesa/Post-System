@@ -10,7 +10,8 @@ import { cueNames, detectLayout, normalizeCue, parseHeading, parseScreenplay } f
 import * as sc from "@/lib/script/service";
 import { needsByPhase, postCsvRows, postNeeds } from "@/lib/script/needs";
 import { defaultPhase, suggestTags } from "@/lib/script/tags";
-import { placeOf, type PdfPage } from "@/lib/script/types";
+import { MAX_TEXT_BYTES, placeOf, textBytes, type PdfPage } from "@/lib/script/types";
+import * as rv from "@/lib/review/service";
 import * as sched from "@/lib/schedule/service";
 import * as s from "@/lib/services";
 
@@ -222,6 +223,8 @@ describe("fixture PDFs", () => {
     for (let n = 1; n <= max; n++) expect(printed.has(n) || omitted.has(String(n))).toBe(true);
     expect(scenes.flatMap((x) => x.characters).some((c) => c.name.includes("*"))).toBe(false);
     expect(scenes.every((x) => x.location)).toBe(true);
+    expect(scenes.some((x) => x.blocks.length > 0)).toBe(true);
+    expect(scenes.flatMap((x) => x.blocks).some((b) => b.text.includes("*"))).toBe(false);
   });
   it("rejects a non-screenplay PDF, garbage bytes and oversize files", async () => {
     expect(() => parseScreenplay([])).toThrow(/Naskah tidak dikenali/);
@@ -309,6 +312,7 @@ describe("script service", () => {
     expect(data).not.toBeNull();
     expect(Object.keys(data!).filter((k) => /script|scene|naskah/i.test(k))).toEqual([]);
     expect(JSON.stringify(data)).not.toContain("JALAN RAYA");
+    expect(JSON.stringify(data)).not.toMatch(/excerpt|blocks/);
   });
 });
 
@@ -338,9 +342,8 @@ describe("suggestTags", () => {
     const tags = suggestTags(["Ledakan pertama.", "LEDAKAN kedua dan VFX lain, sebuah kalimat panjang yang tidak boleh disimpan."], ["BUDI (V.O.)", "SARI (OFF)"]);
     expect(tags.map((t) => t.kind)).toEqual(["vfx", "adr"]);
     expect(tags[0]).toMatchObject({ keyword: "LEDAKAN", auto: true, note: "" });
-    const json = JSON.stringify(tags);
-    expect(json).not.toContain("kalimat");
-    expect(json).not.toContain("pertama");
+    expect(tags[0].excerpt).toBe("Ledakan pertama."); // the sentence of the first match, nothing else
+    expect(JSON.stringify(tags)).not.toContain("kalimat");
   });
   it("is wired into the parser", () => {
     const rows: [string, number][] = [["INT. RUMAH - SIANG", 108], ["Ledakan mengguncang rumah.", 108], ["BUDI (V.O.)", 266], ["Halo.", 180]];
@@ -388,7 +391,7 @@ describe("post tags service", () => {
     expect(tagged.length).toBeGreaterThan(0);
     for (const x of tagged) for (const t of x.postTags) {
       expect(t.auto).toBe(true);
-      expect(JSON.stringify(t).length).toBeLessThan(160); // keyword, no sentences
+      expect(JSON.stringify(t).length).toBeLessThan(160 + 260); // keyword plus one short excerpt
       if (t.kind === "vfx") expect(t.itemId).toBe(vfxPhase);
       if (t.kind === "grading") expect(t.itemId).toBe(gradePhase);
       if (t.kind === "sound" || t.kind === "adr") expect(t.itemId).toBe(soundPhase);
@@ -442,7 +445,7 @@ describe("post tags service", () => {
     const grafis = needs.find((n) => n.kind === "grafis")!;
     expect(grafis.phases.map((p) => p.name)).toEqual(["VFX"]); // /vfx|graphic|grafis|online/ fits one phase only
     const by = needsByPhase(all);
-    expect(by[soundPhase].find((n) => n.kind === "musik")).toEqual({ kind: "musik", scenes: 1, seconds: all[0].estSeconds, numbers: [all[0].number] }); // only the scene linked by hand; other musik tags have no phase
+    expect(by[soundPhase].find((n) => n.kind === "musik")).toMatchObject({ kind: "musik", scenes: 1, seconds: all[0].estSeconds, numbers: [all[0].number] }); // only the scene linked by hand; other musik tags have no phase
     expect(musik.unlinked).toBe(musik.scenes - 1);
     expect((await sc.getPhaseNeeds(db, projectId))!.byPhase[soundPhase]).toEqual(by[soundPhase]);
     expect(postNeeds([{ number: "1", estSeconds: 10, postTags: [{ kind: "vfx", note: "", auto: false, itemId: "gone" }] }], phases)[0]).toMatchObject({ unlinked: 1, phases: [] });
@@ -463,5 +466,132 @@ describe("post tags service", () => {
     for (const w of ["postTags", "LEDAKAN", "teks layar", "lagu tema"]) expect(text).not.toContain(w);
     const p2 = (await s.createProject(db, sup, { name: "Kosong", productionType: "feature_theatrical", platforms: ["Bioskop"], unitCount: null })).id;
     expect(await sc.getPhaseNeeds(db, p2)).toBeNull();
+  });
+});
+
+describe("script text blocks", () => {
+  const rows: [string, number][] = [
+    ["INT. RUMAH - SIANG", 108], ["Budi duduk di kursi dan menatap", 108], ["jendela yang berembun.", 108], ["(MORE)", 400],
+    ["BUDI (V.O.)", 266], ["Halo, apa kabar", 180], ["kamu hari ini?", 180], ["SARI", 266], ["(pelan)", 223], ["Baik.", 180], ["CUT TO:", 480],
+    ["EXT. JALAN - MALAM", 108], ["Hujan * turun.", 108],
+  ];
+  const parsed = () => parseScreenplay([{ page: 1, height: 792, lines: [...rows.map(([t, x], i) => line(700 - i * 12, x, t)), { ...line(790, 500, "12."), skip: true }] }]);
+  it("merges wrapped lines, types each block and drops page furniture, revision marks and the heading", () => {
+    const [a, b] = parsed().scenes.map((x) => x.blocks);
+    expect(a).toEqual([
+      { t: "action", text: "Budi duduk di kursi dan menatap jendela yang berembun." },
+      { t: "cue", text: "BUDI", ext: "V.O." },
+      { t: "dialogue", text: "Halo, apa kabar kamu hari ini?" },
+      { t: "cue", text: "SARI" },
+      { t: "paren", text: "(pelan)" },
+      { t: "dialogue", text: "Baik." },
+      { t: "transition", text: "CUT TO:" },
+    ]);
+    expect(b).toEqual([{ t: "action", text: "Hujan turun." }]);
+    expect(JSON.stringify([a, b])).not.toMatch(/MORE|\*|INT\.|12\./);
+  });
+  it("truncates a block at 20k chars and rejects a script over 2.5 MB", () => {
+    const long = Array.from({ length: 30 }, () => "x".repeat(1000));
+    const one = parseScreenplay(synth([["INT. A - DAY", 108], ...long.map((t): [string, number] => [t, 108])]));
+    expect(one.scenes[0].blocks[0].text).toHaveLength(20000);
+    const big: [string, number][] = Array.from({ length: 140 }, () => [["INT. A - DAY", 108] as [string, number], ...long.slice(0, 25).map((t): [string, number] => [t, 108])]).flat();
+    expect(() => parseScreenplay(synth(big))).toThrow(/2,5 MB/);
+    expect(textBytes([{ t: "action", text: "é" }])).toBe(2);
+    expect(MAX_TEXT_BYTES).toBe(2.5 * 1024 * 1024);
+  });
+  it("gives excerpts: the sentence with the keyword (max 240) and cue + extension + 120 chars of dialogue for ADR", () => {
+    const t = suggestTags(["Sepi. Lalu terjadi ledakan besar di gudang. Semua lari."]);
+    expect(t[0].excerpt).toBe("Lalu terjadi ledakan besar di gudang.");
+    const long = suggestTags([`${"a ".repeat(200)}ledakan${" b".repeat(200)}`])[0].excerpt!;
+    expect(long.length).toBeLessThanOrEqual(240);
+    expect(long).toContain("ledakan");
+    const adr = suggestTags([], ["BUDI (V.O.)"], ["z".repeat(300)])[0];
+    expect(adr.excerpt).toBe(`BUDI (V.O.): ${"z".repeat(120)}`);
+    expect(parsed().scenes[0].postTags.find((x) => x.kind === "adr")?.excerpt).toBe("BUDI (V.O.): Halo, apa kabar kamu hari ini?");
+  });
+});
+
+describe("script text service", () => {
+  let db: Db, sup: string, asst: string, outsider: string, projectId: string, scriptId: string;
+  const textInput = async () => {
+    const { scenes, pages } = parseScreenplay(await extractPages(pdf("sample-letter")));
+    return { title: "Teks", sourceName: "a.pdf", pages, scenes };
+  };
+  beforeAll(async () => {
+    db = await createPgliteDb();
+    sup = (await s.createUser(db, { name: "Sup", email: "sup3@x.id", password: "password1" })).id;
+    outsider = (await s.createUser(db, { name: "Out", email: "out3@x.id", password: "password1" })).id;
+    projectId = (await s.createProject(db, sup, { name: "Film", productionType: "feature_theatrical", platforms: ["Bioskop"], unitCount: null })).id;
+    await s.addMember(db, sup, projectId, { email: "asst3@x.id", role: "assistant", name: "Asst", password: "password1" });
+    asst = (await s.listMembers(db, projectId)).find((m) => m.role === "assistant")!.userId;
+    scriptId = (await sc.importScript(db, sup, projectId, await textInput())).scriptId;
+  });
+
+  it("saves text with the scenes; members read it, outsiders and other projects get nothing", async () => {
+    const data = (await sc.getScript(db, projectId, scriptId))!;
+    expect(data.textIds.length).toBeGreaterThan(20);
+    expect(JSON.stringify(data.scenes)).not.toContain('"t":"action"'); // list queries never carry text
+    const blocks = (await sc.getSceneText(db, projectId, data.scenes[0].id))!;
+    expect(blocks.length).toBeGreaterThan(0);
+    expect(await s.getRole(db, asst, projectId)).toBe("assistant");
+    expect(await s.getRole(db, outsider, projectId)).toBeNull();
+    expect(await sc.getSceneText(db, "00000000-0000-0000-0000-000000000000", data.scenes[0].id)).toBeNull();
+    expect(await sc.getSceneText(db, projectId, "nope")).toBeNull();
+    const two = await sc.getScenesText(db, projectId, scriptId, data.scenes.slice(0, 2).map((x) => x.id));
+    expect(Object.keys(two)).toHaveLength(2);
+    const log = (await s.listActivity(db, projectId)).filter((a) => a.entry.entity === "script");
+    expect(log).toHaveLength(1);
+  });
+  it("searches case-insensitively with a 200 hit cap", async () => {
+    const [first] = (await sc.getScript(db, projectId, scriptId))!.scenes;
+    const word = (await sc.getSceneText(db, projectId, first.id))!.find((b) => b.t === "action")!.text.split(" ").find((w) => w.length > 4)!;
+    const hits = await sc.searchScript(db, projectId, scriptId, word.toUpperCase());
+    expect(hits[0].sceneId).toBe(first.id);
+    expect(hits[0].matches[0].hit.toLowerCase()).toBe(word.toLowerCase());
+    expect(await sc.searchScript(db, projectId, scriptId, "a")).toEqual([]);
+    expect((await sc.searchScript(db, projectId, scriptId, "  ")).length).toBe(0);
+    expect((await sc.searchScript(db, projectId, scriptId, "an")).flatMap((h) => h.matches).length).toBeLessThanOrEqual(200);
+  });
+  it("tags from a selection: supervisor only, 500 chars, confirmed, with the excerpt", async () => {
+    const [first] = (await sc.getScript(db, projectId, scriptId))!.scenes;
+    await expect(sc.addTagFromSelection(db, asst, projectId, first.id, "vfx", "x")).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(sc.addTagFromSelection(db, sup, projectId, first.id, "vfx", "   ")).rejects.toBeInstanceOf(s.InputError);
+    await expect(sc.addTagFromSelection(db, sup, projectId, first.id, "bogus", "x")).rejects.toBeInstanceOf(s.InputError);
+    await sc.addTagFromSelection(db, sup, projectId, first.id, "vfx", `  teks  \n terpilih ${"y".repeat(600)}`, "cek");
+    const tag = (await sc.getScript(db, projectId, scriptId))!.scenes[0].postTags.find((t) => t.kind === "vfx")!;
+    expect(tag).toMatchObject({ auto: false, note: "cek" });
+    expect(tag.excerpt).toHaveLength(500);
+    expect(tag.excerpt!.startsWith("teks terpilih")).toBe(true);
+  });
+  it("only supervisors save text or purge; purge clears text and excerpts but keeps scenes and tags", async () => {
+    await expect(sc.purgeScriptText(db, asst, projectId, scriptId)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(sc.importScript(db, asst, projectId, await textInput())).rejects.toBeInstanceOf(ForbiddenError);
+    const before = (await sc.getScript(db, projectId, scriptId))!;
+    const tagged = before.scenes.filter((x) => x.postTags.length).length;
+    expect(before.scenes.some((x) => x.postTags.some((t) => t.excerpt))).toBe(true);
+    await sc.purgeScriptText(db, sup, projectId, scriptId);
+    const after = (await sc.getScript(db, projectId, scriptId))!;
+    expect(after.textIds).toEqual([]);
+    expect(after.scenes).toHaveLength(before.scenes.length);
+    expect(after.scenes.filter((x) => x.postTags.length)).toHaveLength(tagged);
+    expect(after.scenes.some((x) => x.postTags.some((t) => t.excerpt))).toBe(false);
+    expect(await sc.getSceneText(db, projectId, before.scenes[0].id)).toBeNull();
+    expect((await s.listActivity(db, projectId)).some((a) => /Menghapus teks naskah/.test(a.entry.summary))).toBe(true);
+  });
+  it("never lets text or excerpts reach view-only or reviewer data", async () => {
+    const id = (await sc.importScript(db, sup, projectId, await textInput())).scriptId;
+    const first = (await sc.getScript(db, projectId, id))!.scenes[0];
+    await sc.addTagFromSelection(db, sup, projectId, first.id, "musik", "KUTIPAN-RAHASIA-XYZ");
+    const secret = (await sc.getSceneText(db, projectId, first.id))![0].text;
+    const { token } = await s.createShareLink(db, sup, projectId, "Klien");
+    const text = JSON.stringify(await s.getViewerData(db, token));
+    for (const w of ["KUTIPAN-RAHASIA-XYZ", secret, "excerpt", '"blocks"']) expect(text).not.toContain(w);
+    await sched.addTrack(db, sup, projectId, { name: "Post", template: "empty", startDate: "2026-03-02" });
+    const track = (await sched.getSchedule(db, projectId, { includeInternal: true })).tracks[0];
+    await sched.addItem(db, sup, projectId, { trackId: track.id, parentId: null, name: "VFX", startDate: "2026-04-01", dueDate: "2026-04-20" });
+    const item = (await sched.getSchedule(db, projectId, { includeInternal: true })).tracks[0].items[0].id;
+    const link = await rv.createReviewerLink(db, sup, projectId, { name: "Rev", role: "Klien", itemIds: [item] });
+    const review = JSON.stringify(await rv.getReviewerData(db, link.token));
+    for (const w of ["KUTIPAN-RAHASIA-XYZ", secret, "excerpt", '"blocks"']) expect(review).not.toContain(w);
   });
 });

@@ -5,7 +5,7 @@ import { can } from "@/lib/auth/permissions";
 import { loadProject } from "@/lib/project-context";
 import { getScript, listPhases, listScripts } from "@/lib/script/service";
 
-export default async function ScriptPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ script?: string; new?: string; tag?: string }> }) {
+export default async function ScriptPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ script?: string; new?: string; tag?: string; scene?: string }> }) {
   const { slug } = await params;
   const q = await searchParams;
   const { db, project, role } = await loadProject(slug);
@@ -19,7 +19,7 @@ export default async function ScriptPage({ params, searchParams }: { params: Pro
     <div className="mx-auto max-w-[1240px] space-y-8">
       <div>
         <h1 className="page-title">Naskah</h1>
-        <p className="page-meta">Breakdown naskah dari PDF: daftar adegan dengan perkiraan durasi, tokoh, lokasi, dan export CSV. Hanya struktur adegan yang disimpan, bukan isi naskah.</p>
+        <p className="page-meta">Breakdown naskah dari PDF: daftar adegan dengan perkiraan durasi, tokoh, lokasi, dan export CSV. Teks naskah disimpan dan hanya terlihat oleh anggota project; tidak tampil di link view-only atau link reviewer. File PDF-nya sendiri tidak disimpan.</p>
       </div>
       {list.length > 0 && (
         <nav aria-label="Versi naskah" className="flex flex-wrap items-center gap-3">
@@ -30,7 +30,7 @@ export default async function ScriptPage({ params, searchParams }: { params: Pro
         </nav>
       )}
       {canEdit && (wantNew || list.length === 0) && <ScriptUpload slug={slug} />}
-      {!canEdit && list.length === 0 && <p className="muted text-sm">Belum ada naskah. Supervisor dapat mengunggah PDF naskah. Hanya struktur adegan yang disimpan, bukan isi naskah.</p>}
+      {!canEdit && list.length === 0 && <p className="muted text-sm">Belum ada naskah. Supervisor dapat mengunggah PDF naskah. Teks naskah disimpan dan hanya terlihat oleh anggota project; tidak tampil di link view-only atau link reviewer. File PDF-nya sendiri tidak disimpan.</p>}
       {current && (
         <ScriptView
           slug={slug}
@@ -40,6 +40,8 @@ export default async function ScriptPage({ params, searchParams }: { params: Pro
           agg={current.aggregate}
           phases={phases}
           initialTag={q.tag ?? ""}
+          initialScene={q.scene ?? ""}
+          textIds={current.textIds}
         />
       )}
     </div>
