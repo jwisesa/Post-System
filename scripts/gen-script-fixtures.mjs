@@ -51,16 +51,32 @@ const TINY = [
   S("INT. RUMAH RAHMAT - MALAM", ["A", "Rahmat membuka pintu. Ani menyerahkan paket."], ["C", "RAHMAT"], ["P", "(terkejut)"], ["D", "Kau datang juga."], ["C", "ANI"], ["D", "Alamatnya sudah benar."]),
 ];
 
+// Mimics a Final Draft export: scene numbers on both margins, a "*" revision mark at the right margin (trailing " *"), group cues, modifiers,
+// an OMITTED scene, a running header and a CONFIDENTIAL watermark on every page. Every scene starts a page and the watermark sits on the
+// heading baseline, so it merges into the heading text unless the parser drops repeating items.
+const REAL = [
+  S("1 EXT. DERMAGA TUA - SORE", ["A", "Perahu kayu bersandar. JOKO (35) memanggul jaring ke bahunya."], ["C", "JOKO"], ["D", "Air pasang lebih cepat dari biasanya."], ["T", "CUT TO:"]),
+  S("2 INT. WARUNG MBOK RANI - MALAM", ["A", "Lampu minyak bergoyang. SITI (30) menuang teh ke gelas seng."], ["C", "JOKO, SITI *"], ["D", "Kami berangkat sebelum fajar."], ["C", "SUPER"], ["D", "Tiga hari sebelum badai."], ["C", "TITLE IN : MBOK RANI"], ["D", "Ati-ati di laut."]),
+  S("3 INT. WARUNG MBOK RANI - MALAM MOMENTS LATER *", ["A", "Gelas kosong. Siti membereskan meja."], ["C", "SITI"], ["D", "Pulanglah dengan selamat."]),
+  S("4 OMITTED"),
+  S("5 EXT. DERMAGA TUA - ANOTHER ANGLE", ["A", "Dari ujung dermaga, perahu Joko tampak kecil, dan jaring di bahunya bergoyang diterpa angin laut yang dingin. Gelombang menampar tiang dermaga berkali-kali, berirama seperti jantung."], ["C", "JOKO *"], ["P", "(berteriak)"], ["D", "Tunggu aku!"]),
+  S("6 INT. KAPAL IKAN - SUBUH", ["A", "Mesin menderu. Joko menarik tali jangkar sampai telapak tangannya memerah dan tali basah itu berdecit di roda besi."], ["A", "Dek licin. Satu lampu menyala."], ["C", "JOKO"], ["D", "Sudah siap semua."], ["C", "SITI & MBOK RANI"], ["D", "Selamat jalan."]),
+  S("7 EXT. LAUT LEPAS - CONTINUOUS", ["A", "Ombak memecah di haluan. Matahari belum terbit, langit masih kelabu dan dingin, buih putih menyapu geladak, dan burung camar tidak terlihat di mana pun."], ["A", "Hening."], ["A", "Hanya mesin."], ["C", "JOKO (V.O.)"], ["D", "Laut tidak pernah berjanji apa-apa."]),
+  S("8 EXT. LAUT LEPAS - SAME", ["A", "Awan menggumpal di cakrawala. Angin berbalik."]),
+];
+
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-function html(scenes, L, title) {
+function html(scenes, L, title, real = false) {
+  const star = (t) => (t.endsWith(" *") ? [esc(t.slice(0, -2)), '<span class="star">*</span>'] : [esc(t), ""]);
   const body = [];
   for (const s of scenes) {
     const m = /^(\d+[A-Z]?) (.*)$/.exec(s.h);
     const [num, text] = m ? [m[1], m[2]] : ["", s.h];
-    body.push(`<div class="h">${num ? `<span class="nl">${num}</span>` : ""}${esc(text)}${num ? `<span class="nr">${num}</span>` : ""}</div>`);
+    const [ht, hs] = star(text);
+    body.push(`<div class="h">${num ? `<span class="nl">${num}</span>` : ""}${ht}${num ? `<span class="nr">${num}</span>` : ""}${hs}</div>`);
     let grp = "";
     for (const [k, t] of s.rest) {
-      if (k === "C") grp = `<div class="g"><p class="c">${esc(t)}</p>`;
+      if (k === "C") grp = `<div class="g"><p class="c">${star(t).join("")}</p>`;
       else if (k === "P") grp += `<p class="p">${esc(t)}</p>`;
       else if (k === "D") { body.push(grp + `<p class="d">${esc(t)}</p></div>`); grp = ""; }
       else body.push(`<p class="${k === "T" ? "tr" : "a"}">${esc(t)}</p>`);
@@ -76,16 +92,20 @@ body{margin:0;font:12pt/12pt "Courier New",Courier,monospace}p,div{margin:0}
 .a{margin:0 0 12pt ${L.a};width:${L.aw}}.g{margin-bottom:12pt;break-inside:avoid}
 .c{margin-left:${L.c}}.p{margin-left:${L.p}}.d{margin-left:${L.d};width:3.5in}
 .tr{margin:0 0 12pt ${L.a};width:${L.aw};text-align:right}
-</style><div class="ttl">${title}<br><br>oleh<br>Penulis Fiktif</div>${body.join("\n")}`;
+.star{position:absolute;left:7.3in}.h .star{left:auto;right:-0.9in}
+${real ? `@page{@top-center{content:"TEPI KOTA Screenplay Draft Enam Maret";font:9pt Courier}}
+.h{break-before:page;width:${L.aw}}.wm{position:fixed;top:0;left:0.55in;color:#bbb;font:bold 12pt/12pt Courier}` : ""}
+</style>${real ? '<div class="wm">CONFIDENTIAL</div>' : ""}<div class="ttl">${title}<br><br>oleh<br>Penulis Fiktif</div>${body.join("\n")}`;
 }
-const build = (name, scenes, L, title) => {
+const build = (name, scenes, L, title, real) => {
   const dir = mkdtempSync(join(tmpdir(), "script-"));
   const f = join(dir, `${name}.html`);
-  writeFileSync(f, html(scenes, L, title));
+  writeFileSync(f, html(scenes, L, title, real));
   execFileSync(CHROME, ["--headless=new", "--disable-gpu", "--no-pdf-header-footer", `--print-to-pdf=${out}${name}.pdf`, `file://${f}`], { stdio: "inherit" });
 };
 build("sample-letter", FULL, { w: "8.5in", h: "11in", a: "1.5in", aw: "6in", c: "3.7in", p: "3.1in", d: "2.5in" }, "TEPI KOTA");
 build("sample-a4", TINY, { w: "8.27in", h: "11.69in", a: "1.25in", aw: "5.9in", c: "3.5in", p: "2.9in", d: "2.25in" }, "SURAT TERLAMBAT");
+build("sample-real-like", REAL, { w: "8.5in", h: "11in", a: "1.5in", aw: "6in", c: "3.7in", p: "3.1in", d: "2.5in" }, "TEPI KOTA", true);
 // Not a screenplay: meeting notes, must be rejected by the parser.
 const NOTES = [S("Catatan rapat produksi", ["A", "Peserta membahas jadwal editing, anggaran musik, dan pengiriman materi ke studio. Tidak ada keputusan akhir pekan ini."]), S("Tindak lanjut", ["A", "Tim keuangan mengirim revisi anggaran sebelum hari Jumat. Semua pihak diminta memeriksa kembali daftar penerima."])];
 build("not-a-script", NOTES, { w: "8.5in", h: "11in", a: "1.5in", aw: "6in", c: "3.7in", p: "3.1in", d: "2.5in" }, "NOTULEN");

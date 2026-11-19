@@ -1,6 +1,6 @@
 import { InputError } from "../services";
 import { suggestTags } from "./tags";
-import { placeOf, type ParsedCharacter, type ParsedScene, type PdfPage } from "./types";
+import { placeOf, REVISION_MARK, type ParsedCharacter, type ParsedScene, type PdfPage } from "./types";
 
 const LINES_PER_PAGE = 55;
 const SECONDS_PER_PAGE = 60;
@@ -20,10 +20,21 @@ const TIME_AT_END = new RegExp(String.raw`^(.*?)(?:\s*[-–—.,/]+\s*|\s+)(${TI
 const BARE_TIME = new RegExp(String.raw`^(${TIME_PHRASE})(?:\s*\([^)]*\))?$`, "i");
 
 const IE = String.raw`(?:INT|DLM|DALAM)\.?\s*[/.\-]\s*(?:EXT|EKS|LUAR)\.?|(?:EXT|EKS|LUAR)\.?\s*[/.\-]\s*(?:INT|DLM|DALAM)\.?|I\s*/\s*E\.?|INT|EXT|EKS|DLM|DALAM|LUAR`;
-const HEAD = new RegExp(String.raw`^(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?(?:(\d+[A-Z]{0,2})\s*[.:)\-–]?\s+)?(${IE})(?=[\s.\-–—]|$)\.?\s*(.*)$`, "i");
-const LEAD = /^(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?\d+[A-Z]{0,2}\s*[.:)\-–]?\s+/i;
-const TRAIL = /\s+(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?\d+[A-Z]{0,2}\.?$/i;
-const TRAIL_NUM = /^(.*\S)\s+(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?(\d+[A-Z]{0,2})\.?$/i;
+const HEAD = new RegExp(String.raw`^(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?(?:(\d+(?:-?[A-Z]{1,2})?)\s*[.:)\-–]?\s+)?(${IE})(?=[\s.\-–—]|$)\.?\s*(.*)$`, "i");
+// Scene modifiers: split off the location; the time of day is inherited from the previous scene when none is given.
+const MOD = String.raw`(?:BEBERAPA SAAT KEMUDIAN|SEDETIK KEMUDIAN|MOMENTS? LATER|ANOTHER ANGLE|SUDUT LAIN|SAME TIME|CONTINUOUS|MEANWHILE|LANJUTAN|LATER|SAMA|SAME)`;
+const MOD_END = new RegExp(String.raw`^(.*?)(?:\s*[-–—.,/]+\s*|\s+|^)(${MOD})\s*$`, "i");
+function peel(s: string): { s: string; mod: boolean } {
+  let mod = false, m: RegExpExecArray | null;
+  while ((m = MOD_END.exec(s))) {
+    s = m[1].trim();
+    mod = true;
+  }
+  return { s, mod };
+}
+const LEAD = /^(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?\d+(?:-?[A-Z]{1,2})?\s*[.:)\-–]?\s+/i;
+const TRAIL = /\s+(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?\d+(?:-?[A-Z]{1,2})?\.?$/i;
+const TRAIL_NUM = /^(.*\S)\s+(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?(\d+(?:-?[A-Z]{1,2})?)\.?$/i;
 
 function intExt(prefix: string): string {
   const p = prefix.toUpperCase().replace(/\s+/g, "");
@@ -40,11 +51,11 @@ const normTime = (phrase: string) => {
   return "LAINNYA";
 };
 
-export type Heading = { heading: string; number: string; intExt: string; location: string; place: string; timeOfDay: string };
+export type Heading = { heading: string; number: string; intExt: string; location: string; place: string; timeOfDay: string; /** Ends in a modifier such as MOMENTS LATER / ANOTHER ANGLE / CONTINUOUS. */ modifier: boolean };
 
 /** Parses one line as a scene heading (English or Indonesian), or returns null. */
 export function parseHeading(raw: string): Heading | null {
-  const line = raw.replace(/\s+/g, " ").trim();
+  const line = raw.replace(REVISION_MARK, " ").replace(/\s+/g, " ").trim();
   const m = HEAD.exec(line);
   if (!m) return null;
   const [, lead, prefix] = m;
@@ -58,12 +69,14 @@ export function parseHeading(raw: string): Heading | null {
   // The heading as shown keeps INT/EXT, location and time, without the scene numbers printed in the margins.
   let heading = lead ? line.replace(LEAD, "") : line;
   const tn = TRAIL_NUM.exec(rest);
-  if (tn && (number ? tn[2].toUpperCase() === number.toUpperCase() : TIME_AT_END.test(tn[1]))) {
+  if (tn && (number ? tn[2].toUpperCase() === number.toUpperCase() : TIME_AT_END.test(tn[1]) || peel(tn[1]).mod)) {
     number = number || tn[2];
     rest = tn[1].trim();
     heading = heading.replace(TRAIL, "");
   }
   let timeOfDay = "";
+  const pm = peel(rest);
+  rest = pm.s;
   let location = rest;
   const t = TIME_AT_END.exec(rest);
   if (t) {
@@ -73,8 +86,9 @@ export function parseHeading(raw: string): Heading | null {
     location = "";
     timeOfDay = normTime(rest);
   }
+  if (pm.mod && !timeOfDay) timeOfDay = "LAINNYA";
   location = location.replace(/[\s\-–—.,/]+$/, "").replace(/^[\s\-–—.,/]+/, "").replace(/\s+/g, " ").toUpperCase();
-  return { heading, number: number.toUpperCase(), intExt: intExt(prefix), location, place: placeOf(location), timeOfDay };
+  return { heading, number: number.toUpperCase(), intExt: intExt(prefix), location, place: placeOf(location), timeOfDay, modifier: pm.mod };
 }
 
 // ---------- cues ----------
@@ -83,14 +97,26 @@ const EXT_GROUPS = /\([^)]*\)/g;
 
 /** "BUDI (V.O.)", "Sari (CONT'D)", "BUDI:" -> "BUDI". Returns "" when the line cannot be a character name. */
 export function normalizeCue(raw: string): string {
-  const name = raw.replace(EXT_GROUPS, " ").replace(/\^/g, "").replace(/\s*(?:CONT['’]?D|LANJUT)\.?\s*$/i, "").replace(/[:.\s]+$/, "").replace(/\s+/g, " ").trim().toUpperCase();
+  const name = raw.replace(REVISION_MARK, " ").replace(EXT_GROUPS, " ").replace(/\^/g, "").replace(/\s*(?:CONT['’]?D|LANJUT)\.?\s*$/i, "").replace(/[:.\s]+$/, "").replace(/\s+/g, " ").trim().toUpperCase();
   return /[A-Z]/.test(name) && name.length <= 40 ? name : "";
+}
+
+const INSTR = String.raw`(?:TITLE(?:\s+IN)?|SUPER|TEKS|INSERT|CUT\s+TO|INTERCUT(?:\s+WITH)?)`;
+const INSTR_RE = new RegExp(String.raw`^${INSTR}\b\s*(?:[:\-]\s*(.+))?$`);
+/** Character names behind one cue line: "ALI, DUDUNG" -> two names; "TITLE IN : ALI" -> ALI; "SUPER" / "CUT TO" -> none. */
+export function cueNames(raw: string): string[] {
+  const full = normalizeCue(raw);
+  const ins = INSTR_RE.exec(full);
+  const body = ins ? ins[1] ?? "" : full;
+  return body.split(/\s*(?:,|&|\bDAN\b|\bAND\b)\s*/).map((n) => n.trim()).filter((n) => /[A-Z]/.test(n));
 }
 
 const isUpper = (s: string) => /[A-Z]/.test(s) && !/[a-z]/.test(s);
 const cueExtension = (raw: string) => (raw.match(EXT_GROUPS) ?? []).join(" ") + (/\s(?:CONT['’]?D|LANJUT)\.?$/i.test(raw) ? " (CONT'D)" : "");
 const TRANSITION = /^(?:(?:FADE|CUT|DISSOLVE|SMASH CUT|MATCH CUT|WIPE|IRIS|POTONG|BERALIH|MEMUDAR|PUDAR|SAMBUNG)\b.*|.*\b(?:TO|KE)):?\.?$/;
 const isTransition = (t: string) => isUpper(t) && t.length <= 30 && TRANSITION.test(t) && /(?:[:.]$|\bTO:?$|\bKE:?$|^FADE|^CUT)/.test(t);
+
+const OMITTED = /^(?:(\d+(?:-?[A-Z]{1,2})?)\s+)?OMITTED(?:\s+(\d+(?:-?[A-Z]{1,2})?))?$/i;
 
 // ---------- layout ----------
 
@@ -129,6 +155,7 @@ export function parseScreenplay(pages: PdfPage[]): { scenes: ParsedScene[]; page
   const first = rows.findIndex((r) => r.head);
   if (first < 0) throw new InputError("Naskah tidak dikenali: tidak ada judul adegan (INT./EXT., DLM./LUAR) yang ditemukan.");
   const body = rows.slice(first);
+  const omitted: string[] = [];
   const layout = detectLayout(body);
   const near = (x: number, ref?: number) => ref != null && Math.abs(x - ref) <= layout.tol;
 
@@ -145,6 +172,11 @@ export function parseScreenplay(pages: PdfPage[]): { scenes: ParsedScene[]; page
   let cur: Acc | undefined;
   let inDialogue = false;
   for (const r of body) {
+    const om = OMITTED.exec(r.text);
+    if (om) {
+      omitted.push((om[1] ?? om[2] ?? "").toUpperCase());
+      continue;
+    }
     if (r.head) {
       cur = { head: r.head, rows: [r], blocks: new Map(), lastSpeaker: "", lastKind: "heading", cues: [] };
       accs.push(cur);
@@ -153,15 +185,15 @@ export function parseScreenplay(pages: PdfPage[]): { scenes: ParsedScene[]; page
     }
     cur!.rows.push(r);
     const t = r.text;
-    const isCue = layout.cue != null && near(r.x, layout.cue) && isUpper(t.replace(EXT_GROUPS, "")) && t.length <= 45 && !isTransition(t) && !!normalizeCue(t);
+    const isCue = layout.cue != null && near(r.x, layout.cue) && isUpper(t.replace(EXT_GROUPS, "")) && t.length <= 45 && !isTransition(t) && cueNames(t).length > 0;
     let kind: string;
     if (isCue) {
       kind = "cue";
-      const name = normalizeCue(t);
+      const names = cueNames(t), name = names.join("|");
       cur!.cues.push(t);
       // "BUDI (CONT'D)" straight after a page break, with no action in between, continues the same block.
       const continued = /CONT|LANJUT/i.test(cueExtension(t)) && cur!.lastKind === "dialogue" && cur!.lastSpeaker === name;
-      if (!continued) cur!.blocks.set(name, (cur!.blocks.get(name) ?? 0) + 1);
+      if (!continued) for (const n of names) cur!.blocks.set(n, (cur!.blocks.get(n) ?? 0) + 1);
       cur!.lastSpeaker = name;
       inDialogue = true;
     } else if (isTransition(t) && (r.x > (layout.cue ?? layout.action) + layout.tol || r.x <= layout.action + layout.tol)) kind = "transition";
@@ -177,8 +209,11 @@ export function parseScreenplay(pages: PdfPage[]): { scenes: ParsedScene[]; page
 
   const anyNumber = accs.some((a) => a.head.number);
   const warnings: string[] = [];
+  let prevTime = "";
   const scenes: ParsedScene[] = accs.map((a, i) => {
-    const h = a.head;
+    const h = { ...a.head };
+    if (h.modifier && (!h.timeOfDay || h.timeOfDay === "LAINNYA") && prevTime) h.timeOfDay = prevTime;
+    if (h.timeOfDay && h.timeOfDay !== "LAINNYA") prevTime = h.timeOfDay;
     const lines = a.rows.reduce((n, r, k) => n + 1 + (k && a.rows[k - 1].page === r.page && a.rows[k - 1].y - r.y > pitch * 1.5 ? 1 : 0), 1);
     const start = a.rows[0], end = a.rows[a.rows.length - 1];
     const ps = start.page + Math.floor(frac(start) * 8) / 8;
@@ -193,6 +228,16 @@ export function parseScreenplay(pages: PdfPage[]): { scenes: ParsedScene[]; page
   if (noNumber) warnings.push(`${noNumber} adegan tanpa nomor diberi nomor urut otomatis.`);
   const dup = scenes.find((s, i) => scenes.findIndex((x) => x.number === s.number) !== i);
   if (dup) warnings.push(`Nomor adegan ganda: ${dup.number}.`);
+  const omittedNums = omitted.filter(Boolean);
+  if (omittedNums.length) warnings.push(`${omittedNums.length} adegan OMITTED: ${omittedNums.join(", ")}`);
+  const printed = new Set([...scenes.filter((_, i) => accs[i].head.number).map((x) => x.number.toUpperCase()), ...omittedNums]);
+  const ints = [...printed].map((n) => parseInt(n, 10)).filter((n) => n > 0);
+  if (ints.length) {
+    const lo = Math.min(...ints), hi = Math.max(...ints);
+    const missing: number[] = [];
+    for (let n = lo; n <= hi; n++) if (![...printed].some((p) => parseInt(p, 10) === n)) missing.push(n);
+    if (missing.length) warnings.push(`nomor adegan terlewat: ${missing.slice(0, 40).join(", ")}${missing.length > 40 ? ", ..." : ""}`);
+  }
   const noTime = scenes.filter((s) => !s.timeOfDay).length;
   if (noTime) warnings.push(`${noTime} adegan tanpa keterangan waktu.`);
   if (!scenes.some((s) => s.characters.length)) warnings.push("Tidak ada dialog terdeteksi. Tokoh tidak bisa dihitung; periksa tata letak naskah.");

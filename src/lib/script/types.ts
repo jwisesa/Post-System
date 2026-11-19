@@ -3,6 +3,9 @@
 export type PdfLine = { y: number; x: number; text: string; /** page number, "CONTINUED", "(MORE)": not content. */ skip?: boolean };
 export type PdfPage = { page: number; height: number; lines: PdfLine[] };
 
+/** A standalone Final Draft revision mark ("*") at the margin or between words. */
+export const REVISION_MARK = /(^|\s)\*+(?=\s|$)/g;
+
 export type ParsedCharacter = { name: string; blocks: number };
 export type ParsedScene = {
   position: number;

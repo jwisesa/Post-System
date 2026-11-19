@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createPgliteDb, type Db } from "@/db/client";
 import { auditLog } from "@/db/schema";
 import { ForbiddenError } from "@/lib/auth/permissions";
 import { aggregate } from "@/lib/script/aggregate";
-import { extractPages, groupLines } from "@/lib/script/extract";
-import { detectLayout, normalizeCue, parseHeading, parseScreenplay } from "@/lib/script/parse";
+import { dropRepeating, extractPages, groupLines } from "@/lib/script/extract";
+import { cueNames, detectLayout, normalizeCue, parseHeading, parseScreenplay } from "@/lib/script/parse";
 import * as sc from "@/lib/script/service";
 import { needsByPhase, postCsvRows, postNeeds } from "@/lib/script/needs";
 import { defaultPhase, suggestTags } from "@/lib/script/tags";
@@ -112,7 +113,60 @@ describe("line grouping", () => {
       { str: "Aksi", x: 108, y: 688, w: 30, h: 12 },
     ]);
     expect(out).toHaveLength(2);
-    expect(out[0]).toMatchObject({ x: 54, text: "12 INT. RUMAH - SIANG 12" });
+    expect(out[0]).toMatchObject({ x: 108, text: "12 INT. RUMAH - SIANG 12" });
+  });
+});
+
+describe("real-export patterns", () => {
+  const it0 = (str: string, x: number, w: number, y = 700) => ({ str, x, y, w, h: 12 });
+  it("spaces items by gap, even when a trailing item overlaps the margin number, and drops revision marks", () => {
+    const [a] = groupLines([it0("INT. RUMAH - SORE", 108, 427), it0("4", 524, 7.2), it0("*", 560, 7), it0("Tepat", 108, 36, 600), it0("waktu", 144, 36, 600), it0("ini", 180.5, 21.6, 600)]);
+    expect(a.text).toBe("INT. RUMAH - SORE 4");
+    expect(groupLines([it0("Tepat", 108, 36), it0("waktu", 144, 36)])[0].text).toBe("Tepatwaktu");
+    expect(groupLines([it0("BUDI", 252, 64.8), it0("*", 520, 7.2)])[0].text).toBe("BUDI");
+  });
+  it("uses the first non-margin item as x", () => {
+    expect(groupLines([it0("62", 54, 14.4), it0("EXT. JALAN - MALAM", 108, 130), it0("62", 517, 14.4)])[0].x).toBe(108);
+  });
+  it("drops items repeating at one position on many pages (header, watermark) but keeps content, digits and sluglines", () => {
+    const pages = Array.from({ length: 6 }, (_, n) => [
+      it0("CONFIDENTIAL", 60, 86, 500), it0("Judul - Draft 1", 200, 90, 760), it0(String(n + 1), 520, 7, 760), it0("INT.", 108, 28, 700), it0(`Aksi ${n}`, 108, 40, 600 - n * 12), it0("BUDI", 250, 30, 650 - (n % 3) * 12),
+    ]);
+    const kept = dropRepeating(pages);
+    expect(kept[2].map((i) => i.str)).toEqual(["3", "INT.", "Aksi 2", "BUDI"]);
+    expect(dropRepeating(pages.slice(0, 3))[0]).toHaveLength(6); // too few pages to tell
+  });
+  it("normalises headings: trailing scene numbers, revision marks, modifiers", () => {
+    expect(parseHeading("I/E. LORONG - AFTERNOON 4")).toMatchObject({ number: "4", location: "LORONG", timeOfDay: "SORE" });
+    expect(parseHeading("62 EXT. KLINIK 24 JAM - MOMENTS LATER 62 *")).toMatchObject({ number: "62", location: "KLINIK 24 JAM", modifier: true, timeOfDay: "LAINNYA" });
+    expect(parseHeading("INT. RUANG MAKAN - NIGHT 83 *")).toMatchObject({ number: "83", location: "RUANG MAKAN", timeOfDay: "MALAM" });
+    expect(parseHeading("30-A INT. RUANG MAKAN - MALAM 30-A")).toMatchObject({ number: "30-A", location: "RUANG MAKAN" });
+    expect(parseHeading("EXT. POM BENSIN - ANOTHER ANGLE")).toMatchObject({ location: "POM BENSIN", modifier: true });
+    expect(parseHeading("EXT. POM BENSIN - SUDUT LAIN")).toMatchObject({ location: "POM BENSIN", modifier: true });
+    expect(parseHeading("INT. KAMAR - BEBERAPA SAAT KEMUDIAN")).toMatchObject({ location: "KAMAR", modifier: true });
+    expect(parseHeading("INT. KAMAR - MALAM LANJUTAN")).toMatchObject({ location: "KAMAR", timeOfDay: "MALAM" });
+    expect(parseHeading("INT. KAMAR - DAY/NIGHT")?.timeOfDay).toBe("SIANG");
+    expect(parseHeading("INT. KAMAR - SIANG")?.modifier).toBe(false);
+  });
+  it("splits group cues, strips instruction prefixes and revision marks", () => {
+    expect(cueNames("BUDI, LINA")).toEqual(["BUDI", "LINA"]);
+    expect(cueNames("PETUGAS KEAMANAN & ANGGOTA ORMAS")).toEqual(["PETUGAS KEAMANAN", "ANGGOTA ORMAS"]);
+    expect(cueNames("BUDI DAN SARI (V.O.)")).toEqual(["BUDI", "SARI"]);
+    expect(cueNames("TITLE IN : BUDI")).toEqual(["BUDI"]);
+    for (const c of ["SUPER", "TITLE", "TEKS", "INSERT", "CUT TO", "INTERCUT"]) expect(cueNames(c)).toEqual([]);
+    expect(cueNames("TAMU PESTA #1")).toEqual(["TAMU PESTA #1"]);
+    expect(normalizeCue("BUDI *")).toBe("BUDI");
+  });
+  it("inherits time of day for modifier headings, reports OMITTED and unexplained number gaps", () => {
+    const h = (n: string, t: string) => [`${n} ${t} ${n}`, 108] as [string, number];
+    const { scenes, warnings } = parseScreenplay(synth([
+      h("1", "INT. A - MALAM"), ["Aksi.", 108], h("2", "INT. A - MOMENTS LATER"), ["Aksi.", 108], h("3", "EXT. B - ANOTHER ANGLE"), ["Aksi.", 108],
+      h("4", "EXT. B - SIANG"), ["Aksi.", 108], ["5 OMITTED 5", 108], ["6 OMITTED 6", 108], h("8", "EXT. C - CONTINUOUS"), ["Aksi.", 108],
+    ]));
+    expect(scenes.map((x) => x.number)).toEqual(["1", "2", "3", "4", "8"]);
+    expect(scenes.map((x) => x.timeOfDay)).toEqual(["MALAM", "MALAM", "MALAM", "SIANG", "SIANG"]);
+    expect(scenes.map((x) => x.intExt)).toEqual(["INT", "INT", "EXT", "EXT", "EXT"]);
+    expect(warnings.slice(0, 2)).toEqual(["2 adegan OMITTED: 5, 6", "nomor adegan terlewat: 7"]);
   });
 });
 
@@ -143,6 +197,31 @@ describe("fixture PDFs", () => {
     const { scenes } = parseScreenplay(await extractPages(pdf("sample-a4")));
     expect(scenes.map((x) => x.number)).toEqual(["1", "2", "3"]);
     expect(scenes.map((x) => x.characters.map((c) => c.name))).toEqual([["ANI", "RAHMAT"], ["ANI"], ["RAHMAT", "ANI"]]);
+  });
+  it("parses the real-export-like sample: watermark, header, margin numbers, revisions, modifiers, group cues, OMITTED", async () => {
+    const pages = await extractPages(pdf("sample-real-like"));
+    expect(pages.flatMap((p) => p.lines).some((l) => /CONFIDENTIAL|Screenplay/.test(l.text))).toBe(false);
+    const { scenes, warnings } = parseScreenplay(pages);
+    expect(scenes.map((x) => x.number)).toEqual(["1", "2", "3", "5", "6", "7", "8"]); // every heading found, 4 is OMITTED
+    expect(scenes.map((x) => x.heading)[0]).toBe("EXT. DERMAGA TUA - SORE");
+    expect(scenes.map((x) => x.timeOfDay)).toEqual(["SORE", "MALAM", "MALAM", "MALAM", "SUBUH", "SUBUH", "SUBUH"]);
+    expect(scenes[3]).toMatchObject({ intExt: "EXT", location: "DERMAGA TUA" }); // ANOTHER ANGLE split off
+    expect(scenes[1].characters.map((c) => c.name)).toEqual(["JOKO", "SITI", "MBOK RANI"]); // group cue, SUPER dropped, TITLE IN : name
+    const names = aggregate(scenes, pages.length).characters.map((c) => c.name);
+    expect(names.filter((n) => n.startsWith("JOKO"))).toEqual(["JOKO"]); // "JOKO *" merged
+    expect(names.some((n) => /[*&,]|SUPER/.test(n))).toBe(false);
+    expect(warnings).toEqual(["1 adegan OMITTED: 4"]);
+  });
+  it.skipIf(!process.env.REAL_SCRIPT_PDF || !existsSync(process.env.REAL_SCRIPT_PDF))("local-only: a real Final Draft export keeps loose invariants", async () => {
+    const buf = new Uint8Array(readFileSync(process.env.REAL_SCRIPT_PDF!));
+    const { scenes, warnings } = parseScreenplay(await extractPages(buf));
+    expect(scenes.length).toBeGreaterThanOrEqual(112);
+    const omitted = new Set((warnings.find((w) => /OMITTED/.test(w)) ?? "").replace(/^.*?:/, "").split(",").map((n) => n.trim()).filter(Boolean));
+    const printed = new Set(scenes.map((x) => parseInt(x.number, 10)));
+    const max = Math.max(...printed);
+    for (let n = 1; n <= max; n++) expect(printed.has(n) || omitted.has(String(n))).toBe(true);
+    expect(scenes.flatMap((x) => x.characters).some((c) => c.name.includes("*"))).toBe(false);
+    expect(scenes.every((x) => x.location)).toBe(true);
   });
   it("rejects a non-screenplay PDF, garbage bytes and oversize files", async () => {
     expect(() => parseScreenplay([])).toThrow(/Naskah tidak dikenali/);
