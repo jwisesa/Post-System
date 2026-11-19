@@ -6,11 +6,13 @@ import { readSceneText, tagFromSelection } from "@/app/admin/script-actions";
 import type { SceneRow } from "@/lib/script/service";
 import { TAG_KINDS, TAG_LABEL, type Block, type TagKind } from "@/lib/script/types";
 import { useToast } from "../ui/toast";
+import type { TextCache } from "./SceneTable";
 
-type Range = { s: number; e: number; k: number; q?: boolean };
+type Range = { s: number; e: number; k: number; q?: boolean; n?: boolean };
+type Fresh = { k: number; text: string };
 
 /** Highlight ranges inside one block: each tag's excerpt (or, failing that, its keyword) and the active search query. */
-function ranges(text: string, scene: SceneRow, q: string): Range[] {
+function ranges(text: string, scene: SceneRow, q: string, fresh: Fresh | null): Range[] {
   const low = text.toLowerCase(), out: Range[] = [];
   for (const t of scene.postTags) {
     const k = TAG_KINDS.indexOf(t.kind) + 1;
@@ -21,7 +23,7 @@ function ranges(text: string, scene: SceneRow, q: string): Range[] {
     for (const ex of parts) {
       let at = low.indexOf(ex);
       const tries = at >= 0 ? [ex] : ex.split(/: | … /).filter((x) => x.length >= 3);
-      for (const x of tries) { at = low.indexOf(x); if (at >= 0) { out.push({ s: at, e: at + x.length, k }); hit = true; if (x === ex) break; } }
+      for (const x of tries) { at = low.indexOf(x); if (at >= 0) { out.push({ s: at, e: at + x.length, k, n: !!fresh && fresh.k === k && x === fresh.text }); hit = true; if (x === ex) break; } }
     }
     if (hit) continue;
     let at: number;
@@ -36,14 +38,14 @@ function ranges(text: string, scene: SceneRow, q: string): Range[] {
   return keep;
 }
 
-function Marked({ text, scene, q }: { text: string; scene: SceneRow; q: string }) {
-  const rs = ranges(text, scene, q);
+function Marked({ text, scene, q, fresh }: { text: string; scene: SceneRow; q: string; fresh: Fresh | null }) {
+  const rs = ranges(text, scene, q, fresh);
   if (!rs.length) return <>{text}</>;
   const parts: React.ReactNode[] = [];
   let at = 0;
   rs.forEach((r, i) => {
     if (r.s > at) parts.push(text.slice(at, r.s));
-    parts.push(<mark key={i} className="st-hl" data-k={r.k || undefined} data-q={r.q ? "" : undefined}>{text.slice(r.s, r.e)}</mark>);
+    parts.push(<mark key={i} className="st-hl" data-k={r.k || undefined} data-q={r.q ? "" : undefined} data-new={r.n ? "" : undefined}>{text.slice(r.s, r.e)}</mark>);
     at = r.e;
   });
   if (at < text.length) parts.push(text.slice(at));
@@ -58,9 +60,10 @@ export function Keyed({ text, keyword, k }: { text: string; keyword?: string; k:
   return <>{text.slice(0, at)}<mark className="st-hl" data-k={k}>{text.slice(at, at + kw!.length)}</mark>{text.slice(at + kw!.length)}</>;
 }
 
-export function SceneReader({ slug, scene, canEdit, hasText, q, focusBlock }: { slug: string; scene: SceneRow; canEdit: boolean; hasText: boolean; q: string; focusBlock?: number }) {
+export function SceneReader({ slug, scene, canEdit, hasText, q, focusBlock, texts, nextId }: { slug: string; scene: SceneRow; canEdit: boolean; hasText: boolean; q: string; focusBlock?: number; texts: TextCache; nextId?: string }) {
   const toast = useToast();
-  const [blocks, setBlocks] = useState<Block[] | null | undefined>(hasText ? undefined : null);
+  const [blocks, setBlocks] = useState<Block[] | null | undefined>(hasText ? texts.get(scene.id) : null);
+  const [fresh, setFresh] = useState<Fresh | null>(null); // the highlight just created: pulses once
   const [error, setError] = useState("");
   const root = useRef<HTMLDivElement>(null);
   const bar = useRef<HTMLDivElement>(null);
@@ -71,9 +74,11 @@ export function SceneReader({ slug, scene, canEdit, hasText, q, focusBlock }: { 
   useEffect(() => {
     if (!hasText) return;
     let live = true;
-    readSceneText(slug, scene.id).then((r) => { if (!live) return; if (r.ok) setBlocks(r.blocks); else setError(r.error); });
+    const warm = () => { if (nextId && !texts.has(nextId)) readSceneText(slug, nextId).then((r) => { if (r.ok && r.blocks) texts.set(nextId, r.blocks); }); };
+    if (texts.has(scene.id)) { warm(); return; }
+    readSceneText(slug, scene.id).then((r) => { if (!live) return; if (r.ok) { if (r.blocks) texts.set(scene.id, r.blocks); setBlocks(r.blocks); warm(); } else setError(r.error); });
     return () => { live = false; };
-  }, [slug, scene.id, hasText]);
+  }, [slug, scene.id, hasText, texts, nextId]);
 
   useEffect(() => {
     if (!blocks) return;
@@ -113,13 +118,28 @@ export function SceneReader({ slug, scene, canEdit, hasText, q, focusBlock }: { 
     return () => document.removeEventListener("keydown", onEsc, true);
   }, [sel]);
 
+  const tagRef = useRef(tag);
+  useEffect(() => { tagRef.current = tag; });
+  // keys 1-7 tag the selection while the bar is open (not while typing the note)
+  const barOpen = !!sel;
+  useEffect(() => {
+    if (!barOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      const k = TAG_KINDS[Number(e.key) - 1];
+      if (!k || e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement | null)?.matches?.("input, textarea, select, [contenteditable]")) return;
+      e.preventDefault(); tagRef.current(k);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [barOpen]);
+
   async function tag(kind: TagKind) {
     if (!sel || busy) return;
     setBusy(true);
     const r = await tagFromSelection(slug, scene.id, kind, sel.text, note);
     setBusy(false);
     toast(r.ok ? { message: `Tag ${TAG_LABEL[kind]} ditambahkan.` } : { message: r.error, tone: "error" });
-    if (r.ok) { setSel(null); setNote(""); window.getSelection()?.removeAllRanges(); }
+    if (r.ok) { setFresh({ k: TAG_KINDS.indexOf(kind) + 1, text: sel.text.toLowerCase() }); setTimeout(() => setFresh(null), 500); setSel(null); setNote(""); window.getSelection()?.removeAllRanges(); }
   }
 
   if (!hasText) {
@@ -137,13 +157,14 @@ export function SceneReader({ slug, scene, canEdit, hasText, q, focusBlock }: { 
     <div ref={root} className="st-page" >
       {blocks.map((b, i) => (
         <p key={i} data-b={i} data-t={b.t} className="st-b">
-          {b.t === "cue" ? <><Marked text={b.text} scene={scene} q={q.trim().toLowerCase()} />{b.ext && <span className="st-ext"> ({b.ext})</span>}</> : <Marked text={b.text} scene={scene} q={q.trim().toLowerCase()} />}
+          {b.t === "cue" ? <><Marked text={b.text} scene={scene} q={q.trim().toLowerCase()} fresh={fresh} />{b.ext && <span className="st-ext"> ({b.ext})</span>}</> : <Marked text={b.text} scene={scene} q={q.trim().toLowerCase()} fresh={fresh} />}
         </p>
       ))}
       {sel && (
         <div ref={bar} className="st-bar" role="group" aria-label="Tambah tag dari teks terpilih" style={{ top: sel.top, left: sel.left, width: sel.width }} onMouseDown={(e) => { if (!(e.target instanceof HTMLInputElement)) e.preventDefault(); }}>
+          <p className="st-sel text-xs">“{sel.text.slice(0, 40)}{sel.text.length > 40 ? "…" : ""}” → tandai sebagai</p>
           <div className="st-kinds">
-            {TAG_KINDS.map((k, i) => <button key={k} type="button" data-k={i + 1} disabled={busy} onClick={() => tag(k)}>{TAG_LABEL[k]}</button>)}
+            {TAG_KINDS.map((k, i) => <button key={k} type="button" data-k={i + 1} disabled={busy} title={`Tombol ${i + 1}`} onClick={() => tag(k)}>{TAG_LABEL[k]}</button>)}
           </div>
           <input aria-label="Catatan tag (opsional)" placeholder="Catatan (opsional)" maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} />
         </div>

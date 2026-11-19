@@ -434,6 +434,18 @@ describe("post tags service", () => {
     await expect(sc.setTags(db, sup, projectId, [ids[0], "00000000-0000-0000-0000-000000000000"], { kind: "vfx" })).rejects.toBeInstanceOf(s.InputError);
     await expect(sc.setTags(db, sup, projectId, [], { kind: "vfx" })).rejects.toBeInstanceOf(s.InputError);
   });
+  it("links one phase to every scene of a kind in one call, keeping notes and excerpts", async () => {
+    const [a, b] = (await scenes()).slice(3, 5);
+    await sc.addTagFromSelection(db, sup, projectId, a.id, "lainnya", "satu", "catatan a", null);
+    await sc.addTagFromSelection(db, sup, projectId, b.id, "lainnya", "dua", "", null);
+    const before = (await db.select().from(auditLog)).length;
+    await sc.setTags(db, sup, projectId, [a.id, b.id], { kind: "lainnya", itemId: soundPhase });
+    const got = (await scenes()).filter((x) => [a.id, b.id].includes(x.id)).map((x) => x.postTags.find((t) => t.kind === "lainnya")!);
+    expect(got.every((t) => t.itemId === soundPhase && !t.auto)).toBe(true);
+    expect(got.map((t) => t.excerpt).sort()).toEqual(["dua", "satu"]);
+    expect(got.map((t) => t.note).sort()).toEqual(["", "catatan a"]);
+    expect((await db.select().from(auditLog)).length).toBe(before + 1);
+  });
   it("computes post needs per kind and 'Adegan terkait' per phase", async () => {
     const all = await scenes();
     const phases = await sc.listPhases(db, projectId);

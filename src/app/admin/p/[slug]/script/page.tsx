@@ -17,13 +17,13 @@ export default async function ScriptPage({ params, searchParams }: { params: Pro
   const canEdit = can(role, "script.edit");
   const base = `/admin/p/${slug}/script`;
   return (
-    <div className="mx-auto max-w-[1240px] space-y-8">
+    <div className="mx-auto max-w-[1240px] space-y-4 sm:space-y-8">
       <div>
         <h1 className="page-title">Naskah</h1>
-        <p className="page-meta">Breakdown naskah dari PDF: daftar adegan dengan perkiraan durasi, tokoh, lokasi, dan export CSV.</p>
+        <p className="page-meta max-sm:hidden">Breakdown naskah dari PDF: daftar adegan dengan perkiraan durasi, tokoh, lokasi, dan export CSV.</p>
       </div>
       {list.length > 0 && (
-        <nav aria-label="Versi naskah" className="flex flex-wrap items-center gap-3">
+        <nav aria-label="Versi naskah" className="flex items-center gap-3 max-sm:overflow-x-auto sm:flex-wrap">
           {list.map((s) => (
             <Link key={s.id} href={`${base}?script=${s.id}`} className={current?.script.id === s.id ? "btn-secondary" : "btn-ghost"} aria-current={current?.script.id === s.id ? "page" : undefined}>{s.title}{list.filter((x) => x.title === s.title).length > 1 && ` · ${fmtDate(s.createdAt.toISOString().slice(0, 10))}`}</Link>
           ))}
