@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ScriptUpload } from "@/components/script/ScriptUpload";
 import { ScriptView } from "@/components/script/ScriptView";
 import { can } from "@/lib/auth/permissions";
+import { fmtDate } from "@/lib/schedule/dates";
 import { loadProject } from "@/lib/project-context";
 import { getScript, listPhases, listScripts } from "@/lib/script/service";
 
@@ -19,18 +20,18 @@ export default async function ScriptPage({ params, searchParams }: { params: Pro
     <div className="mx-auto max-w-[1240px] space-y-8">
       <div>
         <h1 className="page-title">Naskah</h1>
-        <p className="page-meta">Breakdown naskah dari PDF: daftar adegan dengan perkiraan durasi, tokoh, lokasi, dan export CSV. Teks naskah disimpan dan hanya terlihat oleh anggota project; tidak tampil di link view-only atau link reviewer. File PDF-nya sendiri tidak disimpan.</p>
+        <p className="page-meta">Breakdown naskah dari PDF: daftar adegan dengan perkiraan durasi, tokoh, lokasi, dan export CSV.</p>
       </div>
       {list.length > 0 && (
         <nav aria-label="Versi naskah" className="flex flex-wrap items-center gap-3">
           {list.map((s) => (
-            <Link key={s.id} href={`${base}?script=${s.id}`} className={current?.script.id === s.id ? "btn-secondary" : "btn-ghost"} aria-current={current?.script.id === s.id ? "page" : undefined}>{s.title}</Link>
+            <Link key={s.id} href={`${base}?script=${s.id}`} className={current?.script.id === s.id ? "btn-secondary" : "btn-ghost"} aria-current={current?.script.id === s.id ? "page" : undefined}>{s.title}{list.filter((x) => x.title === s.title).length > 1 && ` · ${fmtDate(s.createdAt.toISOString().slice(0, 10))}`}</Link>
           ))}
           {canEdit && !wantNew && <Link href={`${base}?new`} className="btn-secondary">Unggah naskah baru</Link>}
         </nav>
       )}
       {canEdit && (wantNew || list.length === 0) && <ScriptUpload slug={slug} />}
-      {!canEdit && list.length === 0 && <p className="muted text-sm">Belum ada naskah. Supervisor dapat mengunggah PDF naskah. Teks naskah disimpan dan hanya terlihat oleh anggota project; tidak tampil di link view-only atau link reviewer. File PDF-nya sendiri tidak disimpan.</p>}
+      {!canEdit && list.length === 0 && <p className="muted text-sm">Belum ada naskah. Supervisor dapat mengunggah PDF naskah.</p>}
       {current && (
         <ScriptView
           slug={slug}

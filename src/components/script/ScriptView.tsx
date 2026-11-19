@@ -5,7 +5,6 @@ import { useState } from "react";
 import { deleteScript, purgeScriptText } from "@/app/admin/script-actions";
 import { Icon } from "@/components/ui/icons";
 import type { ScriptAggregate } from "@/lib/script/aggregate";
-import { fmtRange } from "@/lib/schedule/dates";
 import { phaseLabel, postNeeds, type Phase } from "@/lib/script/needs";
 import type { SceneRow } from "@/lib/script/service";
 import { fmtDuration, TAG_KINDS, TAG_LABEL, type TagKind } from "@/lib/script/types";
@@ -24,6 +23,7 @@ export function ScriptView({ slug, script, scenes, agg, canEdit, phases, initial
   const [tab, setTab] = useState<Tab>("scenes");
   const [tagFilter, setTagFilter] = useState(initialTag);
   const [sceneToOpen, setSceneToOpen] = useState(initialScene);
+  const [from, setFrom] = useState<Tab>("scenes"); // the tab a scene was opened from; closing the drawer returns there
   const fail = (r: { ok: boolean; error?: string }) => { if (!r.ok) toast({ message: r.error ?? "Gagal menyimpan.", tone: "error" }); };
   const exportHref = (type: string) => `/admin/p/${slug}/script/export?script=${script.id}&type=${type}`;
   const pdf = (view: string) => `/admin/p/${slug}/script/print?script=${script.id}&view=${view}`;
@@ -56,13 +56,15 @@ export function ScriptView({ slug, script, scenes, agg, canEdit, phases, initial
           </form>
         )}
         {canEdit && (
-          <button type="button" className="btn-danger" onClick={async () => { if (window.confirm(`Hapus naskah "${script.title}" beserta semua adegannya?`)) { const r = await deleteScript(slug, script.id); fail(r); if (r.ok) router.push(`/admin/p/${slug}/script`); } }}>Hapus naskah</button>
+          <form action={async () => { const r = await deleteScript(slug, script.id); fail(r); if (r.ok) router.push(`/admin/p/${slug}/script`); }}>
+            <ConfirmButton pendingLabel="Menghapus…" message={`Hapus naskah "${script.title}" beserta semua adegannya?`}>Hapus naskah</ConfirmButton>
+          </form>
         )}
       </div>
-      {tab === "scenes" && <Scenes slug={slug} scriptId={script.id} textIds={textIds} initialScene={sceneToOpen} scriptTitle={script.title} scenes={scenes} phases={phases} canEdit={canEdit} initialTag={tagFilter} />}
+      {tab === "scenes" && <Scenes slug={slug} scriptId={script.id} textIds={textIds} initialScene={sceneToOpen} scriptTitle={script.title} scenes={scenes} phases={phases} canEdit={canEdit} initialTag={tagFilter} onClose={() => { setSceneToOpen(""); setTab(from); }} />}
       {tab === "characters" && <Characters agg={agg} />}
       {tab === "locations" && <Locations agg={agg} />}
-      {tab === "post" && <PostNeeds scenes={scenes} phases={phases} onShow={(k) => { setTagFilter(k); setSceneToOpen(""); setTab("scenes"); }} onOpen={(id) => { setSceneToOpen(id); setTab("scenes"); }} />}
+      {tab === "post" && <PostNeeds scenes={scenes} phases={phases} onShow={(k) => { setTagFilter(k); setSceneToOpen(""); setFrom("scenes"); setTab("scenes"); }} onOpen={(id, kind) => { setTagFilter(kind); setSceneToOpen(id); setFrom("post"); setTab("scenes"); }} />}
       {tab === "summary" && <Summary agg={agg} />}
     </section>
   );
@@ -155,7 +157,7 @@ function Summary({ agg }: { agg: ScriptAggregate }) {
   );
 }
 
-function PostNeeds({ scenes, phases, onShow, onOpen }: { scenes: SceneRow[]; phases: Phase[]; onShow: (k: TagKind) => void; onOpen: (id: string) => void }) {
+function PostNeeds({ scenes, phases, onShow, onOpen }: { scenes: SceneRow[]; phases: Phase[]; onShow: (k: TagKind) => void; onOpen: (id: string, kind: TagKind) => void }) {
   const [ctx, setCtx] = useState(true);
   const needs = postNeeds(scenes, phases);
   if (!needs.length) return <p className="muted text-sm">Belum ada kebutuhan post. Tambahkan tag per adegan di tab Adegan; saran otomatis muncul saat naskah diimpor.</p>;
@@ -168,7 +170,7 @@ function PostNeeds({ scenes, phases, onShow, onOpen }: { scenes: SceneRow[]; pha
           <p className="text-sm tabular-nums">Adegan {n.numbers.join(", ")}{n.suggested > 0 && <span className="muted"> ({n.suggested} masih saran)</span>}</p>
           {n.phases.length > 0 && (
             <ul className="rows text-sm">
-              {n.phases.map((p) => <li key={p.id} className="flex flex-wrap justify-between gap-3 py-1.5"><span>{phaseLabel(p)}</span><span className="muted tabular-nums">{fmtRange(p.startDate, p.dueDate)}</span></li>)}
+              {n.phases.map((p) => <li key={p.id} className="flex flex-wrap justify-between gap-3 py-1.5"><span>{phaseLabel(p)}</span></li>)}
             </ul>
           )}
           {n.unlinked > 0 && <p className="notice" style={{ ["--tone" as string]: "var(--warn)" }}>Belum ada fase untuk {TAG_LABEL[n.kind]}{n.phases.length > 0 ? ` (${n.unlinked} adegan)` : ""}. Pilih fase di panel adegan.</p>}
@@ -176,7 +178,7 @@ function PostNeeds({ scenes, phases, onShow, onOpen }: { scenes: SceneRow[]; pha
             <ul className="rows text-sm st-needs">
               {scenes.flatMap((x) => { const t = x.postTags.find((y) => y.kind === n.kind); return t ? [[x, t] as const] : []; }).map(([x, t]) => (
                 <li key={x.id} className="grid gap-0.5 py-1.5">
-                  <span><b className="num">{x.number}</b> <span className="text-ink-2">{x.heading}</span> <button type="button" className="btn-ghost" onClick={() => onOpen(x.id)} aria-label={`Buka adegan ${x.number}`}>Buka adegan</button></span>
+                  <span><b className="num">{x.number}</b> <span className="text-ink-2">{x.heading}</span> <button type="button" className="btn-ghost" onClick={() => onOpen(x.id, n.kind)} aria-label={`Buka adegan ${x.number}`}>Buka adegan</button></span>
                   {(t.excerpt || t.note) && <span className="st-excerpt">{t.excerpt ? <Keyed text={t.excerpt} keyword={t.keyword} k={TAG_KINDS.indexOf(n.kind) + 1} /> : t.note}</span>}
                 </li>
               ))}

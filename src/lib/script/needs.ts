@@ -1,7 +1,9 @@
+import { fmtRange } from "../schedule/dates";
 import { fmtDuration, TAG_KINDS, TAG_LABEL, type PostTag, type TagKind } from "./types";
 
 export type Phase = { id: string; name: string; startDate: string; dueDate: string; track?: string };
-export const phaseLabel = (p: Phase) => (p.track ? `${p.name} (${p.track})` : p.name);
+/** Name, track and date range: the dates keep same-named phases apart. */
+export const phaseLabel = (p: Phase) => `${p.track ? `${p.name} (${p.track})` : p.name} · ${fmtRange(p.startDate, p.dueDate)}`;
 type NeedScene = { id?: string; number: string; heading?: string; estSeconds: number; postTags: PostTag[] };
 
 export type KindNeed = { kind: TagKind; scenes: number; suggested: number; seconds: number; numbers: string[]; phases: Phase[]; unlinked: number };

@@ -455,7 +455,7 @@ describe("post tags service", () => {
     const rows = postCsvRows(all, await sc.listPhases(db, projectId));
     expect(rows[0]).toEqual(["Jenis", "Adegan", "Judul", "Perkiraan durasi", "Catatan", "Fase terkait", "Status tag"]);
     expect(rows.length - 1).toBe(all.reduce((n, x) => n + x.postTags.length, 0));
-    expect(rows).toContainEqual(["Musik", all[0].number, all[0].heading, expect.stringMatching(/^\d+:\d\d$/), "lagu tema", "Sound Design (Post)", "Dikonfirmasi"]);
+    expect(rows).toContainEqual(["Musik", all[0].number, all[0].heading, expect.stringMatching(/^\d+:\d\d$/), "lagu tema", expect.stringMatching(/^Sound Design \(Post\) · .+/), "Dikonfirmasi"]);
     expect(rows.some((r) => r[6] === "Saran" && /^Kata kunci: /.test(r[4]))).toBe(true);
   });
   it("keeps tags and scripts out of view-only data and out of an empty project", async () => {
@@ -562,6 +562,17 @@ describe("script text service", () => {
     expect(tag).toMatchObject({ auto: false, note: "cek" });
     expect(tag.excerpt).toHaveLength(500);
     expect(tag.excerpt!.startsWith("teks terpilih")).toBe(true);
+  });
+  it("a second selection of the same kind appends; phase and note survive; setTags keeps the note", async () => {
+    const scene = (await sc.getScript(db, projectId, scriptId))!.scenes[1];
+    const get = async () => (await sc.getScript(db, projectId, scriptId))!.scenes[1].postTags.find((t) => t.kind === "grafis")!;
+    await sc.addTagFromSelection(db, sup, projectId, scene.id, "grafis", "satu", "catatan", null);
+    await sc.addTagFromSelection(db, sup, projectId, scene.id, "grafis", "dua");
+    expect(await get()).toMatchObject({ excerpt: "satu … dua", note: "catatan", auto: false });
+    await sc.addTagFromSelection(db, sup, projectId, scene.id, "grafis", "dua");
+    expect((await get()).excerpt).toBe("satu … dua");
+    await sc.setTags(db, sup, projectId, [scene.id], { kind: "grafis", itemId: null });
+    expect(await get()).toMatchObject({ note: "catatan", excerpt: "satu … dua" });
   });
   it("only supervisors save text or purge; purge clears text and excerpts but keeps scenes and tags", async () => {
     await expect(sc.purgeScriptText(db, asst, projectId, scriptId)).rejects.toBeInstanceOf(ForbiddenError);

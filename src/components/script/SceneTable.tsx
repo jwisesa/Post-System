@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { confirmSceneTag, deleteScene, removeSceneTag, searchScriptText, setSceneTags, updateScene } from "@/app/admin/script-actions";
-import { Drawer, SubmitButton } from "@/components/ui/controls";
+import { ConfirmButton, Drawer, SubmitButton } from "@/components/ui/controls";
 import { Icon } from "@/components/ui/icons";
 import { phaseLabel, type Phase } from "@/lib/script/needs";
 import type { SceneRow, SearchHit } from "@/lib/script/service";
@@ -26,22 +26,22 @@ function useAct() {
 
 const kindNum = (k: string) => TAG_KINDS.indexOf(k as TagKind) + 1;
 
-/** One marker per kind. A parser suggestion is muted with "?"; click it to confirm. */
-function TagMarks({ slug, scene, canEdit, stop }: { slug: string; scene: SceneRow; canEdit: boolean; stop?: boolean }) {
+/** One marker per kind. A parser suggestion is muted with "?"; in the drawer click it to confirm. `plain` (table cells) shows no buttons. */
+function TagMarks({ slug, scene, canEdit, plain }: { slug: string; scene: SceneRow; canEdit: boolean; plain?: boolean }) {
   const act = useAct();
-  const halt = stop ? (e: React.SyntheticEvent) => e.stopPropagation() : undefined;
+  const edit = canEdit && !plain;
   if (!scene.postTags.length) return <span className="muted">—</span>;
   return (
-    <span className="sa-tags" onClick={halt} onKeyDown={halt}>
+    <span className="sa-tags">
       {scene.postTags.map((t) => (
         <span key={t.kind} className="sa-tagm" data-k={kindNum(t.kind)} data-auto={t.auto ? "" : undefined}>
-          {canEdit && t.auto ? (
+          {edit && t.auto ? (
             <button type="button" title={`Saran dari naskah${t.keyword ? ` (kata kunci ${t.keyword})` : ""}${t.excerpt ? `: ${t.excerpt}` : ""}. Klik untuk konfirmasi.`} aria-label={`Konfirmasi saran tag ${TAG_LABEL[t.kind]} adegan ${scene.number}`}
               onClick={() => act(confirmSceneTag(slug, scene.id, t.kind), `Tag ${TAG_LABEL[t.kind]} dikonfirmasi.`)}>{TAG_LABEL[t.kind]} ?</button>
           ) : (
             <span title={[t.auto ? `Saran dari naskah${t.keyword ? ` (kata kunci ${t.keyword})` : ""}` : t.note, t.excerpt].filter(Boolean).join("\n") || undefined}>{TAG_LABEL[t.kind]}{t.auto ? " ?" : ""}</span>
           )}
-          {canEdit && (
+          {edit && (
             <button type="button" className="sa-x" aria-label={`Hapus tag ${TAG_LABEL[t.kind]} adegan ${scene.number}`} onClick={() => act(removeSceneTag(slug, scene.id, t.kind), `Tag ${TAG_LABEL[t.kind]} dihapus.`)}><Icon name="close" /></button>
           )}
         </span>
@@ -75,18 +75,21 @@ type Search = { q: string; setQ: (v: string) => void; hits: SearchHit[]; busy: b
 /** "Cari di naskah": input plus the matching scenes with the match highlighted. Clicking a hit opens the scene at that block. */
 function SearchBox({ search, results, onPick }: { search: Search; results: boolean; onPick: (id: string, block: number) => void }) {
   const { q, setQ, hits, busy } = search;
+  const [picked, setPicked] = useState<string | null>(null); // the query whose hit list was collapsed by picking a hit
   const live = q.trim().length >= 2;
+  const collapsed = picked === q;
   return (
     <div className="st-search">
       <label className="field"><span className="field-label">Cari di naskah</span>
         <input type="search" value={q} placeholder="Kata atau kalimat di teks naskah" onChange={(e) => setQ(e.target.value)} /></label>
-      {results && live && (
+      {results && live && collapsed && <p className="muted text-sm" aria-live="polite">{hits.length} adegan cocok</p>}
+      {results && live && !collapsed && (
         <ul className="rows st-hits" aria-live="polite">
           {hits.map((h) => (
             <li key={h.sceneId} className="py-1.5">
               <b className="num">{h.number}</b> <span className="text-ink-2">{h.heading}</span>
               {h.matches.slice(0, 3).map((m, i) => (
-                <button key={i} type="button" className="st-hit" onClick={() => onPick(h.sceneId, m.block)}>{m.pre}<mark className="st-hl" data-q="">{m.hit}</mark>{m.post}</button>
+                <button key={i} type="button" className="st-hit" onClick={() => { setPicked(q); onPick(h.sceneId, m.block); }}>{m.pre}<mark className="st-hl" data-q="">{m.hit}</mark>{m.post}</button>
               ))}
               {h.matches.length > 3 && <span className="muted text-xs">+{h.matches.length - 3} kecocokan lain</span>}
             </li>
@@ -110,7 +113,7 @@ function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose, hasTe
   const phaseName = (id?: string | null) => { const p = phases.find((x) => x.id === id); return p && phaseLabel(p); };
   const retag = (t: PostTag, itemId: string | null) => act(setSceneTags(slug, [scene.id], { kind: t.kind, note: t.note, itemId }), `Tag ${TAG_LABEL[t.kind]} disimpan.`);
   return (
-    <Drawer title={`Adegan ${scene.number}`} crumb={scriptTitle} onClose={onClose} bodyKey={`${scene.id}:${tab}`}
+    <Drawer title={`Adegan ${scene.number}`} crumb={scriptTitle} onClose={onClose} bodyKey={tab}
       head={<>
         <p className="num text-sm text-ink-2">{scene.heading} · Hal. {fmtPage(scene.pageStart)}–{fmtPage(scene.pageEnd)} · ~{fmtDuration(scene.estSeconds)}{scene.characters.length > 0 && ` · ${scene.characters.map((c) => c.name).join(", ")}`}</p>
         <div className="flex flex-wrap items-center gap-2">
@@ -123,7 +126,7 @@ function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose, hasTe
         <button type="button" role="tab" aria-selected={tab === "teks"} onClick={() => setTab("teks")}>Teks</button>
         <button type="button" role="tab" aria-selected={tab === "data"} onClick={() => setTab("data")}>{canEdit ? "Ubah & tag" : "Detail"}</button>
       </>}>
-      {tab === "teks" ? <SceneReader slug={slug} scene={scene} canEdit={canEdit} hasText={hasText} q={search.q} focusBlock={focusBlock} /> : <>
+      {tab === "teks" ? <SceneReader key={scene.id} slug={slug} scene={scene} canEdit={canEdit} hasText={hasText} q={search.q} focusBlock={focusBlock} /> : <>
       {canEdit ? (
         <form key={`${scene.id}:${scene.heading}:${scene.number}:${scene.location}:${scene.intExt}:${scene.timeOfDay}:${scene.notes}`} className="space-y-3"
           action={async (f) => {
@@ -138,11 +141,10 @@ function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose, hasTe
           {field("notes", "Catatan", true)}
           <div className="drawer-foot">
             <SubmitButton>Simpan</SubmitButton>
-            <button type="button" className="btn-danger" disabled={deleting} onClick={async () => {
-              if (!window.confirm(`Hapus adegan ${scene.number} dari daftar?`)) return;
+            <ConfirmButton type="button" disabled={deleting} message={`Hapus adegan ${scene.number} dari daftar?`} onClick={async () => {
               setDeleting(true);
               if (await act(deleteScene(slug, scene.id), `Adegan ${scene.number} dihapus.`)) onClose(); else setDeleting(false);
-            }}>{deleting ? "Menghapus…" : "Hapus"}</button>
+            }}>{deleting ? "Menghapus…" : "Hapus"}</ConfirmButton>
           </div>
         </form>
       ) : scene.notes ? <p className="text-sm whitespace-pre-wrap">{scene.notes}</p> : null}
@@ -176,7 +178,7 @@ function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose, hasTe
   );
 }
 
-export function Scenes({ slug, scriptId, scriptTitle, scenes, phases, canEdit, initialTag, initialScene = null, textIds }: { slug: string; scriptId: string; scriptTitle: string; scenes: SceneRow[]; phases: Phase[]; canEdit: boolean; initialTag: string; initialScene?: string | null; textIds: string[] }) {
+export function Scenes({ slug, scriptId, scriptTitle, scenes, phases, canEdit, initialTag, initialScene = null, textIds, onClose }: { slug: string; scriptId: string; scriptTitle: string; scenes: SceneRow[]; phases: Phase[]; canEdit: boolean; initialTag: string; initialScene?: string | null; textIds: string[]; onClose?: () => void }) {
   const act = useAct();
   const [loc, setLoc] = useState("");
   const [who, setWho] = useState("");
@@ -205,10 +207,13 @@ export function Scenes({ slug, scriptId, scriptTitle, scenes, phases, canEdit, i
   const none = <span className="muted">—</span>;
   const hasText = (id: string) => textIds.includes(id);
   const openScene = (id: string, block?: number) => { setOpen(id); setFocusBlock(block); setTab(hasText(id) ? "teks" : "data"); };
-  const at = shown.findIndex((x) => x.id === open);
-  const go = (d: number) => { const n = shown[at + d]; if (n) openScene(n.id); };
+  const list = shown.some((x) => x.id === open) ? shown : scenes; // a scene opened outside the filter still navigates
+  const at = list.findIndex((x) => x.id === open);
+  const go = (d: number) => { const n = list[at + d]; if (n) openScene(n.id); };
   const goRef = useRef(go);
   useEffect(() => { goRef.current = go; });
+
+  useEffect(() => { document.querySelector(".sa-row[data-open]")?.scrollIntoView({ block: "nearest" }); }, [open]);
 
   useEffect(() => {
     if (q.trim().length < 2) return;
@@ -275,7 +280,7 @@ export function Scenes({ slug, scriptId, scriptTitle, scenes, phases, canEdit, i
               <td className="sa-opt whitespace-nowrap" data-l="Hal.">{fmtPage(s.pageStart)}–{fmtPage(s.pageEnd)}</td>
               <td className="whitespace-nowrap" data-l="Durasi">~{fmtDuration(s.estSeconds)}</td>
               <td className="sa-opt" data-l="Tokoh">{s.characters.map((c) => c.name).join(", ") || none}</td>
-              <td className="sa-posts" data-l="Tag" data-nil={s.postTags.length ? undefined : ""}><TagMarks slug={slug} scene={s} canEdit={canEdit} stop /></td>
+              <td className="sa-posts" data-l="Tag" data-nil={s.postTags.length ? undefined : ""}><TagMarks slug={slug} scene={s} canEdit={canEdit} plain /></td>
               <td className="sa-opt sa-notes" data-l="Catatan" data-nil={s.notes ? undefined : ""}>{s.notes || none}</td>
               <td className="sa-act"><button type="button" className="btn-ghost" aria-label={`${canEdit ? "Ubah" : "Buka"} adegan ${s.number}`} onClick={(e) => { e.stopPropagation(); openScene(s.id); }}>{canEdit ? "Ubah" : "Buka"}</button></td>
             </tr>
@@ -290,7 +295,7 @@ export function Scenes({ slug, scriptId, scriptTitle, scenes, phases, canEdit, i
         <tfoot><tr><td colSpan={12}>Total {shown.length} adegan · ~{fmtDuration(total)}</td></tr></tfoot>
       </table>
 
-      {current && <SceneDrawer key="drawer" slug={slug} scene={current} scriptTitle={scriptTitle} phases={phases} canEdit={canEdit} onClose={() => setOpen(null)} hasText={hasText(current.id)} tab={tab} setTab={setTab} search={search} onPick={openScene} focusBlock={focusBlock} prev={at > 0 ? () => go(-1) : undefined} next={at >= 0 && at < shown.length - 1 ? () => go(1) : undefined} />}
+      {current && <SceneDrawer key="drawer" slug={slug} scene={current} scriptTitle={scriptTitle} phases={phases} canEdit={canEdit} onClose={() => { setOpen(null); onClose?.(); }} hasText={hasText(current.id)} tab={tab} setTab={setTab} search={search} onPick={openScene} focusBlock={focusBlock} prev={at > 0 ? () => go(-1) : undefined} next={at >= 0 && at < list.length - 1 ? () => go(1) : undefined} />}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { Fragment } from "react";
 import { PrintActions } from "@/components/timeline/PrintActions";
 import { loadProject } from "@/lib/project-context";
 import { fmtDate, today } from "@/lib/schedule/dates";
@@ -62,10 +63,15 @@ export default async function PrintScript({ params, searchParams }: { params: Pr
             <thead className="border-b border-line"><tr className="muted">{["Kebutuhan", "Adegan", "Durasi", "Nomor adegan", "Fase terkait"].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
             <tbody className="divide-y divide-line">
               {postNeeds(scenes, phases).map((n) => (
-                <tr key={n.kind}>
+                <Fragment key={n.kind}>
+                <tr>
                   <td className={`${td} font-medium`}>{TAG_LABEL[n.kind]}</td><td className={td}>{n.scenes}{n.suggested > 0 && ` (${n.suggested} saran)`}</td><td className={td}>~{fmtDuration(n.seconds)}</td><td className={td}>{n.numbers.join(", ")}</td>
-                  <td className={td}>{n.phases.map((p) => `${phaseLabel(p)} (${fmtDate(p.startDate)} – ${fmtDate(p.dueDate)})`).join("; ")}{n.unlinked > 0 && <span className="block">Belum ada fase untuk {n.unlinked} adegan</span>}</td>
+                  <td className={td}>{n.phases.map((p) => phaseLabel(p)).join("; ")}{n.unlinked > 0 && <span className="block">Belum ada fase untuk {n.unlinked} adegan</span>}</td>
                 </tr>
+                {scenes.flatMap((s) => { const t = s.postTags.find((y) => y.kind === n.kind); return t && (t.excerpt || t.note) ? [[s, t] as const] : []; }).map(([s, t]) => (
+                  <tr key={s.id} className="muted"><td className={td} /><td className={td} colSpan={4}><b>{s.number}</b> {s.heading}{t.note && ` · ${t.note}`}{t.excerpt && <span className="block">{t.excerpt}</span>}</td></tr>
+                ))}
+                </Fragment>
               ))}
             </tbody>
           </>

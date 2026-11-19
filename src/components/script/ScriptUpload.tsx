@@ -75,7 +75,9 @@ export function ScriptUpload({ slug }: { slug: string }) {
       {error && <p className="tag tag-danger">{error}</p>}
       {preview && (
         <div className="space-y-3">
-          <h3 className="section-band">Pratinjau: {preview.title}</h3>
+          <h3 className="section-band">Pratinjau</h3>
+          <label className="field"><span className="field-label">Judul naskah</span>
+            <input value={preview.title} maxLength={200} onChange={(e) => setPreview({ ...preview, title: e.target.value })} /></label>
           <p className="text-sm tabular-nums">
             {preview.summary.scenes} adegan · {preview.pages} halaman · perkiraan {fmtDuration(preview.summary.seconds)} · {preview.summary.characters} tokoh · {preview.summary.locations} lokasi · teks ± {fmtBytes(preview.summary.textBytes)}
           </p>
@@ -85,7 +87,7 @@ export function ScriptUpload({ slug }: { slug: string }) {
           )}
           {preview.warnings.map((w) => <p key={w} className="tag tag-warn">{w}</p>)}
           <div className="flex gap-2">
-            <button type="button" className="btn" disabled={busy} onClick={save}>{busy ? "Menyimpan…" : "Simpan"}</button>
+            <button type="button" className="btn" disabled={busy || !preview.title.trim()} onClick={save}>{busy ? "Menyimpan…" : "Simpan"}</button>
             <button type="button" className="btn-ghost" disabled={busy} onClick={() => setPreview(null)}>Batal</button>
           </div>
         </div>

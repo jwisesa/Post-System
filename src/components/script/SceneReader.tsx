@@ -14,9 +14,17 @@ function ranges(text: string, scene: SceneRow, q: string): Range[] {
   const low = text.toLowerCase(), out: Range[] = [];
   for (const t of scene.postTags) {
     const k = TAG_KINDS.indexOf(t.kind) + 1;
-    const ex = t.excerpt?.toLowerCase();
-    let at = ex ? low.indexOf(ex) : -1;
-    if (at >= 0) { out.push({ s: at, e: at + ex!.length, k }); continue; }
+    // an excerpt is one or more selections joined by " … "; an ADR excerpt joins cue and dialogue as "CUE: text"
+    const whole = t.excerpt?.toLowerCase() ?? "";
+    const parts = whole.split(" … ").filter(Boolean);
+    let hit = false;
+    for (const ex of parts) {
+      let at = low.indexOf(ex);
+      const tries = at >= 0 ? [ex] : ex.split(/: | … /).filter((x) => x.length >= 3);
+      for (const x of tries) { at = low.indexOf(x); if (at >= 0) { out.push({ s: at, e: at + x.length, k }); hit = true; if (x === ex) break; } }
+    }
+    if (hit) continue;
+    let at: number;
     const kw = t.keyword?.toLowerCase().replace(/[:.]+$/, "");
     if (!kw || kw.length < 3) continue;
     for (at = low.indexOf(kw); at >= 0; at = low.indexOf(kw, at + kw.length)) out.push({ s: at, e: at + kw.length, k });
@@ -56,8 +64,9 @@ export function SceneReader({ slug, scene, canEdit, hasText, q, focusBlock }: { 
   const [error, setError] = useState("");
   const root = useRef<HTMLDivElement>(null);
   const bar = useRef<HTMLDivElement>(null);
-  const [sel, setSel] = useState<{ text: string; top: number; left: number } | null>(null);
+  const [sel, setSel] = useState<{ text: string; top: number; left: number; width: number } | null>(null);
   const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!hasText) return;
@@ -69,7 +78,7 @@ export function SceneReader({ slug, scene, canEdit, hasText, q, focusBlock }: { 
   useEffect(() => {
     if (!blocks) return;
     const el = (focusBlock != null && root.current?.querySelector(`[data-b="${focusBlock}"]`)) || root.current?.querySelector("mark.st-hl");
-    el?.scrollIntoView({ block: "center" });
+    if (el) el.scrollIntoView({ block: "center" }); else root.current?.closest(".drawer > div")?.scrollTo(0, 0);
   }, [blocks, focusBlock]);
 
   useEffect(() => {
@@ -81,17 +90,35 @@ export function SceneReader({ slug, scene, canEdit, hasText, q, focusBlock }: { 
         const r = s!.getRangeAt(0).getBoundingClientRect();
         const text = s!.toString().replace(/\s+/g, " ").trim();
         if (!text) return setSel(null);
-        setSel({ text, top: r.top > 120 ? r.top - 8 : r.bottom + 8, left: Math.min(Math.max(r.left + r.width / 2, 170), window.innerWidth - 170) });
+        // clamp the bar to the drawer (it is centred on `left`)
+        const d = root.current!.closest(".drawer")?.getBoundingClientRect() ?? { left: 0, right: window.innerWidth, width: window.innerWidth };
+        const width = Math.min(336, d.width - 16);
+        setSel({ text, top: r.top > 120 ? r.top - 8 : r.bottom + 8, width, left: Math.min(Math.max(r.left + r.width / 2, d.left + 8 + width / 2), d.right - 8 - width / 2) });
       } else if (!bar.current?.contains(document.activeElement)) setSel(null);
     };
     document.addEventListener("selectionchange", onSel);
     return () => document.removeEventListener("selectionchange", onSel);
   }, [canEdit]);
 
-  async function tag(kind: TagKind) {
+  // First Esc only dismisses the tag bar; the drawer ignores defaultPrevented keys.
+  useEffect(() => {
     if (!sel) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      setSel(null);
+      window.getSelection()?.removeAllRanges();
+    };
+    document.addEventListener("keydown", onEsc, true);
+    return () => document.removeEventListener("keydown", onEsc, true);
+  }, [sel]);
+
+  async function tag(kind: TagKind) {
+    if (!sel || busy) return;
+    setBusy(true);
     const r = await tagFromSelection(slug, scene.id, kind, sel.text, note);
-    toast(r.ok ? { message: `Tag ${TAG_LABEL[kind]} ditambahkan` } : { message: r.error, tone: "error" });
+    setBusy(false);
+    toast(r.ok ? { message: `Tag ${TAG_LABEL[kind]} ditambahkan.` } : { message: r.error, tone: "error" });
     if (r.ok) { setSel(null); setNote(""); window.getSelection()?.removeAllRanges(); }
   }
 
@@ -107,16 +134,16 @@ export function SceneReader({ slug, scene, canEdit, hasText, q, focusBlock }: { 
   if (blocks === undefined) return <p className="muted text-sm">Memuat teks…</p>;
   if (!blocks || !blocks.length) return <p className="muted text-sm">Adegan ini tidak punya teks.</p>;
   return (
-    <div ref={root} className="st-page" onKeyDown={(e) => { if (e.key === "Escape") setSel(null); }}>
+    <div ref={root} className="st-page" >
       {blocks.map((b, i) => (
         <p key={i} data-b={i} data-t={b.t} className="st-b">
-          {b.t === "cue" ? <>{b.text}{b.ext && <span className="st-ext"> ({b.ext})</span>}</> : <Marked text={b.text} scene={scene} q={q.trim().toLowerCase()} />}
+          {b.t === "cue" ? <><Marked text={b.text} scene={scene} q={q.trim().toLowerCase()} />{b.ext && <span className="st-ext"> ({b.ext})</span>}</> : <Marked text={b.text} scene={scene} q={q.trim().toLowerCase()} />}
         </p>
       ))}
       {sel && (
-        <div ref={bar} className="st-bar" role="group" aria-label="Tambah tag dari teks terpilih" style={{ top: sel.top, left: sel.left }} onMouseDown={(e) => { if (!(e.target instanceof HTMLInputElement)) e.preventDefault(); }}>
+        <div ref={bar} className="st-bar" role="group" aria-label="Tambah tag dari teks terpilih" style={{ top: sel.top, left: sel.left, width: sel.width }} onMouseDown={(e) => { if (!(e.target instanceof HTMLInputElement)) e.preventDefault(); }}>
           <div className="st-kinds">
-            {TAG_KINDS.map((k, i) => <button key={k} type="button" data-k={i + 1} onClick={() => tag(k)}>{TAG_LABEL[k]}</button>)}
+            {TAG_KINDS.map((k, i) => <button key={k} type="button" data-k={i + 1} disabled={busy} onClick={() => tag(k)}>{TAG_LABEL[k]}</button>)}
           </div>
           <input aria-label="Catatan tag (opsional)" placeholder="Catatan (opsional)" maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} />
         </div>

@@ -185,7 +185,7 @@ export function parseScreenplay(pages: PdfPage[]): { scenes: ParsedScene[]; page
   for (const p of pages) for (const l of p.lines) if (!l.skip) rows.push({ page: p.page, y: l.y, x: l.x, text: l.text, head: parseHeading(l.text) });
   if (rows.length < 5) throw new InputError("Naskah tidak dikenali: PDF hampir tidak berisi teks (mungkin hasil scan). Gunakan PDF yang teksnya bisa diseleksi.");
   const first = rows.findIndex((r) => r.head);
-  if (first < 0) throw new InputError("Naskah tidak dikenali: tidak ada judul adegan (INT./EXT., DLM./LUAR) yang ditemukan.");
+  if (first < 0) throw new InputError("Naskah tidak dikenali: tidak ada judul adegan (INT./EXT., DLM./LUAR) yang ditemukan. Pastikan PDF berisi teks (bukan hasil scan) dan judul adegan diawali INT./EXT. atau DLM./LUAR.");
   const body = rows.slice(first);
   const omitted: string[] = [];
   const layout = detectLayout(body);

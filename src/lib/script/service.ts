@@ -163,13 +163,13 @@ async function resolvePhase(db: Db, projectId: string, kind: TagKind, want: stri
 export async function setTags(db: Db, userId: string, projectId: string, sceneIds: string[], input: { kind: string; note?: string; itemId?: string | null }) {
   await requireRole(db, userId, projectId, "script.edit");
   const kind = kindOf(input.kind);
-  const note = (input.note ?? "").trim().slice(0, 200);
+  const note = input.note === undefined ? undefined : input.note.trim().slice(0, 200); // undefined keeps an existing note
   const itemId = await resolvePhase(db, projectId, kind, input.itemId);
   await db.transaction(async (tx) => {
     const rows = await loadScenes(tx, projectId, sceneIds);
     for (const r of rows) {
       const old = r.postTags.find((t) => t.kind === kind);
-      const next: PostTag = { kind, note, auto: false, itemId, ...(old?.keyword ? { keyword: old.keyword } : {}), ...(old?.excerpt ? { excerpt: old.excerpt } : {}) };
+      const next: PostTag = { kind, note: note ?? old?.note ?? "", auto: false, itemId, ...(old?.keyword ? { keyword: old.keyword } : {}), ...(old?.excerpt ? { excerpt: old.excerpt } : {}) };
       await tx.update(scriptScenes).set({ postTags: [...r.postTags.filter((t) => t.kind !== kind), next] }).where(eq(scriptScenes.id, r.id));
     }
     const one = rows.length === 1;
@@ -200,7 +200,7 @@ async function changeTag(db: Db, userId: string, projectId: string, sceneId: str
 export const confirmTag = (db: Db, userId: string, projectId: string, sceneId: string, kind: string) => changeTag(db, userId, projectId, sceneId, kind, "confirm");
 export const removeTag = (db: Db, userId: string, projectId: string, sceneId: string, kind: string) => changeTag(db, userId, projectId, sceneId, kind, "remove");
 
-/** Tag from a text selection in the reader: replaces the scene's tag of that kind, confirmed, with the selection as its excerpt. */
+/** Tag from a text selection in the reader: adds the selection to the scene's tag of that kind (excerpts are joined with " … "), confirmed. */
 export async function addTagFromSelection(db: Db, userId: string, projectId: string, sceneId: string, kindIn: string, excerptIn: string, note = "", itemId?: string | null) {
   await requireRole(db, userId, projectId, "script.edit");
   const kind = kindOf(kindIn);
@@ -210,7 +210,8 @@ export async function addTagFromSelection(db: Db, userId: string, projectId: str
   await db.transaction(async (tx) => {
     const [row] = await loadScenes(tx, projectId, [sceneId]);
     const old = row.postTags.find((t) => t.kind === kind);
-    const next: PostTag = { kind, note: note.trim().slice(0, 200), auto: false, itemId: phase, excerpt, ...(old?.keyword ? { keyword: old.keyword } : {}) };
+    const joined = old?.excerpt && !old.excerpt.includes(excerpt) ? `${old.excerpt} … ${excerpt}`.slice(0, 500) : old?.excerpt?.includes(excerpt) ? old.excerpt : excerpt;
+    const next: PostTag = { kind, note: note.trim().slice(0, 200) || old?.note || "", auto: false, itemId: itemId === undefined && old?.itemId ? old.itemId : phase, excerpt: joined, ...(old?.keyword ? { keyword: old.keyword } : {}) };
     await tx.update(scriptScenes).set({ postTags: [...row.postTags.filter((t) => t.kind !== kind), next] }).where(eq(scriptScenes.id, sceneId));
     await record(tx, { projectId, userId, entity: "script_scene", entityId: sceneId, action: "update", summary: `Adegan ${row.number}: tag ${TAG_LABEL[kind]} ditambahkan dari teks naskah`, after: { kind, itemId: phase } });
   });
