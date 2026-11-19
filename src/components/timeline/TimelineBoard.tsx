@@ -17,7 +17,7 @@ import { DaysPanel } from "./DaysPanel";
 import type { FeedbackPoint } from "@/lib/feedback/service";
 import type { Signoff } from "@/lib/review/service";
 import type { DriveSummary } from "@/lib/drive-tracker/service";
-import { AgendaList, ItemPanel, ManagePanel, NewItemPanel } from "./ItemPanel";
+import { AgendaList, ItemHead, itemTabs, ItemPanel, type TabId, ManagePanel, NewItemPanel } from "./ItemPanel";
 import { durationLabel, phaseIndex, isLate, progressOf, signed, slip, type Item, type Mode } from "./shared";
 import VerticalGantt from "./VerticalGantt";
 import { TemplatePanel } from "./TemplatePanel";
@@ -120,6 +120,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
   const [fLate, setFLate] = useState(false);
   const [fHard, setFHard] = useState(false);
   const [panel, setPanel] = useState<Panel | null>(null);
+  const [tab, setTab] = useState<TabId>("detail");
   const [drag, setDrag] = useState<Drag | null>(null);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [history, setHistory] = useState<{ undo: Step[]; redo: Step[] }>({ undo: [], redo: [] });
@@ -313,10 +314,10 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
     });
   }
 
-  /** Plain click selects (the step strip appears); clicking the sole selected item again opens it. Shift/Cmd/Ctrl toggles. Without edit rights a click opens it. */
+  /** Plain click selects (the step strip appears); clicking the sole selected item again opens it, and while a drawer is open one click switches it. Shift/Cmd/Ctrl toggles. Without edit rights a click opens it. */
   function pick(id: string, e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }) {
     if (e.shiftKey || e.metaKey || e.ctrlKey) return setSel((s) => { const n = new Set(s); if (!n.delete(id)) n.add(id); return n; });
-    if (!editable || (sel.size === 1 && sel.has(id))) return openItem(id);
+    if (!editable || panel?.kind === "item" || (sel.size === 1 && sel.has(id))) return openItem(id);
     setSel(new Set([id]));
   }
 
@@ -502,6 +503,10 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
   for (const p of feedback) if (p.status === "open") openFeedback.set(p.itemId, (openFeedback.get(p.itemId) ?? 0) + 1);
   const panelItem = panel?.kind === "item" ? byId.get(panel.id) : undefined;
   const panelTrack = panelItem ? tracks.find((t) => t.id === panelItem.trackId) : undefined;
+  const itemAtt = attachments.filter((a) => a.targetType === "schedule_item" && a.targetId === panelItem?.id);
+  const itemCom = comments.filter((c) => c.targetType === "schedule_item" && c.targetId === panelItem?.id);
+  const tabList = panelItem ? itemTabs({ item: panelItem, mode, me, feedback, attachments: itemAtt, comments: itemCom, deps }) : [];
+  const curTab = tabList.some((t) => t.id === tab) ? tab : "detail";
   const others = preview && drag ? preview.moves.filter((m) => m.id !== drag.id).length : 0;
   const conflictIds = new Set(preview?.conflictIds);
   const bodyHeight = rows.length * ROW;
@@ -703,7 +708,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
 
           {view === "gantt" && editable && (
             <p className="hidden text-[13px] text-ink-2 md:block">
-              Klik batang untuk memilih (klik lagi untuk detail), seret untuk memindah, ujungnya untuk memperpanjang, titik di kanannya ke item lain untuk membuat dependency. Pilih: seret di area kosong (di layar sentuh tekan lama dulu), Shift untuk menambah, Cmd/Ctrl+A semua, Shift-klik nama track untuk satu track. Klik dua kali di baris fase untuk menambah milestone.
+              Klik batang untuk memilih (klik lagi atau klik dua kali untuk detail; saat panel terbuka, satu klik berpindah item), seret untuk memindah, ujungnya untuk memperpanjang, titik di kanannya ke item lain untuk membuat dependency. Pilih: seret di area kosong (di layar sentuh tekan lama dulu), Shift untuk menambah, Cmd/Ctrl+A semua, Shift-klik nama track untuk satu track. Klik dua kali di baris fase untuk menambah milestone.
             </p>
           )}
         </>
@@ -748,11 +753,14 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
       )}
 
       {panel?.kind === "item" && panelItem && panelTrack && (
-        <Drawer ph={ph(panelItem.id)} title={panelItem.name} onClose={() => setPanel(null)}>
-          <ItemPanel item={panelItem} track={panelTrack} mode={mode} slug={slug} today={today} allItems={allItems} deps={deps} contacts={contacts} groups={groups} onLink={addLink} onUnlink={removeLink}
+        <Drawer ph={ph(panelItem.id)} title={panelItem.name} onClose={() => setPanel(null)} bodyKey={panelItem.id}
+          crumb={`${panelTrack.name} › ${panelItem.name} · ${panelItem.parentId ? `milestone di ${byId.get(panelItem.parentId)?.name ?? "fase"}` : "fase"}`}
+          head={<ItemHead item={panelItem} mode={mode} today={today} cal={cal} signoffs={signoffs} onStatus={(v) => setStatus([panelItem.id], v)} onStep={(k, d) => step(panelItem, k, d)} />}
+          tabs={tabList.map((t) => <button key={t.id} type="button" role="tab" aria-selected={t.id === curTab} onClick={() => setTab(t.id)}>{t.label}</button>)}>
+          <ItemPanel key={panelItem.id} tab={curTab} item={panelItem} track={panelTrack} mode={mode} slug={slug} today={today} allItems={allItems} deps={deps} contacts={contacts} groups={groups} onLink={addLink} onUnlink={removeLink}
             cal={cal} cascade={cascade} ph={ph(panelItem.id)} onAddMilestone={() => setPanel({ kind: "new", trackId: panelItem.trackId, parentId: panelItem.id, date: panelItem.dueDate })}
-            attachments={attachments.filter((a) => a.targetType === "schedule_item" && a.targetId === panelItem.id)}
-            comments={comments.filter((c) => c.targetType === "schedule_item" && c.targetId === panelItem.id)} feedback={feedback} signoffs={signoffs} me={me} drives={drives} />
+            attachments={itemAtt}
+            comments={itemCom} feedback={feedback} signoffs={signoffs} me={me} drives={drives} />
         </Drawer>
       )}
       {panel?.kind === "new" && (

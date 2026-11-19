@@ -175,20 +175,37 @@ export function Combobox({ name, options, defaultValue = "", placeholder, onValu
   );
 }
 
-/** Right-hand side panel. Closes on Esc or the close button. */
-export function Drawer({ title, onClose, ph, children }: { title: React.ReactNode; onClose: () => void; ph?: number; children: React.ReactNode }) {
+/** Right-hand side panel. Closes on Esc (not while typing in a field) or the close button. Optional crumb, pinned head and tabs sit above the scrolling body; bodyKey remounts only the body. */
+export function Drawer({ title, onClose, ph, crumb, head, tabs, bodyKey, children }: { title: React.ReactNode; onClose: () => void; ph?: number; crumb?: React.ReactNode; head?: React.ReactNode; tabs?: React.ReactNode; bodyKey?: string; children: React.ReactNode }) {
+  const hid = useId();
+  const h2 = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.matches?.("input, textarea, select, [contenteditable]")) { t.blur(); return; }
+      onClose();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+  useEffect(() => {
+    const back = document.activeElement as HTMLElement | null;
+    h2.current?.focus({ preventScroll: true });
+    return () => { if (back?.isConnected) back.focus({ preventScroll: true }); };
+  }, []);
   return (
-    <aside role="dialog" aria-label={typeof title === "string" ? title : "Detail"} className="drawer" data-ph={ph}>
+    <aside role="dialog" aria-modal="false" aria-labelledby={hid} className="drawer" data-ph={ph}>
       <header>
-        <h2 className="min-w-0 break-words">{title}</h2>
+        <div className="min-w-0">
+          {crumb && <p className="drawer-crumb">{crumb}</p>}
+          <h2 id={hid} tabIndex={-1} ref={h2} className="min-w-0 break-words">{title}</h2>
+        </div>
         <button type="button" className="btn-ghost btn-icon" aria-label="Tutup panel" onClick={onClose}><Icon name="close" /></button>
       </header>
-      <div>{children}</div>
+      {head && <section className="drawer-facts">{head}</section>}
+      {tabs && <nav className="drawer-tabs seg" role="tablist">{tabs}</nav>}
+      <div key={bodyKey}>{children}</div>
     </aside>
   );
 }

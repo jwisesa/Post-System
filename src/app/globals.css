@@ -928,3 +928,12 @@ details.tl-details > summary::-webkit-details-marker { display: none; }
 .compare select { min-width: 14rem; }
 
 /* ---------- phase F: drives ---------- */
+
+/* ---------- audit batch 1: drawer ---------- */
+.drawer-crumb { font-size: .75rem; line-height: 1rem; opacity: .8; }
+.drawer-facts { display: grid; gap: .375rem; padding: .75rem 1.25rem; border-bottom: 1px solid var(--line); }
+.drawer-facts .range { font-family: var(--font-display); font-size: 1.125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.drawer-tabs { display: flex; gap: .25rem; overflow-x: auto; padding: .5rem 1.25rem; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+.drawer-foot { position: sticky; bottom: 0; display: flex; gap: .5rem; padding-block: .75rem; background: var(--overlay); border-top: 1px solid var(--line); }
+.drawer > div { transition: opacity 140ms var(--ease-out), translate 140ms var(--ease-out);
+  @starting-style { opacity: 0; translate: 0 calc(4px * var(--shift)); } }
