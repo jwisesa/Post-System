@@ -14,8 +14,8 @@ export default async function Reviewer({ params }: { params: Promise<{ token: st
   return (
     <main className="mx-auto max-w-2xl space-y-5 p-4 md:p-6">
       <header className="space-y-1">
-        <p className="muted text-sm">{data.project.name}</p>
-        <h1 className="page-title">{data.reviewer.name}{data.reviewer.role && <span className="muted"> · {data.reviewer.role}</span>}</h1>
+        <h1 className="page-title">{data.project.name}</h1>
+        <p className="muted text-sm">{data.reviewer.name}{data.reviewer.role && ` · ${data.reviewer.role}`}</p>
       </header>
       {data.items.length === 0 && <p className="muted text-sm">Belum ada milestone yang ditugaskan.</p>}
       {data.items.map((i) => (

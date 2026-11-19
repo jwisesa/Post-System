@@ -2,7 +2,7 @@
 
 import { useOptimistic, useState, useTransition } from "react";
 import { addFeedback, checkFeedback, deleteFeedback, updateFeedback } from "@/app/admin/feedback-actions";
-import { carryOver, WHO } from "@/lib/feedback/parse";
+import { carryOver, parsePoints, WHO } from "@/lib/feedback/parse";
 import type { FeedbackPoint } from "@/lib/feedback/service";
 import { fmtDate } from "@/lib/schedule/dates";
 import { FeedbackTransfer } from "./FeedbackTransfer";
@@ -66,15 +66,17 @@ function OwnRow({ p, item, names, canEdit, onDelete, onSave }: { p: FeedbackPoin
   }
   const where = p.checkedItemId && p.checkedItemId !== item.id ? names.get(p.checkedItemId) : null;
   return (
-    <li className="flex items-baseline gap-2 py-2">
-      <Meta p={p} />
-      <span className="tag shrink-0" title={p.checkNote || undefined}>{LABEL[p.status]}{p.status !== "open" && where ? ` · dicek di ${where}` : ""}</span>
-      {canEdit && (
-        <span className="flex shrink-0 gap-1">
-          <button type="button" className="btn-ghost !min-h-6 text-xs" onClick={() => setEditing(true)}>Ubah</button>
-          <button type="button" className="btn-ghost !min-h-6 text-xs hover:text-danger" onClick={() => window.confirm("Hapus poin ini?") && onDelete()}>Hapus</button>
-        </span>
-      )}
+    <li className="space-y-1 py-2">
+      <div className="flex items-baseline gap-2"><Meta p={p} /></div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="tag" title={p.checkNote || undefined}>{LABEL[p.status]}{p.status !== "open" && where ? ` · dicek di ${where}` : ""}</span>
+        {canEdit && (
+          <>
+            <button type="button" className="btn-ghost !min-h-6 text-xs" onClick={() => setEditing(true)}>Ubah</button>
+            <button type="button" className="btn-ghost !min-h-6 text-xs hover:text-danger" onClick={() => window.confirm("Hapus poin ini?") && onDelete()}>Hapus</button>
+          </>
+        )}
+      </div>
     </li>
   );
 }
@@ -85,8 +87,10 @@ export function FeedbackPanel({ item, allItems, points, mode, slug }: { item: It
   const [text, setText] = useState("");
   const [who, setWho] = useState("");
   const [xfer, setXfer] = useState<"import" | "export" | null>(null);
-  const [shown, mark] = useOptimistic(points, (cur, c: Check) =>
-    cur.map((p) => (p.id === c.id ? { ...p, status: c.status, checkedItemId: c.status === "open" ? null : c.at, checkNote: c.status === "open" ? "" : c.note } : p)),
+  const [shown, mark] = useOptimistic(points, (cur, c: Check | { add: string; itemId: string; fromWho: string }) =>
+    "add" in c
+      ? [...cur, ...parsePoints(c.add).map((x, n) => ({ id: `tmp-${n}`, itemId: c.itemId, body: x.body, ref: x.ref, fromWho: c.fromWho, status: "open", checkedItemId: null, checkNote: "", checkedAt: null, author: "—", createdAt: "" }) as unknown as FeedbackPoint)]
+      : cur.map((p) => (p.id === c.id ? { ...p, status: c.status, checkedItemId: c.status === "open" ? null : c.at, checkNote: c.status === "open" ? "" : c.note } : p)),
   );
   const names = new Map(allItems.map((i) => [i.id, i.name]));
   const byId = new Map(allItems.map((i) => [i.id, i]));
@@ -107,8 +111,12 @@ export function FeedbackPanel({ item, allItems, points, mode, slug }: { item: It
     });
   const add = () =>
     start(async () => {
-      const r = await addFeedback(slug, item.id, text, who);
-      if (report(r, "Feedback ditambahkan.")) setText("");
+      const sent = text;
+      mark({ add: sent, itemId: item.id, fromWho: who.trim() });
+      setText("");
+      toast({ message: "Feedback ditambahkan." }); // row and toast appear together; a failure replaces it with the error and restores the text
+      const r = await addFeedback(slug, item.id, sent, who);
+      if (!report(r)) setText(sent);
     });
   const line = (p: FeedbackPoint) => `[${p.status === "open" ? " " : "x"}] ${p.ref ? `${p.ref} ` : ""}${p.body}${p.status === "dropped" ? " (tidak dikerjakan)" : ""}`;
   const copy = async () => {
@@ -128,8 +136,8 @@ export function FeedbackPanel({ item, allItems, points, mode, slug }: { item: It
       {carry.length > 0 && (
         <div className="space-y-2">
           <h4 className="font-semibold">Cek dari review sebelumnya</h4>
-          <p className="muted tabular-nums">{checked} dari {carry.length} sudah dicek</p>
-          <div className="meter" role="progressbar" aria-valuemin={0} aria-valuemax={carry.length} aria-valuenow={checked}><span style={{ width: `${(checked / carry.length) * 100}%` }} /></div>
+          <p className="muted tabular-nums">{checked} dari {carry.length} sudah dicek{checked === carry.length && <Icon name="check" className="ml-1 inline text-ok" />}</p>
+          <div className="meter" data-full={checked === carry.length || undefined} role="progressbar" aria-valuemin={0} aria-valuemax={carry.length} aria-valuenow={checked}><span style={{ width: `${(checked / carry.length) * 100}%` }} /></div>
           {groups.map((g) => (
             <div key={g}>
               <div className="list-head"><span>Dari {names.get(g)} · {byId.get(g) ? short(byId.get(g)!.startDate) : ""}</span></div>
@@ -170,7 +178,7 @@ export function FeedbackPanel({ item, allItems, points, mode, slug }: { item: It
             <label>
               <span>Tempel atau ketik feedback, satu poin per baris</span>
               <textarea
-                rows={4} value={text} placeholder={"[R2 00:14:32] Potong adegan 3\nGanti musik temp"}
+                rows={4} value={text} placeholder={"Cepat: satu poin per baris. Untuk WhatsApp/banyak baris pakai Impor"}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && text.trim() && !busy) { e.preventDefault(); add(); } }}
               />

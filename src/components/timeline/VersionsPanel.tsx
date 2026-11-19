@@ -26,7 +26,7 @@ export function VersionsPanel({ slug, versions }: { slug: string; versions: Vers
           {versions.map((v) => (
             <li key={v.id} className="flex items-center gap-2 py-1.5">
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{v.name}</span>
+                <span className="line-clamp-2 break-words font-medium">{v.name}</span>
                 <span className="muted block text-xs tabular-nums">{stamp.format(new Date(v.createdAt))}{v.by ? ` · ${v.by}` : ""} · {v.items} item</span>
               </span>
               <a className="btn-ghost" href={`/admin/p/${slug}/timeline/compare?a=${v.id}&b=now`}>Bandingkan</a>

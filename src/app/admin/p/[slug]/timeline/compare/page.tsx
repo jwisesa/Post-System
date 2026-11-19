@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { loadProject } from "@/lib/project-context";
 import type { DiffRow } from "@/lib/schedule/compare";
 import { addDays, diffDays, fmtRange } from "@/lib/schedule/dates";
@@ -6,7 +7,8 @@ import { getComparison, listVersions } from "@/lib/schedule/service";
 import { InputError } from "@/lib/services";
 
 const W = 1000, GUTTER = 220, ROW = 18, HEAD = 22;
-const MONTH = new Intl.DateTimeFormat("id-ID", { month: "short", year: "2-digit", timeZone: "UTC" });
+const MON = new Intl.DateTimeFormat("id-ID", { month: "short", timeZone: "UTC" });
+const month = (d: string) => `${MON.format(new Date(`${d}T00:00:00Z`))} ’${d.slice(2, 4)}`; // ’26 so it does not read as day 26
 const KIND = { changed: "Bergeser", added: "Baru", removed: "Hilang", renamed: "Ganti nama", same: "Sama" } as const;
 const hk = (n: number) => `${n > 0 ? "+" : ""}${n} hk`;
 const tone = (n: number) => (n > 0 ? "text-danger" : "muted");
@@ -33,7 +35,7 @@ function Gantt({ rows, colors }: { rows: DiffRow[]; colors: Map<string, number> 
       {months.map((d) => (
         <g key={d}>
           <line x1={x(d)} x2={x(d)} y1={0} y2={H} stroke="currentColor" strokeOpacity="0.25" strokeWidth="0.5" />
-          <text x={x(d) + 3} y={11} fill="currentColor">{MONTH.format(new Date(`${d}T00:00:00Z`))}</text>
+          <text x={x(d) + 3} y={11} fill="currentColor">{month(d)}</text>
         </g>
       ))}
       <line x1={0} x2={W} y1={HEAD} y2={HEAD} stroke="currentColor" strokeOpacity="0.25" strokeWidth="0.5" />
@@ -65,6 +67,7 @@ export default async function ComparePage({ params, searchParams }: { params: Pr
   for (const s of [cmp?.a.snapshot, cmp?.b.snapshot]) for (const i of s?.items ?? []) if (i.color) colors.set(i.id, i.color);
   const count = (k: DiffRow["kind"]) => rows.filter((r) => r.kind === k).length;
   const summary = [[count("changed") + count("renamed"), "bergeser"], [count("added"), "baru"], [count("removed"), "hilang"]].filter(([n]) => n).map(([n, l]) => `${n} ${l}`).join(", ");
+  const changed = rows.filter((r) => r.kind !== "same");
   const options = (
     <>
       <option value="now">Sekarang</option>
@@ -86,22 +89,25 @@ export default async function ComparePage({ params, searchParams }: { params: Pr
       {cmp && (
         <>
           <p className="muted text-sm">Perbedaan dihitung dengan kalender hari kerja project saat ini</p>
-          {rows.length === 0 ? <p className="muted text-sm">Kedua sisi kosong.</p> : <Gantt rows={rows} colors={colors} />}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm">{summary || "Tidak ada perbedaan"}</p>
             <a className="btn-secondary" href={`/admin/p/${slug}/timeline/compare/export?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`} download>Unduh CSV</a>
           </div>
+          {rows.length === 0 ? <p className="muted text-sm">Kedua sisi kosong.</p> : <Gantt rows={rows} colors={colors} />}
           <table className="table w-full text-sm">
             <thead><tr className="muted text-left"><th className="font-normal">Item</th><th className="font-normal">Tipe</th><th className="font-normal">{cmp.a.label}</th><th className="font-normal">{cmp.b.label}</th><th className="text-right font-normal">Selisih</th></tr></thead>
             <tbody>
-              {rows.filter((r) => r.kind !== "same").map((r) => (
-                <tr key={r.id}>
-                  <td className={r.parent ? "pl-4" : "font-medium"}>{r.name}{r.oldName && <span className="muted"> (dulu {r.oldName})</span>}<span className="muted"> · {r.track}</span></td>
+              {changed.map((r, n) => (
+                <Fragment key={r.id}>
+                {(n === 0 || changed[n - 1].track !== r.track) && <tr><th scope="rowgroup" colSpan={5} className="pt-3 text-left text-xs font-semibold text-ink-2">{r.track}</th></tr>}
+                <tr>
+                  <td className={r.parent ? "pl-4" : "font-medium"}>{r.name}{r.oldName && <span className="muted"> (dulu {r.oldName})</span>}</td>
                   <td>{KIND[r.kind]}</td>
                   <td className="tabular-nums">{r.old ? fmtRange(r.old.start, r.old.due) : ""}</td>
                   <td className="tabular-nums">{r.now ? fmtRange(r.now.start, r.now.due) : ""}</td>
                   <td className="text-right tabular-nums">{r.old && r.now && (r.dStart || r.dDue) ? <><span className={tone(r.dStart)}>{hk(r.dStart)}</span> / <span className={tone(r.dDue)}>{hk(r.dDue)}</span></> : ""}</td>
                 </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>

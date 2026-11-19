@@ -7,7 +7,9 @@ import { can } from "@/lib/auth/permissions";
 import { loadProject } from "@/lib/project-context";
 import { WHO } from "@/lib/feedback/parse";
 import { listReviewerLinks } from "@/lib/review/service";
+import { fmtDate } from "@/lib/schedule/dates";
 import { getSchedule } from "@/lib/schedule/service";
+import { trackLabels } from "@/lib/schedule/track-names";
 import { listMembers, listShareLinks } from "@/lib/services";
 import { addMemberAction, createReviewerLinkAction, createShareLinkAction, removeMemberAction, revokeReviewerLinkAction, revokeShareLinkAction, updateReviewerLinkItemsAction } from "../../../actions";
 
@@ -18,8 +20,9 @@ export default async function Access({ params, searchParams }: { params: Promise
   if (!can(role, "access.manage")) notFound();
   const [members, links, reviewers, schedule, h] = await Promise.all([listMembers(db, project.id), listShareLinks(db, user.id, project.id), listReviewerLinks(db, user.id, project.id), getSchedule(db, project.id, { includeInternal: false }), headers()]);
   // Non-internal milestones grouped by track, then phase.
+  const label = trackLabels(schedule.tracks);
   const groups = schedule.tracks.map((t) => ({
-    id: t.id, name: t.name,
+    id: t.id, name: label.get(t.id)!,
     phases: t.items.filter((i) => !i.parentId).map((p) => ({ id: p.id, name: p.name, stones: t.items.filter((m) => m.parentId === p.id) })).filter((p) => p.stones.length),
   })).filter((t) => t.phases.length);
   const picker = (chosen: string[]) => (
@@ -30,7 +33,7 @@ export default async function Access({ params, searchParams }: { params: Promise
           {t.phases.map((p) => (
             <div key={p.id} className="space-y-0.5 ps-2">
               <div className="muted text-xs">{p.name}</div>
-              {p.stones.map((m) => <label key={m.id} className="check ps-2"><input type="checkbox" name="itemIds" value={m.id} defaultChecked={chosen.includes(m.id)} /> {m.name} <span className="muted text-xs">{m.dueDate}</span></label>)}
+              {p.stones.map((m) => <label key={m.id} className="check ps-2"><input type="checkbox" name="itemIds" value={m.id} defaultChecked={chosen.includes(m.id)} /> {m.name} <span className="muted text-xs">{fmtDate(m.dueDate)}</span></label>)}
             </div>
           ))}
         </fieldset>

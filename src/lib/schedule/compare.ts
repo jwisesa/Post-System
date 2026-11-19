@@ -1,5 +1,6 @@
 import type { ScheduleSnapshot } from "@/db/schema";
 import { addDays } from "./dates";
+import { trackLabels } from "./track-names";
 import { workDays, type Cal } from "./workdays";
 
 /** Working days from `from` to `to`: 0 when equal, negative when `to` is earlier. */
@@ -20,6 +21,7 @@ export function diffSnapshots(a: ScheduleSnapshot, b: ScheduleSnapshot, cal: Cal
   const aItems = new Map(a.items.map((i) => [i.id, i]));
   const bItems = new Map(b.items.map((i) => [i.id, i]));
   const tracks = [...b.tracks, ...a.tracks.filter((t) => !b.tracks.some((x) => x.id === t.id))];
+  const label = trackLabels(tracks);
   const rows: DiffRow[] = [];
   const seen = new Set<string>();
   const one = (i: SItem, track: string): DiffRow => {
@@ -38,8 +40,8 @@ export function diffSnapshots(a: ScheduleSnapshot, b: ScheduleSnapshot, cal: Cal
     for (const i of [...a.items, ...b.items]) if ((bItems.get(i.id) ?? i).trackId === t.id) pool.set(i.id, bItems.get(i.id) ?? i);
     const all = [...pool.values()];
     for (const p of all.filter((i) => !i.parentId || !pool.has(i.parentId))) {
-      rows.push(one(p, t.name));
-      for (const m of all.filter((i) => i.parentId === p.id)) rows.push(one(m, t.name));
+      rows.push(one(p, label.get(t.id)!));
+      for (const m of all.filter((i) => i.parentId === p.id)) rows.push(one(m, label.get(t.id)!));
     }
   }
   return rows;

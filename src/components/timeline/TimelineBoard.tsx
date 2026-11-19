@@ -53,6 +53,24 @@ type Props = {
   openItemId?: string; late?: boolean;
 };
 
+const SHORTCUTS: [string, string][] = [
+  ["Klik batang", "pilih; klik lagi atau klik dua kali untuk detail (saat panel terbuka, satu klik berpindah item)"],
+  ["Enter / Spasi", "buka item terpilih"],
+  ["← / →", "geser 1 hk"],
+  ["Shift/Cmd/Ctrl-klik", "pilih banyak"],
+  ["Seret area kosong", "pilih blok (di layar sentuh tekan lama dulu)"],
+  ["Seret batang / ujungnya", "pindah / perpanjang"],
+  ["Seret titik kanan", "ke item lain untuk dependency"],
+  ["Shift-klik nama track", "pilih satu track"],
+  ["Klik dua kali baris fase", "tambah milestone"],
+  ["Cmd/Ctrl+Z", "urungkan"],
+  ["Cmd/Ctrl+Shift+Z", "ulangi"],
+  ["Cmd/Ctrl+A", "pilih semua"],
+  ["Esc", "batal"],
+  ["Cmd/Ctrl+B", "ciutkan sidebar"],
+  ["Cmd/Ctrl + roda", "zoom"],
+];
+
 const typing = (e: KeyboardEvent) => e.target instanceof HTMLElement && (e.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName));
 
 export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = [], templates = [], attachments, comments = [], feedback = [], signoffs = [], me, versions = [], drives, openItemId, late }: Props) {
@@ -132,6 +150,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
   const mqRef = useRef<{ x0: number; y0: number; ex: number; ey: number; cx: number; cy: number; pid: number; add: boolean; touch: boolean; active: boolean; timer?: ReturnType<typeof setTimeout> } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLDivElement>(null);
+  const help = useRef<HTMLDetailsElement>(null);
 
   const allItems = useMemo(() => tracks.flatMap((t) => t.items.map((i) => ({ ...i, trackName: t.name }))), [tracks]);
   const byId = useMemo(() => new Map(allItems.map((i) => [i.id, i])), [allItems]);
@@ -242,13 +261,13 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
 
   // ---------- actions ----------
 
-  function save(step: Step, moves: DateMove[], summary: string, then: (h: typeof history) => typeof history, done?: string) {
+  function save(step: Step, moves: DateMove[], summary: string, then: (h: typeof history) => typeof history, done?: Parameters<typeof toast>[0]) {
     startTransition(async () => {
       optimistic({ type: "dates", moves });
       const r = await moveItems(slug, moves, summary);
       if (!r.ok) return toast({ message: r.error, tone: "error" });
       setHistory(then);
-      if (done) toast({ message: done });
+      if (done) toast(done);
     });
   }
 
@@ -259,7 +278,11 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
       fwd: result.moves.map((m) => ({ id: m.id, startDate: m.newStart, dueDate: m.newDue })),
     };
     const n = result.conflicts.length;
-    save(step, step.fwd, `Mengubah jadwal ${subject}`, (h) => ({ undo: [...h.undo, step].slice(-50), redo: [] }), n ? `${n} bentrok dengan item yang menunggu. Panah merah menunjukkan letaknya.` : undefined);
+    const m = result.moves[0], d = dayOffset(cal, m.oldDue, m.newDue) || dayOffset(cal, m.oldStart, m.newStart);
+    const message = n ? `${n} bentrok dengan item yang menunggu. Panah merah menunjukkan letaknya.` : `${m.name}${result.moves.length > 1 ? ` +${result.moves.length - 1} lainnya` : ""} ${signed(d, "hk")}`;
+    // Urungkan reverts this very step (not whatever is last in the history by the time it is pressed).
+    const urungkan = () => save(step, step.back, "Mengurungkan perubahan jadwal", (h) => ({ undo: h.undo.filter((x) => x !== step), redo: [...h.redo, step] }));
+    save(step, step.fwd, `Mengubah jadwal ${subject}`, (h) => ({ undo: [...h.undo, step].slice(-50), redo: [] }), { message, action: { label: "Urungkan", run: urungkan } });
   }
 
   const undo = () => { const s = history.undo.at(-1); if (s) save(s, s.back, "Mengurungkan perubahan jadwal", (h) => ({ undo: h.undo.slice(0, -1), redo: [...h.redo, s] })); };
@@ -348,7 +371,8 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
   // Re-subscribed every render so the handler always sees the current history and selection.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setDrag(null); setLink(null); clearTimeout(mqRef.current?.timer); mqRef.current = null; setMq(null); if (!panel) setSel(new Set()); return; }
+      if (e.key === "?" && !typing(e) && !e.metaKey && !e.ctrlKey) { e.preventDefault(); if (help.current) help.current.open = !help.current.open; return; }
+      if (e.key === "Escape") { help.current?.removeAttribute("open"); setDrag(null); setLink(null); clearTimeout(mqRef.current?.timer); mqRef.current = null; setMq(null); if (!panel) setSel(new Set()); return; }
       if (!editable || typing(e)) return;
       if (e.key.toLowerCase() === "a" && (e.metaKey || e.ctrlKey) && view === "gantt" && !panel) { e.preventDefault(); setSel(new Set(rowOf.keys())); return; }
       const z = e.key.toLowerCase() === "z" && (e.metaKey || e.ctrlKey);
@@ -533,7 +557,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
   const big = (id: string) => coarse || sel.has(id);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 tl-root" data-drawer={panel ? "" : undefined}>
       {/* toolbar: primary row (view, zoom, history, panels, actions), then a row of filters */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
         <select aria-label="Tampilan" className="!w-auto hidden md:block" value={view === "gantt" ? (presetId ?? "custom") : view} onChange={(e) => pickView(e.target.value)}>
@@ -725,9 +749,14 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
           )}
 
           {view === "gantt" && editable && (
-            <p className="hidden text-[13px] text-ink-2 md:block">
-              Klik batang untuk memilih (klik lagi atau klik dua kali untuk detail; saat panel terbuka, satu klik berpindah item), seret untuk memindah, ujungnya untuk memperpanjang, titik di kanannya ke item lain untuk membuat dependency. Pilih: seret di area kosong (di layar sentuh tekan lama dulu), Shift untuk menambah, Cmd/Ctrl+A semua, Shift-klik nama track untuk satu track. Klik dua kali di baris fase untuk menambah milestone.
-            </p>
+            <details ref={help} className="tl-details relative hidden w-fit md:block">
+              <summary className="btn-ghost !px-2" aria-label="Pintasan dan cara memakai jadwal" title="Pintasan (?)">?</summary>
+              <div className="tl-pop tl-pop-up w-96 max-w-[90vw] space-y-2 p-3 text-[13px]" role="group" aria-label="Pintasan">
+                <ul className="space-y-1">
+                  {SHORTCUTS.map(([k, d]) => <li key={k} className="flex gap-3"><b className="w-36 shrink-0 font-semibold">{k}</b><span className="text-ink-2">{d}</span></li>)}
+                </ul>
+              </div>
+            </details>
           )}
         </>
       )}
@@ -793,7 +822,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
       )}
       {panel?.kind === "template" && editable && (
         <Drawer title="Rencana mundur dari tanggal rilis" onClose={() => setPanel(null)}>
-          <TemplatePanel slug={slug} templates={templates} />
+          <TemplatePanel slug={slug} templates={templates} onBack={() => setPanel({ kind: "manage" })} />
         </Drawer>
       )}
       {panel?.kind === "days" && (

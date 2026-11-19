@@ -14,7 +14,7 @@ type Preview = Extract<Awaited<ReturnType<typeof previewTemplateAction>>, { ok: 
 const toSource = (v: string): TemplateSource => (v.startsWith("s:") ? { kind: "saved", id: v.slice(2) } : { kind: "builtin", value: v.slice(2) });
 
 /** Plans a template backward from a release date: preview first, nothing is written until "Terapkan". */
-export function TemplatePanel({ slug, templates }: { slug: string; templates: TemplateRow[] }) {
+export function TemplatePanel({ slug, templates, onBack }: { slug: string; templates: TemplateRow[]; onBack?: () => void }) {
   const toast = useToast();
   const [pending, start] = useTransition();
   const [source, setSource] = useState("");
@@ -51,6 +51,7 @@ export function TemplatePanel({ slug, templates }: { slug: string; templates: Te
 
   return (
     <div className="space-y-6">
+      {onBack && <button type="button" className="btn-ghost -ms-2" onClick={onBack}>Kembali ke Kelola</button>}
       <section className="space-y-3">
         <p className="muted text-sm">Pilih template dan tanggal rilis. Fase dihitung mundur dari tanggal rilis pada hari kerja. Tidak ada yang tersimpan sebelum Anda menekan Terapkan.</p>
         <label>

@@ -12,6 +12,7 @@ import type { Deliverable, DeliverableInput } from "@/lib/deliverables/service";
 import { fmtDate } from "@/lib/schedule/dates";
 import { AttachmentList, useAct } from "../assets/AttachmentList";
 import { Combobox, Drawer } from "../ui/controls";
+import { trackLabels } from "@/lib/schedule/track-names";
 import { Icon } from "../ui/icons";
 import { useToast } from "../ui/toast";
 
@@ -29,12 +30,13 @@ function SpecChips({ spec }: { spec: Record<string, string> }) {
 }
 
 function TrackSelect({ tracks, defaultValue }: { tracks: Props["tracks"]; defaultValue?: string | null }) {
+  const label = trackLabels(tracks);
   return (
     <label>
       <span>Track (opsional)</span>
       <select name="trackId" defaultValue={defaultValue ?? ""}>
         <option value="">— Seluruh project</option>
-        {tracks.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        {tracks.map((t) => <option key={t.id} value={t.id}>{label.get(t.id)}</option>)}
       </select>
     </label>
   );
@@ -51,7 +53,7 @@ export function DeliverablesBoard({ deliverables, attachments, tracks, techSpec,
   const [fTrack, setFTrack] = useState("");
   const [panel, setPanel] = useState<Panel | null>(null);
   const editable = mode === "edit";
-  const trackName = new Map(tracks.map((t) => [t.id, t.name]));
+  const trackName = trackLabels(tracks);
   const linksOf = (id: string) => attachments.filter((a) => a.targetType === "deliverable" && a.targetId === id);
 
   const q = query.trim().toLowerCase();
@@ -76,7 +78,7 @@ export function DeliverablesBoard({ deliverables, attachments, tracks, techSpec,
     const [presetId, platform, trackId] = key.split("|");
     const cells = shown.filter((d) => d.presetId === presetId && d.platform === platform && (d.trackId ?? "") === trackId);
     return {
-      key, title: `${presetId.slice(8)}${platform ? ` · ${platform}` : ""}${trackId ? ` · ${trackName.get(trackId) ?? ""}` : ""}`,
+      key, title: `${presetId.slice(8)}${platform ? ` · ${platform}` : ""}${trackId ? ` · ${tracks.find((t) => t.id === trackId)?.name ?? ""}` : ""}`,
       durations: [...new Set(cells.map((c) => c.spec.duration))], ratios: [...new Set(cells.map((c) => c.spec.aspectRatio))], cells,
     };
   });
@@ -109,6 +111,8 @@ export function DeliverablesBoard({ deliverables, attachments, tracks, techSpec,
       )}
 
       <div className="flex flex-wrap items-center gap-2">
+        {items.length > 0 && (
+          <>
         <input className="max-w-56" type="search" inputMode="search" enterKeyHint="search" autoCapitalize="none" autoCorrect="off" placeholder="Cari deliverable, format…" aria-label="Cari deliverable" value={query} onChange={(e) => setQuery(e.target.value)} />
         <select aria-label="Filter platform" className="!w-auto" value={fPlatform} onChange={(e) => setFPlatform(e.target.value)}>
           <option value="">Semua platform</option>
@@ -117,8 +121,10 @@ export function DeliverablesBoard({ deliverables, attachments, tracks, techSpec,
         {tracks.length > 0 && (
           <select aria-label="Filter track" className="!w-auto" value={fTrack} onChange={(e) => setFTrack(e.target.value)}>
             <option value="">Semua track</option>
-            {tracks.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {tracks.map((t) => <option key={t.id} value={t.id}>{trackName.get(t.id)}</option>)}
           </select>
+        )}
+          </>
         )}
         {editable && (
           <div className="ml-auto flex flex-wrap gap-2">

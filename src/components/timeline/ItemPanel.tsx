@@ -6,6 +6,7 @@ import { addItemAction, addTrackAction, deleteItemAction, deleteTrackAction, reb
 import { LINK_LABELS } from "@/lib/assets/catalog";
 import type { Attachment, Comment } from "@/lib/assets/service";
 import { addDays, fmtDate, fmtRange } from "@/lib/schedule/dates";
+import { trackLabels } from "@/lib/schedule/track-names";
 import type { Dep } from "@/lib/schedule/shift";
 import { MILESTONE_NAME_OPTIONS, PHASE_COLORS, PHASE_NAME_OPTIONS, STATUSES, statusLabel, TRACK_NAME_OPTIONS, TRACK_TEMPLATES } from "@/lib/schedule/templates";
 import { snap, type Cal } from "@/lib/schedule/workdays";
@@ -319,8 +320,9 @@ export function NewItemPanel({ slug, tracks, trackId, parentId, date, cal }: { s
   );
 }
 
-export function ManagePanel({ slug, tracks, today, hasItems, onOpen }: { slug: string; tracks: Track[]; today: string; hasItems: boolean; onOpen: (panel: "days" | "versions" | "template") => void }) {
+export function ManagePanel({ slug, tracks, today, hasItems, onOpen }: { slug: string; tracks: Track[]; today: string; hasItems: boolean; onOpen: (panel: "template") => void }) {
   const toast = useToast();
+  const names = trackLabels(tracks);
   return (
     <>
       <form action={addTrackAction} className="space-y-3">
@@ -355,35 +357,11 @@ export function ManagePanel({ slug, tracks, today, hasItems, onOpen }: { slug: s
           <label><span>Nama template</span><input name="name" required /></label>
           <fieldset className="space-y-1">
             <legend className="mb-1 text-xs font-semibold text-ink-2">Track</legend>
-            {tracks.map((t) => <label key={t.id} className="check"><input type="checkbox" name="trackIds" value={t.id} defaultChecked /> {t.name}</label>)}
+            {tracks.map((t) => <label key={t.id} className="check"><input type="checkbox" name="trackIds" value={t.id} defaultChecked /> {names.get(t.id)}</label>)}
           </fieldset>
           <SubmitButton className="btn-secondary">Simpan template</SubmitButton>
         </form>
       )}
-
-      {hasItems && (
-        <section className="space-y-2 hairline pt-4">
-          <h3>Export</h3>
-          <div className="flex flex-wrap gap-2">
-            <a className="btn-secondary" href={`/admin/p/${slug}/timeline/print`}><Icon name="print" /> PDF Gantt</a>
-            <a className="btn-secondary" href={`/admin/p/${slug}/timeline/print?view=calendar`}><Icon name="today" /> PDF Kalender</a>
-            <a className="btn-secondary" href={`/admin/p/${slug}/timeline/export`} download><Icon name="download" /> Excel / Sheets (CSV)</a>
-            <a className="btn-secondary" href={`/admin/p/${slug}/timeline/export?type=feedback`} download><Icon name="feedback" /> Feedback (CSV)</a>
-          </div>
-        </section>
-      )}
-
-      <section className="space-y-2 hairline pt-4">
-        <h3>Versi tersimpan</h3>
-        <p className="muted text-sm">Simpan dan pulihkan keadaan timeline dari tombol Versi di atas jadwal.</p>
-        <button type="button" className="btn-secondary" onClick={() => onOpen("versions")}>Buka Versi</button>
-      </section>
-
-      <section className="space-y-2 hairline pt-4">
-        <h3>Hari kerja & libur</h3>
-        <p className="muted text-sm">Atur hari yang diblokir dan lihat daftar hari liburnya.</p>
-        <button type="button" className="btn-secondary" onClick={() => onOpen("days")}>Buka Hari kerja & libur</button>
-      </section>
 
       {hasItems && (
         <form action={rebaselineAction} className="space-y-3 hairline pt-4">
