@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { ConfirmButton, CopyButton } from "@/components/ui/controls";
+import { ConfirmButton, CopyButton, SubmitButton } from "@/components/ui/controls";
 import { Icon } from "@/components/ui/icons";
 import { ErrorBanner } from "@/components/views";
 import { can } from "@/lib/auth/permissions";
@@ -129,7 +129,7 @@ export default async function Access({ params, searchParams }: { params: Promise
                     <form action={revokeReviewerLinkAction}>
                       <input type="hidden" name="slug" value={slug} />
                       <input type="hidden" name="linkId" value={l.id} />
-                      <ConfirmButton message={`Cabut link "${l.name}"? Yang memegang link ini tidak bisa membukanya lagi.`}>Cabut</ConfirmButton>
+                      <ConfirmButton pendingLabel="Mencabut…" message={`Cabut link "${l.name}"? Yang memegang link ini tidak bisa membukanya lagi.`}>Cabut</ConfirmButton>
                     </form>
                   </>
                 )}
@@ -148,7 +148,7 @@ export default async function Access({ params, searchParams }: { params: Promise
             </li>
           ))}
         </ul>
-        <form action={createReviewerLinkAction} className="hairline mt-3 space-y-3 pt-3">
+        <form key={reviewers.length} action={createReviewerLinkAction} className="hairline mt-3 space-y-3 pt-3">
           <input type="hidden" name="slug" value={slug} />
           <div className="flex flex-wrap items-end gap-3">
             <label className="min-w-48 flex-1"><span>Nama</span><input name="name" required maxLength={60} /></label>
@@ -156,7 +156,7 @@ export default async function Access({ params, searchParams }: { params: Promise
             <datalist id="reviewer-roles">{WHO.map((w) => <option key={w} value={w} />)}</datalist>
           </div>
           {picker([])}
-          <button className="btn">Buat link reviewer</button>
+          <SubmitButton pendingLabel="Membuat…">Buat link reviewer</SubmitButton>
         </form>
       </section>
     </div>

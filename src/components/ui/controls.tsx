@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { Icon, type IconName } from "./icons";
 import { useToast } from "./toast";
 
@@ -101,11 +102,18 @@ export function CopyButton({ text, label = "Salin", className = "btn-secondary" 
   );
 }
 
+/** Submit button that disables itself and says "Menyimpan…" while its form action runs. */
+export function SubmitButton({ className = "btn", children, pendingLabel = "Menyimpan…" }: { className?: string; children: React.ReactNode; pendingLabel?: string }) {
+  const { pending } = useFormStatus();
+  return <button className={className} disabled={pending} style={pending ? { opacity: 0.7 } : undefined}>{pending ? pendingLabel : children}</button>;
+}
+
 /** Submit button that asks first. Works inside any <form action={...}>. */
-export function ConfirmButton({ message, className = "btn-danger", children, onClick, ...rest }: { message: string } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+export function ConfirmButton({ message, className = "btn-danger", children, onClick, pendingLabel, ...rest }: { message: string; pendingLabel?: string } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const { pending } = useFormStatus();
   return (
-    <button {...rest} className={className} onClick={(e) => { if (!window.confirm(message)) { e.preventDefault(); return; } onClick?.(e); }}>
-      {children}
+    <button {...rest} className={className} disabled={pending || rest.disabled} style={pending ? { opacity: 0.7 } : undefined} onClick={(e) => { if (!window.confirm(message)) { e.preventDefault(); return; } onClick?.(e); }}>
+      {pending && pendingLabel ? pendingLabel : children}
     </button>
   );
 }

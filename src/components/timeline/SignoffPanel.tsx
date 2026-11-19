@@ -1,9 +1,9 @@
 "use client";
 
-import { useTransition } from "react";
 import { recordSignoffAction, revokeSignoffAction } from "@/app/admin/signoff-actions";
 import { WHO } from "@/lib/feedback/parse";
 import type { Signoff } from "@/lib/review/service";
+import { SubmitButton } from "../ui/controls";
 import { useToast } from "../ui/toast";
 import type { Item, Mode } from "./shared";
 
@@ -12,7 +12,6 @@ const WIB = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "
 /** Persetujuan on a milestone: active and revoked sign-offs; supervisors can record on someone's behalf and revoke with a reason. */
 export function SignoffPanel({ item, signoffs, mode, slug }: { item: Item; signoffs: Signoff[]; mode: Mode; slug: string }) {
   const toast = useToast();
-  const [busy, start] = useTransition();
   const mine = signoffs.filter((s) => s.itemId === item.id);
   const report = (r: { ok: boolean; error?: string }, done: string) => toast(r.ok ? { message: done } : { message: r.error ?? "Gagal.", tone: "error" });
   const who = (s: Signoff) => s.signerRole || s.signerName;
@@ -32,10 +31,10 @@ export function SignoffPanel({ item, signoffs, mode, slug }: { item: Item; signo
             {mode === "edit" && !s.revokedAt && (
               <form
                 className="flex items-end gap-2 pt-1"
-                action={(f) => start(async () => report(await revokeSignoffAction(slug, s.id, String(f.get("reason") ?? "")), "Persetujuan dicabut."))}
+                action={async (f) => report(await revokeSignoffAction(slug, s.id, String(f.get("reason") ?? "")), "Persetujuan dicabut.")}
               >
                 <label className="min-w-0 flex-1"><span>Alasan mencabut</span><input name="reason" required maxLength={500} /></label>
-                <button className="btn-danger" disabled={busy}>Cabut</button>
+                <SubmitButton className="btn-danger" pendingLabel="Mencabut…">Cabut</SubmitButton>
               </form>
             )}
           </li>
@@ -45,9 +44,9 @@ export function SignoffPanel({ item, signoffs, mode, slug }: { item: Item; signo
         <form
           key={mine.length}
           className="space-y-2"
-          action={(f) => start(async () => report(await recordSignoffAction(slug, item.id, {
+          action={async (f) => report(await recordSignoffAction(slug, item.id, {
             signerName: String(f.get("signerName") ?? ""), signerRole: String(f.get("signerRole") ?? ""), note: String(f.get("note") ?? ""), evidenceUrl: String(f.get("evidenceUrl") ?? ""),
-          }), "Persetujuan dicatat."))}
+          }), "Persetujuan dicatat.")}
         >
           <h4 className="font-semibold">Catat persetujuan</h4>
           <div className="grid grid-cols-2 gap-2">
@@ -57,7 +56,7 @@ export function SignoffPanel({ item, signoffs, mode, slug }: { item: Item; signo
           </div>
           <label><span>Catatan</span><input name="note" maxLength={500} /></label>
           <label><span>Link bukti (opsional)</span><input name="evidenceUrl" type="url" inputMode="url" placeholder="https://" /></label>
-          <button className="btn" disabled={busy}>Catat</button>
+          <SubmitButton>Catat</SubmitButton>
         </form>
       )}
     </section>

@@ -1,12 +1,14 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { createPgliteDb, type Db } from "@/db/client";
+import { projects } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { ForbiddenError } from "@/lib/auth/permissions";
 import { addDays, diffDays } from "@/lib/schedule/dates";
 import * as sch from "@/lib/schedule/service";
 import { computeMoves, computeShift, wouldCycle, type SItem } from "@/lib/schedule/shift";
 import { blockedEntries, calOf, daysForHours, endAfter, isOff, moveKeepingLength, snap, workDays } from "@/lib/schedule/workdays";
 import * as s from "@/lib/services";
-import { progressOf } from "@/components/timeline/shared";
+import { progressOf, slip, signed, dayOffset } from "@/components/timeline/shared";
 
 const item = (id: string, startDate: string, dueDate: string, extra: Partial<SItem> = {}): SItem => ({ id, name: id, parentId: null, startDate, dueDate, hardDeadline: false, ...extra });
 
@@ -100,6 +102,20 @@ describe("schedule service", () => {
     expect(deps.length).toBeGreaterThan(10);
     // the trailer delivers long before the feature
     expect(tracks[1].items.at(-1)!.dueDate < tracks[0].items.at(-1)!.dueDate).toBe(true);
+  });
+
+  it("saving the working-day rules keeps cascade; equal-start rows keep a stable order across move and undo", async () => {
+    await sch.updateScheduleSettings(db, sup, projectId, { skipWeekends: false, national: false, cascade: true });
+    await sch.updateScheduleSettings(db, sup, projectId, { skipWeekends: false, national: false, hoursPerDay: 8 });
+    const [p] = await db.select({ s: projects.scheduleSettings }).from(projects).where(eq(projects.id, projectId));
+    expect(p.s?.cascade).toBe(true);
+    await sch.updateScheduleSettings(db, sup, projectId, { skipWeekends: false, national: false, cascade: false });
+    const order = async () => (await sch.getSchedule(db, projectId, { includeInternal: true })).tracks[0].items.map((i) => i.id);
+    const before = await order();
+    const g = await find("Grading");
+    await sch.applyShift(db, sup, projectId, g.id, { startDate: addDays(g.startDate, 2), dueDate: addDays(g.dueDate, 2), cascade: false });
+    await sch.applyShift(db, sup, projectId, g.id, { startDate: g.startDate, dueDate: g.dueDate, cascade: false });
+    expect(await order()).toEqual(before);
   });
 
   it("preview changes nothing; apply shifts dependents, keeps baseline, logs one entry", async () => {
@@ -295,5 +311,18 @@ describe("progressOf", () => {
     expect(progressOf({ ...i, status: "in_progress" }, [], "2026-01-05")).toBe(0.5);
     expect(progressOf({ ...i, status: "in_progress" }, [], "2025-12-01")).toBe(0.05);
     expect(progressOf({ ...i, status: "in_progress" }, [{ status: "done" }, { status: "todo" }], "2026-01-05")).toBe(0.5);
+  });
+});
+
+describe("slip units", () => {
+  it("counts working days with a calendar (hk) and calendar days without (hari)", () => {
+    const cal = calOf({ skipWeekends: true, national: false, jointLeave: false });
+    // Fri 2026-12-04 -> Tue 2026-12-08 is 4 calendar days but 2 working days
+    const i = { baselineDue: "2026-12-04", dueDate: "2026-12-08" };
+    expect(slip(i, cal)).toBe("+2 hk");
+    expect(slip(i)).toBe("+4 hari");
+    expect(slip({ baselineDue: i.dueDate, dueDate: i.baselineDue }, cal)).toBe("-2 hk");
+    expect(slip({ baselineDue: "2026-12-04", dueDate: "2026-12-04" }, cal)).toBe("");
+    expect(signed(dayOffset(cal, "2026-12-04", "2026-12-07"), "hk")).toBe("+1 hk");
   });
 });

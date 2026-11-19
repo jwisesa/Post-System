@@ -12,7 +12,7 @@ import { snap, type Cal } from "@/lib/schedule/workdays";
 import type { FeedbackPoint } from "@/lib/feedback/service";
 import { AttachmentList, CommentThread } from "../assets/AttachmentList";
 import { saveTemplateAction } from "@/app/admin/template-actions";
-import { ConfirmButton } from "../ui/controls";
+import { ConfirmButton, SubmitButton } from "../ui/controls";
 import { useToast } from "../ui/toast";
 import { FeedbackPanel } from "./FeedbackPanel";
 import { SignoffPanel } from "./SignoffPanel";
@@ -39,12 +39,12 @@ function ColorField({ value }: { value: number | null }) {
   );
 }
 
-export function Badges({ item, today }: { item: Item; today: string }) {
+export function Badges({ item, today, cal }: { item: Item; today: string; cal?: Cal }) {
   return (
     <span className="inline-flex flex-wrap gap-1">
       {item.hardDeadline && <span className="tag tag-danger">Hard deadline</span>}
       {isLate(item, today) && <span className="tag tag-danger">Terlambat</span>}
-      {slip(item) && <span className="tag tag-warn">{slip(item)} dari baseline</span>}
+      {slip(item, cal) && <span className="tag tag-warn">{slip(item, cal)} dari baseline</span>}
       {item.internal && <span className="tag">Internal</span>}
     </span>
   );
@@ -88,10 +88,10 @@ export function ItemHead({ item, mode, today, cal, signoffs, onStatus, onStep }:
         )}
         {item.picName && <span className="tag">PIC {item.picName}</span>}
         {!item.picName && item.picGroupName && <span className="tag">Dept {item.picGroupName}</span>}
-        <Badges item={item} today={today} />
+        <Badges item={item} today={today} cal={cal} />
         {item.parentId && signed && <span className="tag">Disetujui oleh {signed}</span>}
       </div>
-      {slip(item) && <div className="muted text-xs">Baseline: {fmtRange(item.baselineStart, item.baselineDue)}</div>}
+      {slip(item, cal) && <div className="muted text-xs">Baseline: {fmtRange(item.baselineStart, item.baselineDue)}</div>}
       {mode === "edit" && (
         <div role="toolbar" aria-label={`Atur jadwal "${item.name}"`} className="flex flex-wrap items-center gap-x-3 text-sm">
           {kinds.map(([label, kind, back, fwd]) => (
@@ -112,10 +112,10 @@ type ItemProps = {
   allItems: (Item & { trackName: string })[]; deps: Dep[]; contacts: { id: string; label: string }[]; groups: { id: string; name: string }[];
   onLink: (itemId: string, dependsOnId: string) => void; onUnlink: (itemId: string, dependsOnId: string) => void;
   attachments: Attachment[]; comments: Comment[]; feedback: FeedbackPoint[]; signoffs?: Signoff[]; me?: { id: string; role: string };
-  cal: Cal; cascade: boolean; ph: number; onAddMilestone: () => void; drives?: DriveSummary; tab: TabId;
+  cal: Cal; cascade: boolean; onDates: (id: string, start: string, due: string, cascade: boolean, reason: string) => void; ph: number; onAddMilestone: () => void; drives?: DriveSummary; tab: TabId;
 };
 
-export function ItemPanel({ item, mode, slug, today, allItems, deps, contacts, groups, onLink, onUnlink, attachments, comments, feedback, signoffs = [], me, cal, cascade, onAddMilestone, drives, tab }: ItemProps) {
+export function ItemPanel({ item, mode, slug, today, allItems, deps, contacts, groups, onLink, onUnlink, attachments, comments, feedback, signoffs = [], me, cal, cascade, onDates, onAddMilestone, drives, tab }: ItemProps) {
   const stones = allItems.filter((o) => o.parentId === item.id);
   const nameOf = (id: string) => { const i = allItems.find((x) => x.id === id); return i ? `${i.trackName} / ${i.name}` : "—"; };
   const preds = deps.filter((d) => d.itemId === item.id);
@@ -131,7 +131,20 @@ export function ItemPanel({ item, mode, slug, today, allItems, deps, contacts, g
       {t === "detail" && (
         <>
           {mode === "edit" && (
-            <form key={`${item.id}:${item.startDate}:${item.dueDate}:${item.workHours}`} action={updateItemAction} className="space-y-3">
+            <form
+              key={`${item.id}:${item.startDate}:${item.dueDate}:${item.workHours}`}
+              className="space-y-3"
+              action={(f) => {
+                // Changed dates go through the board (undoable, cascade-aware); the server action then saves the other details.
+                const [start, due] = [String(f.get("startDate")), String(f.get("dueDate"))];
+                if (start !== item.startDate || due !== item.dueDate) {
+                  onDates(item.id, start, due, f.get("cascade") !== null, String(f.get("reason") ?? ""));
+                  f.set("startDate", item.startDate);
+                  f.set("dueDate", item.dueDate);
+                }
+                return updateItemAction(f);
+              }}
+            >
               {hidden}
               <label><span>Nama</span><input name="name" required defaultValue={item.name} /></label>
               {item.parentId ? (
@@ -161,7 +174,7 @@ export function ItemPanel({ item, mode, slug, today, allItems, deps, contacts, g
               <label><span>Alasan perubahan tanggal (opsional)</span><input name="reason" /></label>
               {succs.length > 0 && <label className="check"><input type="checkbox" name="cascade" defaultChecked={cascade} /> Jika tanggal berubah, geser juga {succs.length} item yang menunggu</label>}
               <div className="drawer-foot">
-                <button className="btn">Simpan</button>
+                <SubmitButton>Simpan</SubmitButton>
                 <ConfirmButton formAction={deleteItemAction} formNoValidate message={`Hapus "${item.name}"${item.parentId ? "" : " beserta milestone-nya"}?`}>Hapus</ConfirmButton>
               </div>
             </form>
@@ -172,7 +185,7 @@ export function ItemPanel({ item, mode, slug, today, allItems, deps, contacts, g
               {hidden}
               <input type="hidden" name="status" value={item.status} />
               <NotesField item={item} />
-              <button className="btn">Simpan status</button>
+              <SubmitButton>Simpan status</SubmitButton>
             </form>
           )}
 
@@ -301,7 +314,7 @@ export function NewItemPanel({ slug, tracks, trackId, parentId, date, cal }: { s
           <ColorField value={null} />
         </>
       )}
-      <button className="btn">Tambah {milestone ? "milestone" : "fase"}</button>
+      <SubmitButton>Tambah {milestone ? "milestone" : "fase"}</SubmitButton>
     </form>
   );
 }
@@ -323,7 +336,7 @@ export function ManagePanel({ slug, tracks, today, hasItems, onOpen }: { slug: s
           <datalist id="track-names">{TRACK_NAME_OPTIONS.map((n) => <option key={n} value={n} />)}</datalist>
         </label>
         <label><span>Tanggal mulai</span><input name="startDate" type="date" defaultValue={today} /></label>
-        <button className="btn">Tambah track</button>
+        <SubmitButton>Tambah track</SubmitButton>
       </form>
 
       <section className="space-y-2 hairline pt-4">
@@ -344,7 +357,7 @@ export function ManagePanel({ slug, tracks, today, hasItems, onOpen }: { slug: s
             <legend className="mb-1 text-xs font-semibold text-ink-2">Track</legend>
             {tracks.map((t) => <label key={t.id} className="check"><input type="checkbox" name="trackIds" value={t.id} defaultChecked /> {t.name}</label>)}
           </fieldset>
-          <button className="btn-secondary">Simpan template</button>
+          <SubmitButton className="btn-secondary">Simpan template</SubmitButton>
         </form>
       )}
 
@@ -378,7 +391,7 @@ export function ManagePanel({ slug, tracks, today, hasItems, onOpen }: { slug: s
           <h3>Baseline</h3>
           <p className="muted text-sm">Menetapkan jadwal saat ini sebagai baseline baru. Selisih “dari baseline” di semua item kembali nol.</p>
           <label><span>Alasan (opsional)</span><input name="reason" /></label>
-          <ConfirmButton className="btn-secondary" message="Tetapkan jadwal saat ini sebagai baseline baru?">Set baseline</ConfirmButton>
+          <ConfirmButton className="btn-secondary" pendingLabel="Menyimpan…" message="Tetapkan jadwal saat ini sebagai baseline baru?">Set baseline</ConfirmButton>
         </form>
       )}
 
@@ -398,7 +411,7 @@ export function ManagePanel({ slug, tracks, today, hasItems, onOpen }: { slug: s
   );
 }
 
-export function AgendaList({ tracks, today, onOpen, ph }: { tracks: Track[]; today: string; onOpen: (id: string) => void; ph: (id: string) => number }) {
+export function AgendaList({ tracks, today, onOpen, ph, cal }: { tracks: Track[]; today: string; cal?: Cal; onOpen: (id: string) => void; ph: (id: string) => number }) {
   return (
     <div className="space-y-4">
       {tracks.map((t) => (
@@ -415,7 +428,7 @@ export function AgendaList({ tracks, today, onOpen, ph }: { tracks: Track[]; tod
                   </span>
                   <span className="shrink-0 text-right text-xs">
                     <span className={isLate(i, today) ? "text-danger" : "font-semibold text-ink-2"}>{fmtDate(i.dueDate).replace(/ \d{4}$/, "")}</span>
-                    {slip(i) && <span className="block text-warn">{slip(i)}</span>}
+                    {slip(i, cal) && <span className="block text-warn">{slip(i, cal)}</span>}
                   </span>
                 </button>
               </li>

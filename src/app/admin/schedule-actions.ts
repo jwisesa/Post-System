@@ -74,7 +74,7 @@ export async function saveSettingsAction(f: FormData) {
   await finish(timeline(project.slug), async () => {
     let holidays: { date: string; name: string }[] = [];
     try { holidays = JSON.parse(str(f, "holidays") || "[]"); } catch { /* keep none */ }
-    await sch.updateScheduleSettings(db, user.id, project.id, { skipWeekends: flag(f, "skipWeekends"), cascade: flag(f, "cascade"), national: flag(f, "national"), jointLeave: flag(f, "jointLeave"), hoursPerDay: Number(str(f, "hoursPerDay")) || undefined, holidays: Array.isArray(holidays) ? holidays : [] });
+    await sch.updateScheduleSettings(db, user.id, project.id, { skipWeekends: flag(f, "skipWeekends"), national: flag(f, "national"), jointLeave: flag(f, "jointLeave"), hoursPerDay: Number(str(f, "hoursPerDay")) || undefined, holidays: Array.isArray(holidays) ? holidays : [] });
   });
 }
 

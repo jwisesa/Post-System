@@ -14,7 +14,7 @@ export type Item = typeof scheduleItems.$inferSelect;
 export async function getSchedule(db: Db, projectId: string, opts: { includeInternal: boolean }) {
   const [trackRows, itemRows, contacts, groups, [project]] = await Promise.all([
     db.select().from(tracks).where(eq(tracks.projectId, projectId)).orderBy(asc(tracks.sortOrder), asc(tracks.createdAt)),
-    db.select().from(scheduleItems).where(eq(scheduleItems.projectId, projectId)).orderBy(asc(scheduleItems.startDate), asc(scheduleItems.createdAt)),
+    db.select().from(scheduleItems).where(eq(scheduleItems.projectId, projectId)).orderBy(asc(scheduleItems.startDate), asc(scheduleItems.createdAt), asc(scheduleItems.id)),
     db.select({ id: teamContacts.id, name: teamContacts.name, internal: teamContacts.internal }).from(teamContacts).where(eq(teamContacts.projectId, projectId)),
     db.select({ id: teamGroups.id, name: teamGroups.name }).from(teamGroups).where(eq(teamGroups.projectId, projectId)),
     db.select({ settings: projects.scheduleSettings }).from(projects).where(eq(projects.id, projectId)),
@@ -334,6 +334,7 @@ export async function applyMoves(db: Db, userId: string, projectId: string, move
 
 // ---------- working-day settings ----------
 
+/** `cascade` is owned by the timeline toolbar: saving the working-day rules keeps whatever is stored. */
 export async function updateScheduleSettings(db: Db, userId: string, projectId: string, input: ScheduleSettings) {
   await requireRole(db, userId, projectId, "schedule.edit");
   const holidays = (input.holidays ?? [])
@@ -343,6 +344,7 @@ export async function updateScheduleSettings(db: Db, userId: string, projectId: 
   const next: ScheduleSettings = { skipWeekends: input.skipWeekends !== false, cascade: Boolean(input.cascade), national: input.national !== false, jointLeave: input.jointLeave !== false, hoursPerDay: hoursPerDayOf(input), holidays: [...new Map(holidays.map((h) => [h.date, h])).values()] };
   await db.transaction(async (tx) => {
     const [before] = await tx.select({ settings: projects.scheduleSettings }).from(projects).where(eq(projects.id, projectId));
+    if (input.cascade === undefined) next.cascade = Boolean(before?.settings?.cascade);
     if (JSON.stringify(before?.settings) === JSON.stringify(next)) return;
     await tx.update(projects).set({ scheduleSettings: next }).where(eq(projects.id, projectId));
     await record(tx, { projectId, userId, entity: "schedule", entityId: projectId, action: "update", summary: "Mengubah aturan hari kerja timeline", before: before?.settings, after: next });

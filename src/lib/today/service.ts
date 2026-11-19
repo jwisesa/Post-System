@@ -121,7 +121,7 @@ export async function getToday(db: Db, projectId: string, today: string, opts: {
         .filter((s) => !s.revokedAt && wibDate.format(new Date(s.createdAt)) >= addDays(today, -7))
         .flatMap((s) => {
           const it = items.find((i) => i.id === s.itemId);
-          return it ? [{ id: s.id, name: it.name, track: it.trackName, signer: s.signerRole || s.signerName, at: s.createdAt }] : [];
+          return it ? [{ id: s.id, itemId: it.id, name: it.name, track: it.trackName, signer: s.signerRole || s.signerName, at: s.createdAt }] : [];
         })
     : [];
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { updateTechSpecAction } from "@/app/admin/actions";
 import { MAX_CAMERAS, TECH_FIELDS, TECH_SECTIONS, cameraKeys, fieldApplies, type TechField, type TechSpec } from "@/lib/tech-spec/schema";
 import { Icon } from "./ui/icons";
@@ -23,6 +23,29 @@ export function TechForm({ slug, spec, history }: { slug: string; spec: TechSpec
     return `${fields.filter((f) => (values[f.key] ?? "").trim()).length}/${fields.length}`;
   };
   const changed = TECH_FIELDS.filter((f) => (values[f.key] ?? "").trim() !== (spec[f.key] ?? ""));
+
+  // Warn before leaving with unsaved edits (removed again once the form is clean, e.g. after a save).
+  const dirty = changed.length > 0;
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  // Arriving at #f-<key> (Pemeriksaan "Perbaiki"): open the sections around the field and focus it.
+  useEffect(() => {
+    const go = () => {
+      const el = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+      if (!el?.id.startsWith("f-")) return;
+      for (let d = el.closest("details"); d; d = d.parentElement?.closest("details") ?? null) d.open = true;
+      el.scrollIntoView({ block: "center" });
+      el.querySelector<HTMLElement>("input, textarea")?.focus({ preventScroll: true });
+    };
+    go();
+    window.addEventListener("hashchange", go);
+    return () => window.removeEventListener("hashchange", go);
+  }, []);
 
   return (
     <form action={updateTechSpecAction} className="space-y-4 pb-32 md:pb-24">

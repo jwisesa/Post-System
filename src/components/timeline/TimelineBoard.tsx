@@ -18,7 +18,7 @@ import type { FeedbackPoint } from "@/lib/feedback/service";
 import type { Signoff } from "@/lib/review/service";
 import type { DriveSummary } from "@/lib/drive-tracker/service";
 import { AgendaList, ItemHead, itemTabs, ItemPanel, type TabId, ManagePanel, NewItemPanel } from "./ItemPanel";
-import { durationLabel, phaseIndex, isLate, progressOf, signed, slip, type Item, type Mode } from "./shared";
+import { dayOffset, durationLabel, phaseIndex, isLate, progressOf, signed, slip, type Item, type Mode } from "./shared";
 import VerticalGantt from "./VerticalGantt";
 import { TemplatePanel } from "./TemplatePanel";
 import { stamp, VersionsPanel } from "./VersionsPanel";
@@ -49,11 +49,13 @@ type Optimistic =
 type Props = {
   schedule: Schedule; mode: Mode; slug: string; today: string; contacts: { id: string; label: string }[]; groups?: { id: string; name: string }[]; templates?: TemplateRow[];
   attachments: Attachment[]; comments?: Comment[]; feedback?: FeedbackPoint[]; signoffs?: Signoff[]; me?: { id: string; role: string }; versions?: VersionRow[]; drives?: DriveSummary;
+  /** From the URL: open this item, and/or start with the Terlambat filter on (links from Hari Ini). */
+  openItemId?: string; late?: boolean;
 };
 
 const typing = (e: KeyboardEvent) => e.target instanceof HTMLElement && (e.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName));
 
-export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = [], templates = [], attachments, comments = [], feedback = [], signoffs = [], me, versions = [], drives }: Props) {
+export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = [], templates = [], attachments, comments = [], feedback = [], signoffs = [], me, versions = [], drives, openItemId, late }: Props) {
   const toast = useToast();
   const editable = mode === "edit";
   const [, startTransition] = useTransition();
@@ -117,12 +119,12 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [fStatus, setFStatus] = useState("");
   const [fPic, setFPic] = useState("");
-  const [fLate, setFLate] = useState(false);
+  const [fLate, setFLate] = useState(Boolean(late));
   const [fHard, setFHard] = useState(false);
-  const [panel, setPanel] = useState<Panel | null>(null);
+  const [panel, setPanel] = useState<Panel | null>(() => (openItemId && schedule.tracks.some((t) => t.items.some((i) => i.id === openItemId)) ? { kind: "item", id: openItemId } : null));
   const [tab, setTab] = useState<TabId>("detail");
   const [drag, setDrag] = useState<Drag | null>(null);
-  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [sel, setSel] = useState<Set<string>>(() => new Set(panel?.kind === "item" ? [panel.id] : []));
   const [history, setHistory] = useState<{ undo: Step[]; redo: Step[] }>({ undo: [], redo: [] });
   const [cascade, setCascadeState] = useState(Boolean(schedule.settings.cascade));
   const [link, setLink] = useState<{ from: string; x: number; y: number } | null>(null);
@@ -226,6 +228,11 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
     return () => { ro.disconnect(); el.removeEventListener("wheel", onWheel); };
   }, [view, tracks.length, zoomTo]);
 
+  // Arriving from Hari Ini with ?item=: bring that row into view.
+  useEffect(() => {
+    if (openItemId) document.querySelector(`[data-item-id="${CSS.escape(openItemId)}"]`)?.scrollIntoView({ block: "center", inline: "center" });
+  }, [openItemId]);
+
   // Close the Export popover when clicking elsewhere.
   useEffect(() => {
     const close = (e: PointerEvent) => document.querySelectorAll("details.tl-details[open]").forEach((d) => { if (!d.contains(e.target as Node)) d.removeAttribute("open"); });
@@ -261,6 +268,14 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
   function nudge(item: Item, days: number) {
     const targets = targetsFor(item.id, "move", days);
     apply(computeMoves(allItems, deps, targets, cascade, cal), targets.length > 1 ? `${targets.length} item` : `"${item.name}"`);
+  }
+
+  /** Dates from the item form go through the same undoable, cascade-aware path as dragging. */
+  function setDates(id: string, startDate: string, dueDate: string, cascadeNow: boolean, reason: string) {
+    const item = byId.get(id);
+    if (!item) return;
+    try { apply(computeMoves(allItems, deps, [{ id, startDate, dueDate }], cascadeNow, cal), `"${item.name}"${reason ? ` (${reason})` : ""}`); }
+    catch (e) { toast({ message: e instanceof Error ? e.message : "Tanggal tidak valid.", tone: "error" }); }
   }
 
   function setStatus(ids: string[], status: string) {
@@ -364,7 +379,10 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
         e.stopPropagation();
         if (!drag || drag.id !== item.id) return;
         if (drag.delta === 0) { if (kind === "move") pick(item.id, e); else setSel(new Set([item.id])); }
-        else if (preview) apply(preview, preview.moves.length > 1 ? `"${item.name}" dan ${preview.moves.length - 1} item lain` : `"${item.name}"`);
+        else if (preview) {
+          apply(preview, preview.moves.length > 1 ? `"${item.name}" dan ${preview.moves.length - 1} item lain` : `"${item.name}"`);
+          if (!sel.has(item.id)) setSel(new Set([item.id]));
+        }
         setDrag(null);
       },
       onPointerCancel: () => setDrag(null),
@@ -608,7 +626,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
       ) : (
         <>
           {/* narrow screens: agenda */}
-          <div className="md:hidden"><AgendaList tracks={shown} today={today} onOpen={openItem} ph={ph} /></div>
+          <div className="md:hidden"><AgendaList tracks={shown} today={today} onOpen={openItem} ph={ph} cal={cal} /></div>
 
           {view === "calendar" && <div className="hidden md:block"><CalendarView tracks={shown} cal={cal} ph={ph} progress={progress} today={today} onOpen={openItem} /></div>}
           {view === "vertical" && <div className="hidden md:block"><VerticalGantt tracks={shown} cal={cal} ph={ph} progress={progress} today={today} onOpen={openItem} /></div>}
@@ -715,7 +733,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
       )}
 
       {/* step controls for one selected item: each press moves one working day, with undo, cascade and snapping */}
-      {one && (
+      {one && view === "gantt" && (
         <div role="toolbar" aria-label={`Atur jadwal "${one.name}"`} className="sheet-bar fixed inset-x-0 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-50 mx-auto hidden w-fit max-w-[calc(100%-2rem)] flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-sm md:flex">
           <span className="max-w-40 truncate font-medium">{one.name}</span>
           {([...(one.parentId ? [] : [["Mulai", "start", "minus", "plus"], ["Selesai", "due", "minus", "plus"]] as const), ["Geser", "move", "left", "chevron"]] as const).map(([label, kind, back, fwd]) => (
@@ -758,7 +776,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
           head={<ItemHead item={panelItem} mode={mode} today={today} cal={cal} signoffs={signoffs} onStatus={(v) => setStatus([panelItem.id], v)} onStep={(k, d) => step(panelItem, k, d)} />}
           tabs={tabList.map((t) => <button key={t.id} type="button" role="tab" aria-selected={t.id === curTab} onClick={() => setTab(t.id)}>{t.label}</button>)}>
           <ItemPanel key={panelItem.id} tab={curTab} item={panelItem} track={panelTrack} mode={mode} slug={slug} today={today} allItems={allItems} deps={deps} contacts={contacts} groups={groups} onLink={addLink} onUnlink={removeLink}
-            cal={cal} cascade={cascade} ph={ph(panelItem.id)} onAddMilestone={() => setPanel({ kind: "new", trackId: panelItem.trackId, parentId: panelItem.id, date: panelItem.dueDate })}
+            cal={cal} cascade={cascade} onDates={setDates} ph={ph(panelItem.id)} onAddMilestone={() => setPanel({ kind: "new", trackId: panelItem.trackId, parentId: panelItem.id, date: panelItem.dueDate })}
             attachments={itemAtt}
             comments={itemCom} feedback={feedback} signoffs={signoffs} me={me} drives={drives} />
         </Drawer>
@@ -861,7 +879,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
           <span className={`shrink-0 text-right text-xs tabular-nums ${late ? "font-medium text-danger" : "text-muted"}`} title={milestone ? (late ? "Terlambat" : undefined) : `${fmtRange(p.start, p.due)} · ${durationLabel(cal, p.start, p.due, item.workHours)}${late ? " · terlambat" : ""}`}>
             <span className="@max-[320px]:hidden">{fmtDate(p.due).replace(/ \d{4}$/, "")}</span>
             {!milestone && <span className="ml-1.5 inline-block min-w-9 text-muted @max-[380px]:hidden">{workDays(cal, p.start, p.due)} hk<span className="@max-[440px]:hidden">{item.workHours ? ` · ${item.workHours} j` : ""}</span></span>}
-            {slip(item) && <span className="ml-1 text-warn @max-[440px]:hidden">{slip(item)}</span>}
+            {slip(item, cal) && <span className="ml-1 text-warn @max-[440px]:hidden">{slip(item, cal)}</span>}
           </span>
         </div>
         <div
@@ -914,7 +932,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
           )}
           {isSubject && drag && preview && (
             <div className="tl-tip" style={{ top: 6, left: (milestone ? left + px : left + w) + 20 }}>
-              {fmtRange(p.start, p.due)}{!milestone && ` · ${workDays(cal, p.start, p.due)} hk${item.workHours ? ` · ${item.workHours} j` : ""}`} · {signed(diffDays(item.startDate, p.start) || diffDays(item.dueDate, p.due))}{others > 0 && ` · ${others} item ikut`}{preview.conflicts.length > 0 && ` · ${preview.conflicts.length} bentrok`}
+              {fmtRange(p.start, p.due)}{!milestone && ` · ${workDays(cal, p.start, p.due)} hk${item.workHours ? ` · ${item.workHours} j` : ""}`} · {signed(dayOffset(cal, item.startDate, p.start) || dayOffset(cal, item.dueDate, p.due), "hk")}{others > 0 && ` · ${others} item ikut`}{preview.conflicts.length > 0 && ` · ${preview.conflicts.length} bentrok`}
             </div>
           )}
         </div>

@@ -11,9 +11,9 @@ import { listTemplates } from "@/lib/schedule/template-service";
 import { canUseDriveTracker, getDriveSummary } from "@/lib/drive-tracker/service";
 import { getTeam } from "@/lib/services";
 
-export default async function Timeline({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string }> }) {
+export default async function Timeline({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string; item?: string; late?: string }> }) {
   const { slug } = await params;
-  const { error } = await searchParams;
+  const { error, item, late } = await searchParams;
   const { db, project, role, user } = await loadProject(slug);
   const [schedule, team, attachments, comments, versions, feedback, templates, signoffs] = await Promise.all([
     getSchedule(db, project.id, { includeInternal: true }), getTeam(db, project.id, { includeInternal: true }),
@@ -27,7 +27,7 @@ export default async function Timeline({ params, searchParams }: { params: Promi
     <>
       <h1>Timeline</h1>
       <ErrorBanner message={error} />
-      <TimelineBoard schedule={schedule} mode={mode} slug={slug} today={today()} contacts={contacts} groups={team.map((g) => ({ id: g.id, name: g.name }))} templates={templates} attachments={attachments} comments={comments} feedback={feedback} signoffs={signoffs} me={{ id: user.id, role }} versions={versions} drives={drives} />
+      <TimelineBoard schedule={schedule} mode={mode} slug={slug} today={today()} contacts={contacts} groups={team.map((g) => ({ id: g.id, name: g.name }))} templates={templates} attachments={attachments} comments={comments} feedback={feedback} signoffs={signoffs} me={{ id: user.id, role }} versions={versions} drives={drives} openItemId={item} late={late === "1"} />
     </>
   );
 }

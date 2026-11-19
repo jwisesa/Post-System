@@ -1,4 +1,4 @@
-import { diffDays } from "@/lib/schedule/dates";
+import { addDays, diffDays } from "@/lib/schedule/dates";
 import type { Schedule } from "@/lib/schedule/service";
 import { PHASE_COLORS } from "@/lib/schedule/templates";
 import { calendarDays, workDays, type Cal } from "@/lib/schedule/workdays";
@@ -9,13 +9,20 @@ export type Mode = "edit" | "status" | "view";
 
 export const isLate = (i: { dueDate: string; status: string }, today: string) => i.status !== "done" && i.dueDate < today;
 
-/** "+3 hr" / "-2 hr" against the baseline due date, or "" when on plan. */
-export function slip(i: { dueDate: string; baselineDue: string }) {
-  const d = diffDays(i.baselineDue, i.dueDate);
-  return d ? `${d > 0 ? "+" : ""}${d} hr` : "";
+/** Signed days from a to b: working days when a calendar is given, else calendar days. */
+export function dayOffset(cal: Cal | undefined, a: string, b: string) {
+  if (a === b) return 0;
+  const [lo, hi, sign] = a < b ? [addDays(a, 1), b, 1] : [addDays(b, 1), a, -1];
+  return sign * (cal ? workDays(cal, lo, hi) : diffDays(lo, hi) + 1);
 }
 
-export const signed = (n: number) => `${n > 0 ? "+" : ""}${n} hr`;
+/** "+3 hk" / "-2 hk" (working days) against the baseline due date, "hari" without a calendar; "" when on plan. */
+export function slip(i: { dueDate: string; baselineDue: string }, cal?: Cal) {
+  const d = dayOffset(cal, i.baselineDue, i.dueDate);
+  return d ? signed(d, cal ? "hk" : "hari") : "";
+}
+
+export const signed = (n: number, unit = "hari") => `${n > 0 ? "+" : ""}${n} ${unit}`;
 
 /** Phase colour number (1..8) of every item: its own, else its phase's, else by the phase's position in its track. */
 export function phaseIndex(tracks: Track[]) {

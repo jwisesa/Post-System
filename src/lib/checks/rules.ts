@@ -28,7 +28,8 @@ const isDcp = (res: string) => /scope|flat/i.test(res) || [[2048, 858], [1998, 1
 const isVideo169 = (res: string) => /uhd|\bhd\b/i.test(res) || [[3840, 2160], [1920, 1080]].some(([w, h]) => { const r = parseRes(res); return r?.w === w && r.h === h; });
 
 const tech = (slug: string) => `/admin/p/${slug}/technical`;
-const fixTech = (i: CheckInput) => ({ label: "Perbaiki di Technical Page", href: tech(i.slug) });
+/** Link to the Technical Page, straight to the field `key` (sections open on arrival). */
+const fixTech = (i: CheckInput, key?: string) => ({ label: "Perbaiki di Technical Page", href: key ? `${tech(i.slug)}#f-${key}` : tech(i.slug) });
 const fixDel = (i: CheckInput) => ({ label: "Perbaiki di Deliverables", href: `/admin/p/${i.slug}/deliverables` });
 const fixTl = (i: CheckInput) => ({ label: "Perbaiki di Timeline", href: `/admin/p/${i.slug}/timeline` });
 const open = (d: CheckInput["deliverables"][number]) => !isDone(d.status);
@@ -45,7 +46,7 @@ export const RULES: { id: string; run: (i: CheckInput) => Finding[] }[] = [
   { id: "fps.sound", run: (i) => {
     const s = fps(i.tech.sound_tc_fps), m = fps(i.tech.frameRate);
     if (s === null || m === null || same(s, m)) return [];
-    return [{ rule: "fps.sound", severity: "warn", title: "Frame rate timecode suara berbeda dari master", detail: `Timecode suara ${i.tech.sound_tc_fps}, master ${i.tech.frameRate}. Sync audio bisa drift.`, fix: fixTech(i) }];
+    return [{ rule: "fps.sound", severity: "warn", title: "Frame rate timecode suara berbeda dari master", detail: `Timecode suara ${i.tech.sound_tc_fps}, master ${i.tech.frameRate}. Sync audio bisa drift.`, fix: fixTech(i, "sound_tc_fps") }];
   } },
   { id: "fps.camera", run: (i) => {
     const m = fps(i.tech.frameRate);
@@ -53,7 +54,7 @@ export const RULES: { id: string; run: (i: CheckInput) => Finding[] }[] = [
     const out: Finding[] = [];
     for (let n = 1; n <= 4; n++) {
       const c = fps(i.tech[`cam${n}_fps`]);
-      if (c !== null && !same(c, m)) out.push({ rule: "fps.camera", severity: "info", title: `Kamera ${n} merekam ${i.tech[`cam${n}_fps`]} fps, master ${i.tech.frameRate}`, detail: "Wajar untuk slow motion atau overcrank; pastikan memang disengaja dan conform di post.", fix: fixTech(i) });
+      if (c !== null && !same(c, m)) out.push({ rule: "fps.camera", severity: "info", title: `Kamera ${n} merekam ${i.tech[`cam${n}_fps`]} fps, master ${i.tech.frameRate}`, detail: "Wajar untuk slow motion atau overcrank; pastikan memang disengaja dan conform di post.", fix: fixTech(i, `cam${n}_fps`) });
     }
     return out;
   } },
@@ -69,7 +70,7 @@ export const RULES: { id: string; run: (i: CheckInput) => Finding[] }[] = [
     const res = i.tech.masterResolution ?? "", asp = i.tech.aspectRatio ?? "";
     const actual = aspectMismatch(res, asp);
     if (actual === null) return [];
-    return [{ rule: "aspect.master", severity: isDcp(res) ? "error" : "warn", title: "Resolusi master tidak cocok dengan aspect ratio", detail: `${res} berasio ${actual.toFixed(2)}:1, aspect ratio project ${asp}.`, fix: fixTech(i) }];
+    return [{ rule: "aspect.master", severity: isDcp(res) ? "error" : "warn", title: "Resolusi master tidak cocok dengan aspect ratio", detail: `${res} berasio ${actual.toFixed(2)}:1, aspect ratio project ${asp}.`, fix: fixTech(i, "masterResolution") }];
   } },
   { id: "aspect.deliverable", run: (i) => i.deliverables.filter(open).flatMap((d) => {
     const res = d.spec.resolution ?? "", asp = d.spec.aspectRatio ?? "";

@@ -6,6 +6,7 @@ import type { ScheduleSettings } from "@/db/schema";
 import { fmtDate } from "@/lib/schedule/dates";
 import { HOLIDAY_YEARS } from "@/lib/schedule/holidays-id";
 import { blockedEntries, HOLIDAY_KIND_LABEL, hoursPerDayOf, type Cal } from "@/lib/schedule/workdays";
+import { SubmitButton } from "../ui/controls";
 import { Icon } from "../ui/icons";
 
 const WEEKDAY = new Intl.DateTimeFormat("id-ID", { weekday: "long", timeZone: "UTC" });
@@ -26,7 +27,6 @@ function SettingsForm({ slug, settings }: { slug: string; settings: ScheduleSett
       <label className="check"><input type="checkbox" name="national" defaultChecked={settings.national !== false} /> Libur nasional Indonesia</label>
       <label className="check"><input type="checkbox" name="jointLeave" defaultChecked={settings.jointLeave !== false} /> Termasuk cuti bersama</label>
       <p className="muted text-xs">Tanggal libur nasional tersedia untuk {HOLIDAY_YEARS.join(", ")}. Tahun di luar daftar ini perlu diisi manual.</p>
-      <label className="check"><input type="checkbox" name="cascade" defaultChecked={Boolean(settings.cascade)} /> Geser otomatis item yang bergantung</label>
       <label className="max-w-40">
         <span>Jam kerja per hari</span>
         <input name="hoursPerDay" type="number" min={1} max={24} step={1} defaultValue={hoursPerDayOf(settings)} />
@@ -52,7 +52,7 @@ function SettingsForm({ slug, settings }: { slug: string; settings: ScheduleSett
         </div>
         <p className="muted text-xs">Hari libur khusus produksi, mis. hari libur lokasi syuting atau tim.</p>
       </div>
-      <button className="btn-secondary">Simpan aturan hari kerja</button>
+      <SubmitButton className="btn-secondary">Simpan aturan hari kerja</SubmitButton>
     </form>
   );
 }

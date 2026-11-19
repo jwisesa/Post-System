@@ -39,6 +39,8 @@ describe("checks", () => {
     expect(ids({ tech: { frameRate: "24", sound_tc_fps: "23.976" } })).toEqual(["fps.sound"]);
     expect(ids({ tech: { frameRate: "29.97", sound_tc_fps: "29.97 NDF" } })).toEqual([]);
     expect(ids({ tech: { frameRate: "24", cam1_fps: "48", cam2_fps: "24", cam3_fps: "film" } })).toEqual(["fps.camera"]);
+    expect(run({ tech: { frameRate: "24", sound_tc_fps: "23.976" } })[0].fix.href).toBe("/admin/p/p/technical#f-sound_tc_fps");
+    expect(run({ tech: { frameRate: "24", cam2_fps: "48" } })[0].fix.href).toBe("/admin/p/p/technical#f-cam2_fps");
     const t = { frameRate: "24" };
     expect(ids({ tech: t, deliverables: [del({ spec: { frameRate: "23.976" } })] })).toEqual(["fps.deliverable"]);
     expect(ids({ tech: t, deliverables: [del({ spec: { frameRate: "24" } }), del({ spec: { frameRate: "25" }, status: "delivered" }), del({ spec: { frameRate: "25" }, origin: "derived" })] })).toEqual([]);
@@ -82,6 +84,6 @@ describe("checks", () => {
     await d.applyPreset(db, u, pid, { presetId: "promo", trackId: null, dueDate: "2026-12-02" });
     const f = await getChecks(db, pid, "film", "2026-11-18");
     expect(f[0]).toMatchObject({ rule: "aspect.master", severity: "error" });
-    expect(f[0].fix.href).toBe("/admin/p/film/technical");
+    expect(f[0].fix.href).toBe("/admin/p/film/technical#f-masterResolution");
   });
 });

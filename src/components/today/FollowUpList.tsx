@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { markFollowedUp } from "@/app/admin/today-actions";
 import { fmtDate } from "@/lib/schedule/dates";
@@ -17,7 +18,7 @@ function FollowUpRow({ row, slug }: { row: Row; slug: string }) {
       <div className="due-row" data-late={row.late || undefined}>
         <span className="due-date">{fmtDate(row.dueDate).replace(/ \d{4}$/, "")}</span>
         <span className="due-name">
-          {row.name}{" "}
+          <Link href={`/admin/p/${slug}/timeline?item=${row.id}`} className="hover:underline">{row.name}</Link>{" "}
           <span className="due-ctx">· {row.track} · {row.daysSinceUpdate} hari tanpa update · {row.picName ?? "PIC belum ditentukan"}</span>
         </span>
         <button type="button" className="btn-ghost !min-h-6" aria-expanded={open} onClick={() => setOpen(!open)}>Catat</button>

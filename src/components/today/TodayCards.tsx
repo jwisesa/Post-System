@@ -8,7 +8,11 @@ export const when = (today: string, d: string) => {
 };
 
 const short = (d: string) => fmtDate(d).replace(/ \d{4}$/, "");
-const hr = (s: string) => s.replace(" hari", " hr");
+const itemHref = (base: string | undefined, id: string) => (base ? `${base}/timeline?item=${id}` : undefined);
+/** The row's name as a link into the timeline with that item open (plain text without a project base). */
+function NameLink({ href, children }: { href?: string; children: React.ReactNode }) {
+  return href ? <Link href={href} className="hover:underline">{children}</Link> : <>{children}</>;
+}
 const DOW = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
 const DUE_CAP = 8;
 const LANES = 3;
@@ -30,15 +34,15 @@ export function DeliverablesMeter({ data, href }: { data: TodayData; href?: stri
   );
 }
 
-export function DueRow({ e, today }: { e: TodayEntry; today: string }) {
+export function DueRow({ e, today, base }: { e: TodayEntry; today: string; base?: string }) {
   return (
     <li className="due-row" data-late={e.dueDate < today || undefined} data-today={e.dueDate === today || undefined}>
       <span className="due-date">{short(e.dueDate)}</span>
       <span className="due-name">
         {e.hardDeadline && <span className="tag tag-danger mr-1.5">Hard</span>}
-        {e.name} <span className="due-ctx">· {e.kind === "deliverable" ? "Deliver · " : ""}{e.context} · {e.statusLabel}{e.picName && ` · ${e.picName}`}</span>
+        <NameLink href={e.kind === "item" ? itemHref(base, e.id) : base ? `${base}/deliverables` : undefined}>{e.name}</NameLink> <span className="due-ctx">· {e.kind === "deliverable" ? "Deliver · " : ""}{e.context} · {e.statusLabel}{e.picName && ` · ${e.picName}`}</span>
       </span>
-      <span className="due-when">{hr(when(today, e.dueDate))}</span>
+      <span className="due-when">{when(today, e.dueDate)}</span>
     </li>
   );
 }
@@ -114,7 +118,7 @@ function FeedbackList({ groups, base }: { groups: TodayData["feedback"]; base?: 
           <li key={g.id}>
             <div className="due-row">
               <span className="due-date">{short(g.dueDate)}</span>
-              <span className="due-name">{g.name} <span className="due-ctx">· {g.track}</span></span>
+              <span className="due-name"><NameLink href={itemHref(base, g.id)}>{g.name}</NameLink> <span className="due-ctx">· {g.track}</span></span>
               <span className="due-when">{g.count} poin</span>
             </div>
             <ul className="pb-1 ps-[4.25rem] text-[13px] text-ink-2">
@@ -129,7 +133,7 @@ function FeedbackList({ groups, base }: { groups: TodayData["feedback"]; base?: 
 }
 
 /** Admin only: sign-offs of the last 7 days, one line each. */
-function SignoffList({ rows }: { rows: TodayData["signoffs"] }) {
+function SignoffList({ rows, base }: { rows: TodayData["signoffs"]; base?: string }) {
   return (
     <section>
       <ListHead title="Persetujuan terbaru" count={rows.length} />
@@ -137,7 +141,7 @@ function SignoffList({ rows }: { rows: TodayData["signoffs"] }) {
         {rows.slice(0, 5).map((s) => (
           <li key={s.id} className="due-row">
             <span className="due-date">{short(s.at.slice(0, 10))}</span>
-            <span className="due-name">{s.name} <span className="due-ctx">· {s.track}</span></span>
+            <span className="due-name"><NameLink href={itemHref(base, s.itemId)}>{s.name}</NameLink> <span className="due-ctx">· {s.track}</span></span>
             <span className="due-when">{s.signer}</span>
           </li>
         ))}
@@ -147,9 +151,9 @@ function SignoffList({ rows }: { rows: TodayData["signoffs"] }) {
   );
 }
 
-function Stat({ base, tone, empty, children }: { base?: string; tone?: string; empty?: boolean; children: React.ReactNode }) {
+function Stat({ base, query = "", tone, empty, children }: { base?: string; query?: string; tone?: string; empty?: boolean; children: React.ReactNode }) {
   const p = { className: "stat", "data-tone": tone, "data-empty": empty || undefined };
-  return base === undefined ? <div {...p}>{children}</div> : <Link href={`${base}/timeline`} {...p}>{children}</Link>;
+  return base === undefined ? <div {...p}>{children}</div> : <Link href={`${base}/timeline${query}`} {...p}>{children}</Link>;
 }
 
 /** The one-screen "Hari Ini". `base` (project admin path) makes the key numbers links; `aside` fills the right column. */
@@ -162,10 +166,10 @@ export function TodayBoard({ data, today, base, aside }: { data: TodayData; toda
   return (
     <div className="space-y-4">
       <div className="stats">
-        <Stat base={base} tone="danger" empty={!data.late.length}>
+        <Stat base={base} query="?late=1" tone="danger" empty={!data.late.length}>
           <span className="stat-label">Terlambat</span>
           <span className="stat-num">{data.late.length}</span>
-          <span className="stat-sub">{oldest ? `Paling lama: ${oldest.name}, ${lateDays} hr` : "Tidak ada yang terlambat"}</span>
+          <span className="stat-sub">{oldest ? `Paling lama: ${oldest.name}, ${lateDays} hari` : "Tidak ada yang terlambat"}</span>
         </Stat>
         <Stat base={base} tone="today" empty={!data.dueToday.length}>
           <span className="stat-label">Hari ini</span>
@@ -190,7 +194,7 @@ export function TodayBoard({ data, today, base, aside }: { data: TodayData; toda
         <section className="min-w-0">
           <ListHead title="Jatuh tempo" count={due.length} href={base ? `${base}/timeline` : undefined} link="Timeline" />
           {due.length === 0 ? <p className="py-2 text-[13px] text-ink-2">Tidak ada deadline dalam 7 hari.</p> : (
-            <ul>{due.slice(0, DUE_CAP).map((e) => <DueRow key={`${e.kind}-${e.id}`} e={e} today={today} />)}</ul>
+            <ul>{due.slice(0, DUE_CAP).map((e) => <DueRow key={`${e.kind}-${e.id}`} e={e} today={today} base={base} />)}</ul>
           )}
           {due.length > DUE_CAP && (
             base ? <Link href={`${base}/timeline`} className="mt-1 block px-1 text-[13px] font-semibold underline underline-offset-2">+{due.length - DUE_CAP} lainnya, lihat Timeline</Link>
@@ -199,7 +203,7 @@ export function TodayBoard({ data, today, base, aside }: { data: TodayData; toda
         </section>
         <div className="min-w-0 space-y-6">
           {data.feedback.length > 0 && <FeedbackList groups={data.feedback} base={base} />}
-          {data.signoffs.length > 0 && <SignoffList rows={data.signoffs} />}
+          {data.signoffs.length > 0 && <SignoffList rows={data.signoffs} base={base} />}
           {aside}
         </div>
       </div>
@@ -224,7 +228,7 @@ export function TodayCards({ data, today }: { data: TodayData; today: string }) 
                   <li key={h.id} className="due-row" data-today={h.daysLeft === 0 || undefined}>
                     <span className="due-date">{short(h.dueDate)}</span>
                     <span className="due-name">{h.name} <span className="due-ctx">· {h.track}</span></span>
-                    <span className="due-when">{h.daysLeft === 0 ? "hari ini" : `${h.daysLeft} hr lagi`}</span>
+                    <span className="due-when">{h.daysLeft === 0 ? "hari ini" : `${h.daysLeft} hari lagi`}</span>
                   </li>
                 ))}
               </ul>
