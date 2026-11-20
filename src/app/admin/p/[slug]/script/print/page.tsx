@@ -4,8 +4,8 @@ import { PrintActions } from "@/components/timeline/PrintActions";
 import { loadProject } from "@/lib/project-context";
 import { fmtDate, today } from "@/lib/schedule/dates";
 import { phaseLabel, postNeeds } from "@/lib/script/needs";
-import { getScript, listPhases } from "@/lib/script/service";
-import { fmtDuration, fmtPage, TAG_LABEL } from "@/lib/script/types";
+import { getKinds, getScript, listPhases } from "@/lib/script/service";
+import { fmtDuration, fmtPage, kindDef } from "@/lib/script/types";
 
 const VIEWS = { scenes: "Breakdown adegan", characters: "Tokoh", locations: "Lokasi", post: "Kebutuhan post" } as const;
 const th = "py-1 pe-3 text-left font-normal";
@@ -19,6 +19,7 @@ export default async function PrintScript({ params, searchParams }: { params: Pr
   if (!data) notFound();
   const view = (q.view && q.view in VIEWS ? q.view : "scenes") as keyof typeof VIEWS;
   const { script, scenes, aggregate: agg } = data;
+  const kinds = await getKinds(db, project.id);
   const phases = view === "post" ? await listPhases(db, project.id) : [];
   return (
     <>
@@ -40,7 +41,7 @@ export default async function PrintScript({ params, searchParams }: { params: Pr
                 <tr key={s.id}>
                   <td className={`${td} font-medium`}>{s.number}</td><td className={td}>{s.heading}</td><td className={td}>{s.intExt}</td><td className={td}>{s.timeOfDay}</td>
                   <td className={`${td} whitespace-nowrap`}>{fmtPage(s.pageStart)}–{fmtPage(s.pageEnd)}</td><td className={`${td} whitespace-nowrap`}>~{fmtDuration(s.estSeconds)}</td>
-                  <td className={td}>{s.characters.map((c) => c.name).join(", ")}</td><td className={td}>{s.postTags.map((t) => TAG_LABEL[t.kind as keyof typeof TAG_LABEL] + (t.auto ? "?" : "")).join(", ")}</td><td className={td}>{s.notes}</td>
+                  <td className={td}>{s.characters.map((c) => c.name).join(", ")}</td><td className={td}>{s.postTags.map((t) => kindDef(kinds, t.kind).label + (t.auto ? "?" : "")).join(", ")}</td><td className={td}>{s.notes}</td>
                 </tr>
               ))}
             </tbody>
@@ -62,10 +63,10 @@ export default async function PrintScript({ params, searchParams }: { params: Pr
           <>
             <thead className="border-b border-line"><tr className="muted">{["Kebutuhan", "Adegan", "Durasi", "Nomor adegan", "Fase terkait"].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
             <tbody className="divide-y divide-line">
-              {postNeeds(scenes, phases).map((n) => (
+              {postNeeds(scenes, phases, kinds).map((n) => (
                 <Fragment key={n.kind}>
                 <tr>
-                  <td className={`${td} font-medium`}>{TAG_LABEL[n.kind]}</td><td className={td}>{n.scenes}{n.suggested > 0 && ` (${n.suggested} saran)`}</td><td className={td}>~{fmtDuration(n.seconds)}</td><td className={td}>{n.numbers.join(", ")}</td>
+                  <td className={`${td} font-medium`}>{n.label}</td><td className={td}>{n.scenes}{n.suggested > 0 && ` (${n.suggested} saran)`}</td><td className={td}>~{fmtDuration(n.seconds)}</td><td className={td}>{n.numbers.join(", ")}</td>
                   <td className={td}>{n.phases.map((p) => phaseLabel(p)).join("; ")}{n.unlinked > 0 && <span className="block">Belum ada fase untuk {n.unlinked} adegan</span>}</td>
                 </tr>
                 {scenes.flatMap((s) => { const t = s.postTags.find((y) => y.kind === n.kind); return t && (t.excerpt || t.note) ? [[s, t] as const] : []; }).map(([s, t]) => (

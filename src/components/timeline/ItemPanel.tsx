@@ -20,7 +20,7 @@ import { SignoffPanel } from "./SignoffPanel";
 import type { Signoff } from "@/lib/review/service";
 import { MilestoneDate, PhaseDates } from "./DateFields";
 import { Icon } from "../ui/icons";
-import { fmtDuration, TAG_LABEL } from "@/lib/script/types";
+import { fmtDuration } from "@/lib/script/types";
 import type { PhaseNeed } from "@/lib/script/needs";
 import Link from "next/link";
 import { durationLabel, isLate, slip, type Item, type Mode, type Track } from "./shared";
@@ -220,7 +220,7 @@ export function ItemPanel({ item, mode, slug, today, allItems, deps, contacts, g
               <ul className="rows">
                 {needs.map((n) => (
                   <li key={n.kind} className="py-1.5">
-                    <Link href={`/admin/p/${slug}/script?script=${scriptId}&tag=${n.kind}`} className="text-accent">{TAG_LABEL[n.kind]}</Link>
+                    <Link href={`/admin/p/${slug}/script?script=${scriptId}&tag=${n.kind}`} className="text-accent">{n.label}</Link>
                     <span className="num text-ink-2"> · {n.scenes} adegan · ~{fmtDuration(n.seconds)}</span>
                     <span className="block text-xs text-muted">Adegan {n.numbers.join(", ")}</span>
                     {mode !== "view" && n.items.filter((x) => x.excerpt).slice(0, 3).map((x) => (

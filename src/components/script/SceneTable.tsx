@@ -7,8 +7,9 @@ import { Icon } from "@/components/ui/icons";
 import { phaseLabel, type Phase } from "@/lib/script/needs";
 import type { SceneRow, SearchHit } from "@/lib/script/service";
 import { defaultPhase } from "@/lib/script/tags";
-import { fmtDuration, fmtPage, INT_EXTS, placeOf, TAG_KINDS, TAG_LABEL, TIMES_OF_DAY, type Block, type PostTag, type TagKind } from "@/lib/script/types";
+import { fmtDuration, fmtPage, INT_EXTS, placeOf, TIMES_OF_DAY, type Block, type PostTag } from "@/lib/script/types";
 import { useToast } from "../ui/toast";
+import { useKinds } from "./kinds";
 import { SceneReader } from "./SceneReader";
 
 export type TextCache = Map<string, Block[]>;
@@ -26,41 +27,41 @@ function useAct() {
   };
 }
 
-const kindNum = (k: string) => TAG_KINDS.indexOf(k as TagKind) + 1;
-
 /** One marker per kind. A parser suggestion is muted with "?"; in the drawer click it to confirm. `plain` (table cells) shows no buttons. */
 function TagMarks({ slug, scene, canEdit, plain }: { slug: string; scene: SceneRow; canEdit: boolean; plain?: boolean }) {
   const act = useAct();
+  const { of } = useKinds();
   const edit = canEdit && !plain;
   if (!scene.postTags.length) return <span className="muted">—</span>;
   return (
     <span className="sa-tags">
-      {scene.postTags.map((t) => (
-        <span key={t.kind} className="sa-tagm" data-k={kindNum(t.kind)} data-auto={t.auto ? "" : undefined}>
+      {scene.postTags.map((t) => { const L = of(t.kind).label; return (
+        <span key={t.kind} className="sa-tagm" data-k={of(t.kind).color || undefined} data-auto={t.auto ? "" : undefined}>
           {edit && t.auto ? (
-            <button type="button" title={`Saran dari naskah${t.keyword ? ` (kata kunci ${t.keyword})` : ""}${t.excerpt ? `: ${t.excerpt}` : ""}. Klik untuk konfirmasi.`} aria-label={`Konfirmasi saran tag ${TAG_LABEL[t.kind]} adegan ${scene.number}`}
-              onClick={() => act(confirmSceneTag(slug, scene.id, t.kind), `Tag ${TAG_LABEL[t.kind]} dikonfirmasi.`)}>{TAG_LABEL[t.kind]} ?</button>
+            <button type="button" title={`Saran dari naskah${t.keyword ? ` (kata kunci ${t.keyword})` : ""}${t.excerpt ? `: ${t.excerpt}` : ""}. Klik untuk konfirmasi.`} aria-label={`Konfirmasi saran tag ${L} adegan ${scene.number}`}
+              onClick={() => act(confirmSceneTag(slug, scene.id, t.kind), `Tag ${L} dikonfirmasi.`)}>{L} ?</button>
           ) : (
-            <span title={[t.auto ? `Saran dari naskah${t.keyword ? ` (kata kunci ${t.keyword})` : ""}` : t.note, t.excerpt].filter(Boolean).join("\n") || undefined}>{TAG_LABEL[t.kind]}{t.auto ? " ?" : ""}</span>
+            <span title={[t.auto ? `Saran dari naskah${t.keyword ? ` (kata kunci ${t.keyword})` : ""}` : t.note, t.excerpt].filter(Boolean).join("\n") || undefined}>{L}{t.auto ? " ?" : ""}</span>
           )}
           {edit && (
-            <button type="button" className="sa-x" aria-label={`Hapus tag ${TAG_LABEL[t.kind]} adegan ${scene.number}`} onClick={() => act(removeSceneTag(slug, scene.id, t.kind), `Tag ${TAG_LABEL[t.kind]} dihapus.`)}><Icon name="close" /></button>
+            <button type="button" className="sa-x" aria-label={`Hapus tag ${L} adegan ${scene.number}`} onClick={() => act(removeSceneTag(slug, scene.id, t.kind), `Tag ${L} dihapus.`)}><Icon name="close" /></button>
           )}
         </span>
-      ))}
+      ); })}
     </span>
   );
 }
 
 /** Kind + optional note + optional phase. The phase follows the kind (default by name) until the user picks one. */
-function TagForm({ phases, label, onSubmit }: { phases: Phase[]; label: string; onSubmit: (v: { kind: TagKind; note: string; itemId: string | null }) => Promise<boolean> }) {
-  const [kind, setKind] = useState<TagKind>("vfx");
+function TagForm({ phases, label, onSubmit }: { phases: Phase[]; label: string; onSubmit: (v: { kind: string; note: string; itemId: string | null }) => Promise<boolean> }) {
+  const { kinds } = useKinds();
+  const [kind, setKind] = useState("vfx");
   const [itemId, setItemId] = useState(defaultPhase("vfx", phases) ?? "");
   const [note, setNote] = useState("");
   return (
     <form className="sa-tagform" action={async () => { if (await onSubmit({ kind, note, itemId: itemId || null })) setNote(""); }}>
       <label><span>Jenis tag</span>
-        <select value={kind} onChange={(e) => { const k = e.target.value as TagKind; setKind(k); setItemId(defaultPhase(k, phases) ?? ""); }}>{TAG_KINDS.map((k) => <option key={k} value={k}>{TAG_LABEL[k]}</option>)}</select></label>
+        <select value={kind} onChange={(e) => { const k = e.target.value; setKind(k); setItemId(defaultPhase(k, phases) ?? ""); }}>{kinds.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}</select></label>
       <label><span>Fase jadwal</span>
         <select value={itemId} onChange={(e) => setItemId(e.target.value)}>
           <option value="">{phases.length ? "Belum dipilih" : "Belum ada fase"}</option>
@@ -118,6 +119,7 @@ function SearchBox({ search, results, onPick, compact, keys = true }: { search: 
 
 function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose, hasText, tab, setTab, search, onPick, focusBlock, prev, next, texts, nextId }: { slug: string; scene: SceneRow; scriptTitle: string; phases: Phase[]; canEdit: boolean; onClose: () => void; hasText: boolean; tab: "teks" | "data"; setTab: (t: "teks" | "data") => void; search: Search; onPick: (id: string, block: number) => void; focusBlock?: number; prev?: () => void; next?: () => void; texts: TextCache; nextId?: string }) {
   const act = useAct();
+  const { of } = useKinds();
   const [deleting, setDeleting] = useState(false);
   const field = (k: "heading" | "number" | "location" | "notes", label: string, area?: boolean) => (
     <label><span>{label}</span>{area ? <textarea name={k} rows={3} maxLength={2000} defaultValue={scene[k]} /> : <input name={k} defaultValue={scene[k]} required={k === "number"} />}</label>
@@ -126,7 +128,7 @@ function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose, hasTe
     <label><span>{label}</span><select name={k} defaultValue={scene[k]}><option value="">—</option>{opts.map((o) => <option key={o}>{o}</option>)}</select></label>
   );
   const phaseName = (id?: string | null) => { const p = phases.find((x) => x.id === id); return p && phaseLabel(p); };
-  const retag = (t: PostTag, itemId: string | null) => act(setSceneTags(slug, [scene.id], { kind: t.kind, note: t.note, itemId }), `Tag ${TAG_LABEL[t.kind]} disimpan.`);
+  const retag = (t: PostTag, itemId: string | null) => act(setSceneTags(slug, [scene.id], { kind: t.kind, note: t.note, itemId }), `Tag ${of(t.kind).label} disimpan.`);
   return (
     <Drawer title={`Adegan ${scene.number}`} crumb={scriptTitle} onClose={onClose} bodyKey={tab}
       head={<>
@@ -145,8 +147,8 @@ function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose, hasTe
         {scene.postTags.length > 0 && (
           <div className="st-strip">
             {scene.postTags.map((t) => (
-              <button key={t.kind} type="button" className="sa-tagm" data-k={kindNum(t.kind)} data-auto={t.auto ? "" : undefined} title="Tampilkan di teks"
-                onClick={() => document.querySelector(`.st-page mark.st-hl[data-k="${kindNum(t.kind)}"]`)?.scrollIntoView({ block: "center" })}>{TAG_LABEL[t.kind]}{t.auto ? " ?" : ""}{phases.find((x) => x.id === t.itemId) ? ` · ${phases.find((x) => x.id === t.itemId)!.name}` : ""}</button>
+              <button key={t.kind} type="button" className="sa-tagm" data-k={of(t.kind).color || undefined} data-auto={t.auto ? "" : undefined} title="Tampilkan di teks"
+                onClick={() => document.querySelector(`.st-page mark.st-hl[data-k="${of(t.kind).color}"]`)?.scrollIntoView({ block: "center" })}>{of(t.kind).label}{t.auto ? " ?" : ""}{phases.find((x) => x.id === t.itemId) ? ` · ${phases.find((x) => x.id === t.itemId)!.name}` : ""}</button>
             ))}
           </div>
         )}
@@ -166,7 +168,7 @@ function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose, hasTe
               </div>
               {canEdit ? (
                 <label className="sa-inline"><span>Fase</span>
-                  <select aria-label={`Fase untuk ${TAG_LABEL[t.kind]}`} value={t.itemId && phaseName(t.itemId) ? t.itemId : ""} onChange={(e) => retag(t, e.target.value || null)}>
+                  <select aria-label={`Fase untuk ${of(t.kind).label}`} value={t.itemId && phaseName(t.itemId) ? t.itemId : ""} onChange={(e) => retag(t, e.target.value || null)}>
                     <option value="">Belum dipilih</option>
                     {phases.map((p) => <option key={p.id} value={p.id}>{phaseLabel(p)}</option>)}
                   </select></label>
@@ -174,7 +176,7 @@ function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose, hasTe
             </li>
           ))}
         </ul>
-        {canEdit && <TagForm key={scene.id} phases={phases} label="Tambah tag" onSubmit={(v) => act(setSceneTags(slug, [scene.id], v), `Tag ${TAG_LABEL[v.kind]} ditambahkan.`)} />}
+        {canEdit && <TagForm key={scene.id} phases={phases} label="Tambah tag" onSubmit={(v) => act(setSceneTags(slug, [scene.id], v), `Tag ${of(v.kind).label} ditambahkan.`)} />}
       </section>
 
       {canEdit ? (
@@ -206,6 +208,7 @@ function SceneDrawer({ slug, scene, scriptTitle, phases, canEdit, onClose, hasTe
 
 export function Scenes({ slug, scriptId, scriptTitle, scenes, phases, canEdit, initialTag, initialScene = null, textIds, onClose }: { slug: string; scriptId: string; scriptTitle: string; scenes: SceneRow[]; phases: Phase[]; canEdit: boolean; initialTag: string; initialScene?: string | null; textIds: string[]; onClose?: () => void }) {
   const act = useAct();
+  const { kinds, of } = useKinds();
   const [loc, setLoc] = useState("");
   const [who, setWho] = useState("");
   const [tod, setTod] = useState("");
@@ -278,14 +281,14 @@ export function Scenes({ slug, scriptId, scriptTitle, scenes, phases, canEdit, i
         <label className="field"><span className="field-label">Waktu</span>
           <select value={tod} onChange={(e) => setTod(e.target.value)}><option value="">Semua</option>{TIMES_OF_DAY.map((t) => <option key={t}>{t}</option>)}</select></label>
         <label className="field"><span className="field-label">Tag post</span>
-          <select value={tag} onChange={(e) => setTag(e.target.value)}><option value="">Semua</option>{TAG_KINDS.map((k) => <option key={k} value={k}>{TAG_LABEL[k]}</option>)}</select></label>
+          <select value={tag} onChange={(e) => setTag(e.target.value)}><option value="">Semua</option>{kinds.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}</select></label>
         <button type="button" className="btn-secondary" aria-pressed={byNumber} onClick={() => setByNumber(!byNumber)}>Urutkan nomor</button>
       </div>
       </details>
 
       {canEdit && picked.length > 0 && (
         <div className="sa-bulk" role="group" aria-label="Tag untuk adegan terpilih">
-          <TagForm phases={phases} label={`Tambah tag ke ${picked.length} adegan`} onSubmit={async (v) => { const ok = await act(setSceneTags(slug, picked, v), `Tag ${TAG_LABEL[v.kind]} ditambahkan ke ${picked.length} adegan.`); if (ok) setSel(new Set()); return ok; }} />
+          <TagForm phases={phases} label={`Tambah tag ke ${picked.length} adegan`} onSubmit={async (v) => { const ok = await act(setSceneTags(slug, picked, v), `Tag ${of(v.kind).label} ditambahkan ke ${picked.length} adegan.`); if (ok) setSel(new Set()); return ok; }} />
           <button type="button" className="btn-ghost" onClick={() => setSel(new Set())}>Batal pilih</button>
         </div>
       )}

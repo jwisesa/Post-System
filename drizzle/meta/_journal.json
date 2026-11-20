@@ -92,6 +92,13 @@
       "when": 1795106771863,
       "tag": "0012_polite_mauler",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795143470790,
+      "tag": "0013_conscious_swordsman",
+      "breakpoints": true
     }
   ]
 }

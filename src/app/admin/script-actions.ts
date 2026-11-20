@@ -59,3 +59,19 @@ export async function confirmSceneTag(slug: string, id: string, kind: string) {
 export async function removeSceneTag(slug: string, id: string, kind: string) {
   return run(slug, (db, userId, projectId) => sc.removeTag(db, userId, projectId, id, kind).then(() => ({})));
 }
+
+export async function createTagKind(slug: string, input: { label: string; color: number }) {
+  return run(slug, (db, userId, projectId) => sc.createKind(db, userId, projectId, input));
+}
+
+export async function updateTagKind(slug: string, id: string, patch: { label?: string; color?: number }) {
+  return run(slug, (db, userId, projectId) => sc.updateKind(db, userId, projectId, id, patch).then(() => ({})));
+}
+
+export async function moveTagKind(slug: string, id: string, dir: -1 | 1) {
+  return run(slug, (db, userId, projectId) => sc.moveKind(db, userId, projectId, id, dir).then(() => ({})));
+}
+
+export async function deleteTagKind(slug: string, id: string) {
+  return run(slug, (db, userId, projectId) => sc.deleteKind(db, userId, projectId, id));
+}

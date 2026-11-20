@@ -4,7 +4,7 @@ import { ScriptView } from "@/components/script/ScriptView";
 import { can } from "@/lib/auth/permissions";
 import { fmtDate } from "@/lib/schedule/dates";
 import { loadProject } from "@/lib/project-context";
-import { getScript, listPhases, listScripts } from "@/lib/script/service";
+import { getScript, kindUsage, listKinds, listPhases, listScripts } from "@/lib/script/service";
 
 export default async function ScriptPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ script?: string; new?: string; tag?: string; scene?: string }> }) {
   const { slug } = await params;
@@ -14,6 +14,8 @@ export default async function ScriptPage({ params, searchParams }: { params: Pro
   const wantNew = q.new != null;
   const current = wantNew ? null : await getScript(db, project.id, list.find((s) => s.id === q.script)?.id ?? list[0]?.id ?? "");
   const phases = current ? await listPhases(db, project.id) : [];
+  const customKinds = current ? (await listKinds(db, project.id)).map((k) => ({ id: k.id, key: k.key, label: k.label, color: k.color })) : [];
+  const usage = current ? await kindUsage(db, project.id) : {};
   const canEdit = can(role, "script.edit");
   const base = `/admin/p/${slug}/script`;
   return (
@@ -43,6 +45,8 @@ export default async function ScriptPage({ params, searchParams }: { params: Pro
           initialTag={q.tag ?? ""}
           initialScene={q.scene ?? ""}
           textIds={current.textIds}
+          customKinds={customKinds}
+          kindUsage={usage}
         />
       )}
     </div>

@@ -2,20 +2,21 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { readSceneText, tagFromSelection } from "@/app/admin/script-actions";
+import { createTagKind, readSceneText, tagFromSelection } from "@/app/admin/script-actions";
 import type { SceneRow } from "@/lib/script/service";
-import { TAG_KINDS, TAG_LABEL, type Block, type TagKind } from "@/lib/script/types";
+import { TAG_KINDS, type Block, type KindDef } from "@/lib/script/types";
 import { useToast } from "../ui/toast";
+import { NewKindForm, useKinds } from "./kinds";
 import type { TextCache } from "./SceneTable";
 
 type Range = { s: number; e: number; k: number; q?: boolean; n?: boolean };
 type Fresh = { k: number; text: string };
 
 /** Highlight ranges inside one block: each tag's excerpt (or, failing that, its keyword) and the active search query. */
-function ranges(text: string, scene: SceneRow, q: string, fresh: Fresh | null): Range[] {
+function ranges(text: string, scene: SceneRow, q: string, fresh: Fresh | null, colorOf: (kind: string) => number): Range[] {
   const low = text.toLowerCase(), out: Range[] = [];
   for (const t of scene.postTags) {
-    const k = TAG_KINDS.indexOf(t.kind) + 1;
+    const k = colorOf(t.kind);
     // an excerpt is one or more selections joined by " … "; an ADR excerpt joins cue and dialogue as "CUE: text"
     const whole = t.excerpt?.toLowerCase() ?? "";
     const parts = whole.split(" … ").filter(Boolean);
@@ -39,7 +40,8 @@ function ranges(text: string, scene: SceneRow, q: string, fresh: Fresh | null): 
 }
 
 function Marked({ text, scene, q, fresh }: { text: string; scene: SceneRow; q: string; fresh: Fresh | null }) {
-  const rs = ranges(text, scene, q, fresh);
+  const { of } = useKinds();
+  const rs = ranges(text, scene, q, fresh, (k) => of(k).color);
   if (!rs.length) return <>{text}</>;
   const parts: React.ReactNode[] = [];
   let at = 0;
@@ -62,6 +64,8 @@ export function Keyed({ text, keyword, k }: { text: string; keyword?: string; k:
 
 export function SceneReader({ slug, scene, canEdit, hasText, q, focusBlock, texts, nextId }: { slug: string; scene: SceneRow; canEdit: boolean; hasText: boolean; q: string; focusBlock?: number; texts: TextCache; nextId?: string }) {
   const toast = useToast();
+  const { kinds, of } = useKinds();
+  const [naming, setNaming] = useState(false);
   const [blocks, setBlocks] = useState<Block[] | null | undefined>(hasText ? texts.get(scene.id) : null);
   const [fresh, setFresh] = useState<Fresh | null>(null); // the highlight just created: pulses once
   const [error, setError] = useState("");
@@ -133,13 +137,23 @@ export function SceneReader({ slug, scene, canEdit, hasText, q, focusBlock, text
     return () => document.removeEventListener("keydown", onKey);
   }, [barOpen]);
 
-  async function tag(kind: TagKind) {
+  async function tag(kind: string, def?: KindDef) {
     if (!sel || busy) return;
     setBusy(true);
     const r = await tagFromSelection(slug, scene.id, kind, sel.text, note);
     setBusy(false);
-    toast(r.ok ? { message: `Tag ${TAG_LABEL[kind]} ditambahkan.` } : { message: r.error, tone: "error" });
-    if (r.ok) { setFresh({ k: TAG_KINDS.indexOf(kind) + 1, text: sel.text.toLowerCase() }); setTimeout(() => setFresh(null), 500); setSel(null); setNote(""); window.getSelection()?.removeAllRanges(); }
+    const d = def ?? of(kind);
+    toast(r.ok ? { message: `Tag ${d.label} ditambahkan.` } : { message: r.error, tone: "error" });
+    if (r.ok) { setFresh({ k: d.color, text: sel.text.toLowerCase() }); setTimeout(() => setFresh(null), 500); setSel(null); setNaming(false); setNote(""); window.getSelection()?.removeAllRanges(); }
+    return r.ok;
+  }
+
+  /** "+ Jenis baru": creates the kind and tags the current selection with it in one step. */
+  async function createAndTag(v: { label: string; color: number }) {
+    if (!sel) return false;
+    const c = await createTagKind(slug, v);
+    if (!c.ok) { toast({ message: c.error, tone: "error" }); return false; }
+    return !!(await tag(c.key, { key: c.key, label: v.label.trim().replace(/\s+/g, " "), color: v.color, builtin: false }));
   }
 
   if (!hasText) {
@@ -164,8 +178,10 @@ export function SceneReader({ slug, scene, canEdit, hasText, q, focusBlock, text
         <div ref={bar} className="st-bar" role="group" aria-label="Tambah tag dari teks terpilih" style={{ top: sel.top, left: sel.left, width: sel.width }} onMouseDown={(e) => { if (!(e.target instanceof HTMLInputElement)) e.preventDefault(); }}>
           <p className="st-sel text-xs">“{sel.text.slice(0, 40)}{sel.text.length > 40 ? "…" : ""}” → tandai sebagai</p>
           <div className="st-kinds">
-            {TAG_KINDS.map((k, i) => <button key={k} type="button" data-k={i + 1} disabled={busy} title={`Tombol ${i + 1}`} onClick={() => tag(k)}>{TAG_LABEL[k]}</button>)}
+            {kinds.map((k) => <button key={k.key} type="button" data-k={k.color} disabled={busy} title={k.builtin ? `Tombol ${TAG_KINDS.indexOf(k.key as never) + 1}` : undefined} onClick={() => tag(k.key)}>{k.label}</button>)}
+            <button type="button" className="st-new" disabled={busy} aria-expanded={naming} onClick={() => setNaming(!naming)}>+ Jenis baru</button>
           </div>
+          {naming && <NewKindForm inBar label="Buat & tandai" onCreate={createAndTag} onCancel={() => setNaming(false)} />}
           <input aria-label="Catatan tag (opsional)" placeholder="Catatan (opsional)" maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
       )}

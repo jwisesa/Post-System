@@ -57,5 +57,17 @@ export function fmtPage(p: number) {
 export const TAG_KINDS = ["vfx", "adr", "musik", "sound", "grading", "grafis", "lainnya"] as const;
 export type TagKind = (typeof TAG_KINDS)[number];
 export const TAG_LABEL: Record<TagKind, string> = { vfx: "VFX", adr: "ADR", musik: "Musik", sound: "Sound", grading: "Grading", grafis: "Grafis", lainnya: "Lainnya" };
-/** `auto` = suggested by the parser, not yet confirmed. `keyword` is the short matched word; `excerpt` the sentence (or selection) it came from, shown as context. `itemId` = a schedule phase of this project. */
-export type PostTag = { kind: TagKind; note: string; auto: boolean; keyword?: string; excerpt?: string; itemId?: string | null };
+export const isBuiltinKind = (k: string): k is TagKind => (TAG_KINDS as readonly string[]).includes(k);
+/** A tag kind as shown: `color` 1..8 = phase colour, 0 = neutral (a custom kind that no longer exists). */
+export type KindDef = { key: string; label: string; color: number; builtin: boolean };
+export const BUILTIN_KINDS: KindDef[] = TAG_KINDS.map((key, i) => ({ key, label: TAG_LABEL[key], color: i + 1, builtin: true }));
+export const MAX_CUSTOM_KINDS = 12;
+export const MAX_KIND_LABEL = 24;
+/** Built-ins first, then the project's custom kinds in their order. */
+export const withCustom = (custom: { key: string; label: string; color: number }[]): KindDef[] => [...BUILTIN_KINDS, ...custom.map((c) => ({ key: c.key, label: c.label, color: c.color, builtin: false }))];
+/** "c-stock-footage" -> "Stock footage". */
+const humanKey = (k: string) => { const t = k.replace(/^c-/, "").replace(/-+/g, " ").trim() || k; return t.charAt(0).toUpperCase() + t.slice(1); };
+/** The definition of a key; an unknown (deleted) custom key is humanised with the neutral colour instead of throwing. */
+export const kindDef = (kinds: KindDef[], key: string): KindDef => kinds.find((k) => k.key === key) ?? { key, label: humanKey(key), color: 0, builtin: false };
+/** `auto` = suggested by the parser, not yet confirmed. `keyword` is the short matched word; `excerpt` the sentence (or selection) it came from, shown as context. `itemId` = a schedule phase of this project. `kind` = a built-in or a custom `c-...` key. */
+export type PostTag = { kind: string; note: string; auto: boolean; keyword?: string; excerpt?: string; itemId?: string | null };

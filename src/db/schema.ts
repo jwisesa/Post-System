@@ -441,7 +441,7 @@ export const scriptScenes = ps.table(
     characters: jsonb("characters").$type<{ name: string; blocks: number }[]>().notNull().default([]),
     notes: text("notes").notNull().default(""),
     /** Post-production needs: matched keyword, the user's notes and a short excerpt (context) per kind. */
-    postTags: jsonb("post_tags").$type<{ kind: "vfx" | "adr" | "musik" | "sound" | "grading" | "grafis" | "lainnya"; note: string; auto: boolean; keyword?: string; excerpt?: string; itemId?: string | null }[]>().notNull().default([]),
+    postTags: jsonb("post_tags").$type<{ kind: string; note: string; auto: boolean; keyword?: string; excerpt?: string; itemId?: string | null }[]>().notNull().default([]),
   },
   (t) => [index("script_scenes_script_pos_idx").on(t.scriptId, t.position)],
 );
@@ -456,6 +456,23 @@ export const scriptSceneText = ps.table("script_scene_text", {
     .references(() => projects.id, { onDelete: "cascade" }),
   blocks: jsonb("blocks").$type<{ t: "action" | "cue" | "paren" | "dialogue" | "transition"; text: string; ext?: string }[]>().notNull(),
 });
+
+/** The project's own post-needs tag kinds, next to the seven built-ins. `key` is a stable slug starting with "c-"; `color` 1..8 = the phase colours. */
+export const scriptTagKinds = ps.table(
+  "script_tag_kinds",
+  {
+    id: id(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    color: integer("color").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [unique().on(t.projectId, t.key), index("script_tag_kinds_project_idx").on(t.projectId)],
+);
 
 // ---------- calendar feed ----------
 

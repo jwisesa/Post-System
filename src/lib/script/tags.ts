@@ -52,10 +52,10 @@ export function suggestTags(lines: string[], cues: string[] = [], dialogues: str
   return TAG_KINDS.filter((k) => found.has(k)).map((kind) => ({ kind, note: "", auto: true, keyword: found.get(kind)!.keyword.slice(0, 30), excerpt: found.get(kind)!.excerpt, itemId: null }));
 }
 
-const PHASE_NAME: Partial<Record<TagKind, RegExp>> = { vfx: /vfx/i, adr: /sound/i, sound: /sound/i, musik: /music|musik/i, grading: /grading/i, grafis: /vfx|graphic|grafis|online/i };
+const PHASE_NAME: Partial<Record<string, RegExp>> = { vfx: /vfx/i, adr: /sound/i, sound: /sound/i, musik: /music|musik/i, grading: /grading/i, grafis: /vfx|graphic|grafis|online/i };
 
-/** The phase a tag links to by default: the only top-level phase whose name fits the kind; none when zero or several fit. */
-export function defaultPhase(kind: TagKind, phases: { id: string; name: string }[]): string | null {
+/** The phase a tag links to by default (none for custom kinds): the only top-level phase whose name fits the kind; none when zero or several fit. */
+export function defaultPhase(kind: string, phases: { id: string; name: string }[]): string | null {
   const rx = PHASE_NAME[kind];
   const hit = rx ? phases.filter((p) => rx.test(p.name)) : [];
   return hit.length === 1 ? hit[0].id : null;

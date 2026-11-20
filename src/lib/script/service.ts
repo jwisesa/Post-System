@@ -1,13 +1,13 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
-import { scriptSceneText, scriptScenes, scripts } from "@/db/schema";
+import { scriptSceneText, scriptScenes, scriptTagKinds, scripts } from "@/db/schema";
 import { InputError, record, requireRole, type Tx } from "../services";
 import { aggregate } from "./aggregate";
 import { getSchedule } from "../schedule/service";
 import { needsByPhase, type Phase } from "./needs";
 import { defaultPhase } from "./tags";
-import { BLOCK_TYPES, INT_EXTS, MAX_BLOCK_CHARS, MAX_TEXT_BYTES, TAG_KINDS, TAG_LABEL, TIMES_OF_DAY, textBytes, type Block, type PostTag, type TagKind } from "./types";
+import { BLOCK_TYPES, BUILTIN_KINDS, INT_EXTS, isBuiltinKind, kindDef, MAX_BLOCK_CHARS, MAX_CUSTOM_KINDS, MAX_KIND_LABEL, MAX_TEXT_BYTES, TAG_KINDS, TIMES_OF_DAY, textBytes, withCustom, type Block, type KindDef, type PostTag } from "./types";
 
 const omit = <T extends object, K extends keyof T>(o: T, k: K): Omit<T, K> => { const c = { ...o }; delete c[k]; return c; };
 const str = (max: number) => z.string().max(max).transform((s) => s.trim());
@@ -137,10 +137,106 @@ export async function listPhases(db: Db, projectId: string): Promise<Phase[]> {
   return tracks.flatMap((t) => t.items.filter((i) => !i.parentId).map((i) => ({ id: i.id, name: i.name, startDate: i.startDate, dueDate: i.dueDate, track: t.name })));
 }
 
-const kindOf = (k: string): TagKind => {
-  if (!(TAG_KINDS as readonly string[]).includes(k)) throw new InputError("Jenis tag tidak valid.");
-  return k as TagKind;
-};
+// ---------- custom tag kinds (per project) ----------
+
+export const listKinds = (db: Db | Tx, projectId: string) => db.select().from(scriptTagKinds).where(eq(scriptTagKinds.projectId, projectId)).orderBy(asc(scriptTagKinds.sortOrder), asc(scriptTagKinds.createdAt));
+export type CustomKind = Awaited<ReturnType<typeof listKinds>>[number];
+/** Built-ins followed by the project's custom kinds. */
+export const getKinds = async (db: Db | Tx, projectId: string): Promise<KindDef[]> => withCustom(await listKinds(db, projectId));
+
+/** How many scene tags of each custom key exist in the whole project. */
+export async function kindUsage(db: Db | Tx, projectId: string): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  for (const r of await db.select({ t: scriptScenes.postTags }).from(scriptScenes).where(eq(scriptScenes.projectId, projectId))) for (const t of r.t) out[t.kind] = (out[t.kind] ?? 0) + 1;
+  return out;
+}
+
+/** Trim, collapse whitespace, strip control characters. */
+export const cleanLabel = (v: string) => v.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim();
+
+/** Stable key for a label: "c-" + ascii slug, made unique among `taken`. Always starts with "c-", so it never equals a built-in key. */
+export function kindKey(label: string, taken: string[]): string {
+  const slug = label.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30).replace(/-+$/, "") || "jenis";
+  let key = `c-${slug}`;
+  for (let n = 2; taken.includes(key); n++) key = `c-${slug}-${n}`;
+  return key;
+}
+
+function checkLabel(raw: string, others: { label: string }[]) {
+  const label = cleanLabel(raw);
+  if (!label) throw new InputError("Nama jenis tag wajib diisi.");
+  if (label.length > MAX_KIND_LABEL) throw new InputError(`Nama jenis tag maksimal ${MAX_KIND_LABEL} karakter.`);
+  if ([...BUILTIN_KINDS, ...others].some((k) => k.label.toLowerCase() === label.toLowerCase())) throw new InputError("Sudah ada jenis tag dengan nama itu.");
+  return label;
+}
+const checkColor = (c: number) => { if (!Number.isInteger(c) || c < 1 || c > 8) throw new InputError("Warna tidak valid."); return c; };
+
+export async function createKind(db: Db, userId: string, projectId: string, input: { label: string; color: number }) {
+  await requireRole(db, userId, projectId, "script.edit");
+  const color = checkColor(input.color);
+  return db.transaction(async (tx) => {
+    const all = await listKinds(tx, projectId);
+    if (all.length >= MAX_CUSTOM_KINDS) throw new InputError(`Maksimal ${MAX_CUSTOM_KINDS} jenis tag sendiri per project.`);
+    const label = checkLabel(input.label, all);
+    const key = kindKey(label, all.map((k) => k.key));
+    const [row] = await tx.insert(scriptTagKinds).values({ projectId, key, label, color, sortOrder: Math.max(-1, ...all.map((k) => k.sortOrder)) + 1 }).returning();
+    await record(tx, { projectId, userId, entity: "script_tag_kind", entityId: row.id, action: "create", summary: `Menambah jenis tag "${label}"`, after: { key, label, color } });
+    return { id: row.id, key };
+  });
+}
+
+export async function updateKind(db: Db, userId: string, projectId: string, id: string, patch: { label?: string; color?: number }) {
+  await requireRole(db, userId, projectId, "script.edit");
+  await db.transaction(async (tx) => {
+    const all = await listKinds(tx, projectId);
+    const row = all.find((k) => k.id === id);
+    if (!row) throw new InputError("Jenis tag tidak ditemukan.");
+    const next = { label: patch.label === undefined ? row.label : checkLabel(patch.label, all.filter((k) => k.id !== id)), color: patch.color === undefined ? row.color : checkColor(patch.color) };
+    if (next.label === row.label && next.color === row.color) return;
+    await tx.update(scriptTagKinds).set(next).where(eq(scriptTagKinds.id, id));
+    await record(tx, { projectId, userId, entity: "script_tag_kind", entityId: id, action: "update", summary: `Jenis tag "${row.label}" diubah`, before: { label: row.label, color: row.color }, after: next });
+  });
+}
+
+/** Swaps the kind with its neighbour. */
+export async function moveKind(db: Db, userId: string, projectId: string, id: string, dir: -1 | 1) {
+  await requireRole(db, userId, projectId, "script.edit");
+  await db.transaction(async (tx) => {
+    const all = await listKinds(tx, projectId);
+    const i = all.findIndex((k) => k.id === id), j = i + dir;
+    if (i < 0) throw new InputError("Jenis tag tidak ditemukan.");
+    if (j < 0 || j >= all.length) return;
+    const order = all.map((k) => k.id);
+    [order[i], order[j]] = [order[j], order[i]];
+    for (const [pos, kid] of order.entries()) await tx.update(scriptTagKinds).set({ sortOrder: pos }).where(eq(scriptTagKinds.id, kid));
+    await record(tx, { projectId, userId, entity: "script_tag_kind", entityId: id, action: "update", summary: `Urutan jenis tag "${all[i].label}" diubah` });
+  });
+}
+
+/** Deletes the kind and strips its tags from every scene of the project. One audit entry. Returns how many tags were removed. */
+export async function deleteKind(db: Db, userId: string, projectId: string, id: string) {
+  await requireRole(db, userId, projectId, "script.edit");
+  return db.transaction(async (tx) => {
+    const [row] = await tx.delete(scriptTagKinds).where(and(eq(scriptTagKinds.id, id), eq(scriptTagKinds.projectId, projectId))).returning();
+    if (!row) throw new InputError("Jenis tag tidak ditemukan.");
+    const scenes = await tx.select({ id: scriptScenes.id, postTags: scriptScenes.postTags }).from(scriptScenes).where(eq(scriptScenes.projectId, projectId));
+    let removed = 0;
+    for (const x of scenes.filter((y) => y.postTags.some((t) => t.kind === row.key))) {
+      removed += x.postTags.filter((t) => t.kind === row.key).length;
+      await tx.update(scriptScenes).set({ postTags: x.postTags.filter((t) => t.kind !== row.key) }).where(eq(scriptScenes.id, x.id));
+    }
+    await record(tx, { projectId, userId, entity: "script_tag_kind", entityId: id, action: "delete", summary: `Menghapus jenis tag "${row.label}"${removed ? ` dan ${removed} tag pada adegan` : ""}`, before: row });
+    return { removed };
+  });
+}
+
+/** A built-in key or a custom key of this project; anything else is rejected. Returns the display definition. */
+async function resolveKind(tx: Db | Tx, projectId: string, k: string): Promise<KindDef> {
+  if (isBuiltinKind(k)) return kindDef(BUILTIN_KINDS, k);
+  const hit = (await getKinds(tx, projectId)).find((d) => d.key === k);
+  if (!hit) throw new InputError("Jenis tag tidak valid.");
+  return hit;
+}
 
 async function loadScenes(tx: Tx | Db, projectId: string, ids: string[]) {
   const rows = ids.length ? await tx.select().from(scriptScenes).where(and(inArray(scriptScenes.id, ids), eq(scriptScenes.projectId, projectId))) : [];
@@ -152,7 +248,7 @@ async function loadScenes(tx: Tx | Db, projectId: string, ids: string[]) {
  * Adds (or replaces) the tag of one kind on the given scenes, confirmed (auto: false). `itemId` undefined = default phase for the kind,
  * null = no phase, a string = that phase (must be a phase of this project). The auto keyword is kept.
  */
-async function resolvePhase(db: Db, projectId: string, kind: TagKind, want: string | null | undefined): Promise<string | null> {
+async function resolvePhase(db: Db, projectId: string, kind: string, want: string | null | undefined): Promise<string | null> {
   const phases = await listPhases(db, projectId);
   if (want === undefined) return defaultPhase(kind, phases);
   if (want === null || want === "") return null;
@@ -162,7 +258,7 @@ async function resolvePhase(db: Db, projectId: string, kind: TagKind, want: stri
 
 export async function setTags(db: Db, userId: string, projectId: string, sceneIds: string[], input: { kind: string; note?: string; itemId?: string | null }) {
   await requireRole(db, userId, projectId, "script.edit");
-  const kind = kindOf(input.kind);
+  const { key: kind, label } = await resolveKind(db, projectId, input.kind);
   const note = input.note === undefined ? undefined : input.note.trim().slice(0, 200); // undefined keeps an existing note
   const itemId = await resolvePhase(db, projectId, kind, input.itemId);
   await db.transaction(async (tx) => {
@@ -175,7 +271,7 @@ export async function setTags(db: Db, userId: string, projectId: string, sceneId
     const one = rows.length === 1;
     await record(tx, {
       projectId, userId, entity: one ? "script_scene" : "script", entityId: one ? rows[0].id : rows[0].scriptId, action: "update",
-      summary: one ? `Adegan ${rows[0].number}: tag ${TAG_LABEL[kind]} diatur` : `Tag ${TAG_LABEL[kind]} ditambahkan ke ${rows.length} adegan`,
+      summary: one ? `Adegan ${rows[0].number}: tag ${label} diatur` : `Tag ${label} ditambahkan ke ${rows.length} adegan`,
       after: { kind, note, itemId },
     });
   });
@@ -184,7 +280,7 @@ export async function setTags(db: Db, userId: string, projectId: string, sceneId
 /** Confirms a parser suggestion (auto -> false) or removes a tag. */
 async function changeTag(db: Db, userId: string, projectId: string, sceneId: string, kindIn: string, mode: "confirm" | "remove") {
   await requireRole(db, userId, projectId, "script.edit");
-  const kind = kindOf(kindIn);
+  const kind = kindIn; // no validation: a tag whose custom kind was deleted can still be removed
   await db.transaction(async (tx) => {
     const [row] = await loadScenes(tx, projectId, [sceneId]);
     const old = row.postTags.find((t) => t.kind === kind);
@@ -193,7 +289,7 @@ async function changeTag(db: Db, userId: string, projectId: string, sceneId: str
     await tx.update(scriptScenes).set({ postTags: next }).where(eq(scriptScenes.id, sceneId));
     await record(tx, {
       projectId, userId, entity: "script_scene", entityId: sceneId, action: mode === "remove" ? "delete" : "update",
-      summary: `Adegan ${row.number}: tag ${TAG_LABEL[kind]} ${mode === "remove" ? "dihapus" : "dikonfirmasi"}`, before: { kind, auto: old.auto, itemId: old.itemId ?? null },
+      summary: `Adegan ${row.number}: tag ${kindDef(await getKinds(tx, projectId), kind).label} ${mode === "remove" ? "dihapus" : "dikonfirmasi"}`, before: { kind, auto: old.auto, itemId: old.itemId ?? null },
     });
   });
 }
@@ -203,7 +299,7 @@ export const removeTag = (db: Db, userId: string, projectId: string, sceneId: st
 /** Tag from a text selection in the reader: adds the selection to the scene's tag of that kind (excerpts are joined with " … "), confirmed. */
 export async function addTagFromSelection(db: Db, userId: string, projectId: string, sceneId: string, kindIn: string, excerptIn: string, note = "", itemId?: string | null) {
   await requireRole(db, userId, projectId, "script.edit");
-  const kind = kindOf(kindIn);
+  const { key: kind, label } = await resolveKind(db, projectId, kindIn);
   const excerpt = excerptIn.replace(/\s+/g, " ").trim().slice(0, 500);
   if (!excerpt) throw new InputError("Pilih teks di naskah terlebih dahulu.");
   const phase = await resolvePhase(db, projectId, kind, itemId);
@@ -213,7 +309,7 @@ export async function addTagFromSelection(db: Db, userId: string, projectId: str
     const joined = old?.excerpt && !old.excerpt.includes(excerpt) ? `${old.excerpt} … ${excerpt}`.slice(0, 500) : old?.excerpt?.includes(excerpt) ? old.excerpt : excerpt;
     const next: PostTag = { kind, note: note.trim().slice(0, 200) || old?.note || "", auto: false, itemId: itemId === undefined && old?.itemId ? old.itemId : phase, excerpt: joined, ...(old?.keyword ? { keyword: old.keyword } : {}) };
     await tx.update(scriptScenes).set({ postTags: [...row.postTags.filter((t) => t.kind !== kind), next] }).where(eq(scriptScenes.id, sceneId));
-    await record(tx, { projectId, userId, entity: "script_scene", entityId: sceneId, action: "update", summary: `Adegan ${row.number}: tag ${TAG_LABEL[kind]} ditambahkan dari teks naskah`, after: { kind, itemId: phase } });
+    await record(tx, { projectId, userId, entity: "script_scene", entityId: sceneId, action: "update", summary: `Adegan ${row.number}: tag ${label} ditambahkan dari teks naskah`, after: { kind, itemId: phase } });
   });
 }
 
@@ -282,5 +378,5 @@ export async function getPhaseNeeds(db: Db, projectId: string) {
   const [script] = await db.select({ id: scripts.id }).from(scripts).where(eq(scripts.projectId, projectId)).orderBy(desc(scripts.createdAt)).limit(1);
   if (!script) return null;
   const scenes = await db.select({ id: scriptScenes.id, heading: scriptScenes.heading, number: scriptScenes.number, estSeconds: scriptScenes.estSeconds, postTags: scriptScenes.postTags }).from(scriptScenes).where(eq(scriptScenes.scriptId, script.id)).orderBy(asc(scriptScenes.position));
-  return { scriptId: script.id, byPhase: needsByPhase(scenes as { id: string; heading: string; number: string; estSeconds: number; postTags: PostTag[] }[]) };
+  return { scriptId: script.id, byPhase: needsByPhase(scenes as { id: string; heading: string; number: string; estSeconds: number; postTags: PostTag[] }[], await getKinds(db, projectId)) };
 }

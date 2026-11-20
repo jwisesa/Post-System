@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { toCsv } from "@/lib/schedule/csv";
 import { today } from "@/lib/schedule/dates";
 import { postCsvRows } from "@/lib/script/needs";
-import { getScript, listPhases } from "@/lib/script/service";
+import { getKinds, getScript, listPhases } from "@/lib/script/service";
 import { fmtDuration, fmtPage } from "@/lib/script/types";
 import { getProjectForUser } from "@/lib/services";
 
@@ -30,7 +30,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       ...scenes.map((s) => [s.number, s.heading, s.intExt, s.location, s.timeOfDay, fmtPage(s.pageStart), fmtPage(s.pageEnd), fmtDuration(s.estSeconds), String(s.estSeconds), s.characters.map((c) => c.name).join("; "), s.notes]),
     ];
   } else if (type === "post") {
-    rows = postCsvRows(scenes, await listPhases(db, row.project.id));
+    rows = postCsvRows(scenes, await listPhases(db, row.project.id), await getKinds(db, row.project.id));
   } else return new Response("Bad request", { status: 400 });
   const base = data.script.title.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "naskah";
   return new Response("﻿" + toCsv(rows), {
