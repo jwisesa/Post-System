@@ -11,7 +11,7 @@ import { budgetBids, budgetDocs, budgetPicks, budgetScenarios, budgetScopes, bud
 import { listDeliverables } from "../deliverables/service";
 import { listPhases } from "../script/service";
 import { InputError, record, requireRole, type Tx } from "../services";
-import { NEXT, SERVICE_CATEGORIES, VERSION_STATUSES, type VersionStatusCode } from "./catalog";
+import { CANCEL_MARK, NEXT, SERVICE_CATEGORIES, VERSION_STATUSES, type VersionStatusCode } from "./catalog";
 import { lineAmount, MAX_RP, taxOf } from "./money";
 
 const view = (db: Db, u: string, p: string) => requireRole(db, u, p, "budget.view");
@@ -38,7 +38,7 @@ export async function getBudget(db: Db, userId: string, projectId: string) {
   await view(db, userId, projectId);
   const [vendors, scopes, bids, docs, versions, scenario] = await Promise.all([
     db.select().from(budgetVendors).where(eq(budgetVendors.projectId, projectId)).orderBy(asc(budgetVendors.name)),
-    db.select().from(budgetScopes).where(eq(budgetScopes.projectId, projectId)).orderBy(asc(budgetScopes.sortOrder), asc(budgetScopes.createdAt)),
+    db.select().from(budgetScopes).where(eq(budgetScopes.projectId, projectId)).orderBy(asc(budgetScopes.sortOrder), asc(budgetScopes.createdAt), asc(budgetScopes.id)),
     db.select().from(budgetBids).where(eq(budgetBids.projectId, projectId)).orderBy(asc(budgetBids.createdAt)),
     db.select().from(budgetDocs).where(eq(budgetDocs.projectId, projectId)).orderBy(asc(budgetDocs.createdAt)),
     db.select({ v: budgetVersions, author: users.name }).from(budgetVersions).leftJoin(users, eq(users.id, budgetVersions.createdBy)).where(eq(budgetVersions.projectId, projectId)).orderBy(asc(budgetVersions.number)),
@@ -350,7 +350,7 @@ export async function setVersionStatus(db: Db, userId: string, projectId: string
     const from = v.status as VersionStatusCode;
     if (!NEXT[from]?.includes(to)) throw new InputError(`Status "${VERSION_STATUSES[from]}" tidak bisa diubah ke "${VERSION_STATUSES[to]}".`);
     if (from === "approved" && !why) throw new InputError("Isi alasan pembatalan persetujuan (batal setujui).");
-    const stamp = { statusNote: why, statusBy: userId, statusAt: new Date() };
+    const stamp = { statusNote: from === "approved" ? `${CANCEL_MARK}: ${why}` : why, statusBy: userId, statusAt: new Date() };
     if (to === "approved") {
       await tx.update(budgetVersions).set({ status: "superseded", statusNote: `Digantikan oleh versi ${v.number}`, statusBy: userId, statusAt: new Date() }).where(and(eq(budgetVersions.docId, v.docId), eq(budgetVersions.status, "approved"), ne(budgetVersions.id, v.id)));
     }

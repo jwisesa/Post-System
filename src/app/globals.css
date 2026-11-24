@@ -1128,3 +1128,11 @@ details.tl-details > summary::-webkit-details-marker { display: none; }
 .bg-item { grid-column: 1 / -1; }
 .bg-amount { text-align: end; font-variant-numeric: tabular-nums; }
 .bg-bid { border-top: 1px solid var(--line); padding-top: 1rem; }
+
+/* ---------- budget A2 ---------- */
+.cmp-added { background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.cmp-removed { background: color-mix(in srgb, var(--danger) 9%, transparent); }
+.cmp-removed td:first-child { text-decoration: line-through; text-decoration-color: var(--danger); }
+.cmp-changed { background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.bg-vhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); padding-bottom: 0.375rem; }
+.bg-vhead h2 { font-family: var(--font-display); font-size: 1rem; font-weight: 650; }

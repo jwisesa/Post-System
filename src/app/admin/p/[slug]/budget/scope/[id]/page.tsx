@@ -4,6 +4,7 @@ import { ScopeView } from "@/components/budget/ScopeView";
 import { can } from "@/lib/auth/permissions";
 import { categoryLabel } from "@/lib/budget/catalog";
 import { formatRupiah } from "@/lib/budget/money";
+import { compareBids } from "@/lib/budget/vendors";
 import { getScope } from "@/lib/budget/service";
 import { listDeliverables } from "@/lib/deliverables/service";
 import { loadProject } from "@/lib/project-context";
@@ -21,9 +22,11 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
     const doc = d.docs.find((x) => x.bidId === b.id && x.kind === "quote")!;
     return {
       id: b.id, vendor: d.vendors.find((v) => v.id === b.vendorId)?.name ?? "—", docId: doc.id, picked: pick?.bidId === b.id,
-      versions: d.versions.filter((v) => v.docId === doc.id).map((v) => ({ id: v.id, number: v.number, ref: v.ref, docDate: v.docDate, status: v.status, subtotal: v.subtotal, ppn: v.ppn, pph23: v.pph23, ppnRateBp: v.ppnRateBp, pph23RateBp: v.pph23RateBp, notes: v.notes, links: v.links, authorName: v.authorName, lines: v.lines.map((l) => ({ key: l.key, item: l.item, qtyMilli: l.qtyMilli, unit: l.unit, unitPrice: l.unitPrice })) })),
+      versions: d.versions.filter((v) => v.docId === doc.id).map((v) => ({ id: v.id, number: v.number, ref: v.ref, docDate: v.docDate, status: v.status, subtotal: v.subtotal, ppn: v.ppn, pph23: v.pph23, ppnRateBp: v.ppnRateBp, pph23RateBp: v.pph23RateBp, notes: v.notes, statusNote: v.statusNote, links: v.links, authorName: v.authorName, lines: v.lines.map((l) => ({ key: l.key, item: l.item, qtyMilli: l.qtyMilli, unit: l.unit, unitPrice: l.unitPrice })) })),
     };
   });
+  const names = new Map(d.bids.map((b) => [b.id, d.vendors.find((v) => v.id === b.vendorId)?.name ?? "—"]));
+  const cmp = compareBids(d.scope.id, { scopes: [{ id: d.scope.id, budget: d.scope.budget }], bids: d.bids, docs: d.docs, versions: d.versions, picks: d.picks }, names);
   const taken = new Set(d.bids.map((b) => b.vendorId));
   return (
     <div className="mx-auto max-w-[1100px] space-y-5">
@@ -31,13 +34,14 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
         <p className="page-meta"><Link href={`/admin/p/${slug}/budget`}>Anggaran & vendor</Link></p>
         <h1 className="page-title">{d.scope.name}</h1>
         <p className="page-meta">{categoryLabel(d.scope.category)} · Target <span className="tabular-nums">{formatRupiah(d.scope.budget)}</span> sebelum pajak</p>
-        <p className="page-meta">Fase: {d.phases.map((p) => p.name).join(", ") || "—"} · Deliverable: {d.deliverables.map((x) => x.name).join(", ") || "—"}</p>
+        <p className="page-meta">Fase: {d.phases.length ? d.phases.map((p, i) => <span key={p.id}>{i > 0 && ", "}<Link href={`/admin/p/${slug}/timeline?item=${p.id}`} className="underline">{p.name}</Link></span>) : "—"} · Deliverable: {d.deliverables.map((x) => x.name).join(", ") || "—"}</p>
       </div>
       <ScopeView
         slug={slug}
         canEdit={can(role, "budget.edit")}
         scope={{ id: d.scope.id, name: d.scope.name, category: d.scope.category, budget: d.scope.budget, phaseIds: d.scope.phaseIds, deliverableIds: d.scope.deliverableIds, notes: d.scope.notes }}
         bids={bids}
+        cmp={cmp}
         addable={d.vendors.filter((v) => !v.archivedAt && !taken.has(v.id)).map((v) => ({ id: v.id, name: v.name }))}
         phases={phases.map((p) => ({ id: p.id, name: `${p.name} (${p.track})` }))}
         deliverables={deliverables.map((x) => ({ id: x.id, name: x.name }))}

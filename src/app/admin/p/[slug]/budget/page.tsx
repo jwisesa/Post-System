@@ -24,7 +24,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ slug: s
       <BudgetView
         slug={slug}
         canEdit={can(role, "budget.edit")}
-        rows={rows.map((r) => { const s = data.scopes.find((x) => x.id === r.scopeId)!; return { id: s.id, name: s.name, category: s.category, budget: r.budget, chosen: r.chosen, state: r.state, variance: r.variance }; })}
+        rows={rows.map((r) => { const s = data.scopes.find((x) => x.id === r.scopeId)!; return { id: s.id, name: s.name, category: s.category, budget: r.budget, chosen: r.chosen, state: r.state, variance: r.variance, cancelled: r.cancelled, vendor: (() => { const pk = data.picks.find((x) => x.scopeId === s.id); const bid = pk && data.bids.find((x) => x.id === pk.bidId); return bid ? data.vendors.find((v) => v.id === bid.vendorId)?.name ?? null : null; })() }; })}
         total={{ budget: total.budget, chosen: total.chosen, provisional: total.provisional }}
         phases={phases.map((p) => ({ id: p.id, name: `${p.name} (${p.track})` }))}
         deliverables={deliverables.map((d) => ({ id: d.id, name: d.name }))}

@@ -1,31 +1,45 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { changeVersionStatus } from "@/app/admin/budget-actions";
+import { Drawer } from "@/components/ui/controls";
 import { useToast } from "@/components/ui/toast";
 import { NEXT, VERSION_STATUSES, type VersionStatusCode } from "@/lib/budget/catalog";
 
-/** Offers only the moves allowed by NEXT. Undoing an approval asks for a reason. */
+/** Offers only the moves allowed by NEXT. Undoing an approval ("batal setujui") needs a note, asked in a drawer. */
 export function StatusSelect({ slug, versionId, status }: { slug: string; versionId: string; status: VersionStatusCode }) {
   const toast = useToast();
   const router = useRouter();
+  const [undo, setUndo] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
   const options = NEXT[status];
   if (!options.length) return <span className="tag">{VERSION_STATUSES[status]}</span>;
-  const change = async (to: string) => {
-    let note = "";
-    if (status === "approved") {
-      note = window.prompt("Alasan batal setujui:")?.trim() ?? "";
-      if (!note) return;
-    }
-    const r = await changeVersionStatus(slug, versionId, to, note);
+  const change = async (to: string, why = "") => {
+    setBusy(true);
+    const r = await changeVersionStatus(slug, versionId, to, why);
+    setBusy(false);
     if (!r.ok) { toast({ message: r.error, tone: "error" }); return; }
     toast({ message: r.picked ? `Disetujui. ${r.vendor} dipilih untuk lingkup ini.` : "Status diubah." });
+    setUndo(null); setNote("");
     router.refresh();
   };
   return (
-    <select aria-label="Ubah status" value="" onChange={(e) => e.target.value && change(e.target.value)}>
-      <option value="">{VERSION_STATUSES[status]}</option>
-      {options.map((o) => <option key={o} value={o}>{VERSION_STATUSES[o]}</option>)}
-    </select>
+    <>
+      <select aria-label="Ubah status" value="" onChange={(e) => { const v = e.target.value; if (!v) return; if (status === "approved") setUndo(v); else change(v); }}>
+        <option value="">{VERSION_STATUSES[status]}</option>
+        {options.map((o) => <option key={o} value={o}>{status === "approved" ? "Batal setujui" : VERSION_STATUSES[o]}</option>)}
+      </select>
+      {undo && (
+        <Drawer title="Batal setujui" crumb="Anggaran & vendor" onClose={() => { setUndo(null); setNote(""); }}>
+          <form className="space-y-4 text-sm" onSubmit={(e) => { e.preventDefault(); if (note.trim()) change(undo, note); }}>
+            <p className="muted">Vendor tetap terpilih, tetapi nilainya kembali menjadi perkiraan sampai ada versi yang disetujui. Alasan dicatat di riwayat.</p>
+            <label className="grid gap-1">Alasan (wajib)<textarea rows={3} required maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} /></label>
+            <button className="btn" disabled={busy || !note.trim()}>{busy ? "Menyimpan…" : "Batal setujui"}</button>
+          </form>
+        </Drawer>
+      )}
+    </>
   );
 }

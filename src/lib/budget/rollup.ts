@@ -1,14 +1,15 @@
+import { CANCEL_MARK } from "./catalog";
 // The four numbers per scope: budget (target), chosen, invoiced, paid. All PRE-TAX.
 // Takes plain rows so it runs on the server and in client components.
 
 export type ScopeR = { id: string; budget: number };
 export type BidR = { id: string; scopeId: string };
 export type DocR = { id: string; bidId: string; kind: "quote" | "change_order" };
-export type VersionR = { id: string; docId: string; number: number; status: string; subtotal: number };
+export type VersionR = { id: string; docId: string; number: number; status: string; subtotal: number; statusNote?: string };
 export type PickR = { scopeId: string; bidId: string; versionId: string | null };
 export type BudgetRows = { scopes: ScopeR[]; bids: BidR[]; docs: DocR[]; versions: VersionR[]; picks: PickR[]; invoices?: never[]; payments?: never[]; driveLines?: never[] }; // invoices/payments/driveLines arrive in phase B
 
-export type BidValue = { quote: number; state: "pinned" | "approved" | "provisional" | "none"; versionId?: string; changeOrders: number };
+export type BidValue = { quote: number; state: "pinned" | "approved" | "provisional" | "none"; versionId?: string; changeOrders: number; cancelled?: boolean };
 
 export function bidValue(bidId: string, d: BudgetRows, pinnedVersionId?: string | null): BidValue {
   const quoteDoc = d.docs.find((x) => x.bidId === bidId && x.kind === "quote");
@@ -20,7 +21,7 @@ export function bidValue(bidId: string, d: BudgetRows, pinnedVersionId?: string 
   const ok = vs.find((v) => v.status === "approved");
   if (ok) return { quote: ok.subtotal, state: "approved", versionId: ok.id, changeOrders };
   const prov = vs.find((v) => v.status !== "rejected" && v.status !== "superseded");
-  if (prov) return { quote: prov.subtotal, state: "provisional", versionId: prov.id, changeOrders };
+  if (prov) return { quote: prov.subtotal, state: "provisional", versionId: prov.id, changeOrders, cancelled: !!prov.statusNote?.startsWith(CANCEL_MARK) };
   return { quote: 0, state: "none", changeOrders };
 }
 
@@ -31,7 +32,7 @@ export function scopeNumbers(scopeId: string, d: BudgetRows) {
   const drives = 0; // phase B/C: drive lines
   const chosen = bv ? bv.quote + bv.changeOrders + drives : 0;
   // invoiced / planned / paid / notInvoiced / unpaid come with invoices (phase B)
-  return { scopeId, budget, chosen, state: bv?.state ?? "none", invoiced: 0, planned: 0, paid: 0, drives, variance: budget - chosen, overBudget: Math.max(0, chosen - budget), notInvoiced: 0, unpaid: 0 };
+  return { scopeId, budget, chosen, state: bv?.state ?? "none", cancelled: !!bv?.cancelled, invoiced: 0, planned: 0, paid: 0, drives, variance: budget - chosen, overBudget: Math.max(0, chosen - budget), notInvoiced: 0, unpaid: 0 };
 }
 export type ScopeNumbers = ReturnType<typeof scopeNumbers>;
 

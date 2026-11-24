@@ -212,3 +212,64 @@ describe("isolation", () => {
     expect(hits).toEqual([]);
   });
 });
+
+describe("budget A2: compare, vendor table, undo approval", () => {
+  let db: Db, sup: string, asst: string, out: string, pid: string, other: string;
+  const L = (item: string, qty: number, price: number) => ({ item, qtyMilli: qty, unit: "jam", unitPrice: price });
+  const V = (lines: b.VersionInput["lines"], notes = "n"): b.VersionInput => ({ ref: "", docDate: "", lines, ppnBp: 1100, pph23Bp: 200, notes, links: [] });
+  const setup = async (vendor: string, scopeId: string) => {
+    const { vendorId } = await b.createVendor(db, sup, pid, { name: vendor });
+    const { bidId } = await b.addBid(db, sup, pid, scopeId, vendorId);
+    const docId = (await b.getBudget(db, sup, pid)).docs.find((d) => d.bidId === bidId)!.id;
+    return { bidId, docId };
+  };
+  beforeAll(async () => {
+    db = await createPgliteDb();
+    sup = (await s.createUser(db, { name: "Sup", email: "s@x.id", password: "password1" })).id;
+    out = (await s.createUser(db, { name: "Out", email: "o@x.id", password: "password1" })).id;
+    pid = (await s.createProject(db, sup, { name: "Film", productionType: "feature_theatrical", platforms: ["Bioskop"], unitCount: null })).id;
+    other = (await s.createProject(db, out, { name: "Lain", productionType: "feature_theatrical", platforms: ["Bioskop"], unitCount: null })).id;
+    await s.addMember(db, sup, pid, { email: "a@x.id", role: "assistant", name: "Asst", password: "password1" });
+    asst = (await s.listMembers(db, pid)).find((m) => m.role === "assistant")!.userId;
+  });
+
+  it("compares across vendors; foreign and invalid ids are rejected; assistant may read", async () => {
+    const { scopeId } = await b.createScope(db, sup, pid, { name: "Grading", category: "grading", budget: 150000000 });
+    const A = await setup("A", scopeId), B = await setup("B", scopeId);
+    const a1 = await b.addVersion(db, sup, pid, A.docId, V([L("Grading", 2500, 1000), L("Online", 1000, 500)]));
+    const a2 = await b.addVersion(db, sup, pid, A.docId, V([L("Grading", 2500, 1200), L("DCP", 1000, 300)]));
+    const b1 = await b.addVersion(db, sup, pid, B.docId, V([L("Grading", 2500, 900)]));
+    const { compareVersions } = await import("@/lib/budget/compare");
+    const c = await compareVersions(db, asst, pid, a2.versionId, b1.versionId);
+    expect(c.a.vendor).toBe("A"); expect(c.b.vendor).toBe("B");
+    expect(c.diff.rows.map((r) => r.kind).sort()).toEqual(["changed", "removed"]);
+    const c2 = await compareVersions(db, sup, pid, a1.versionId, a2.versionId);
+    expect(c2.diff.rows.map((r) => r.kind).sort()).toEqual(["added", "changed", "removed"]);
+    await expect(compareVersions(db, sup, pid, a1.versionId, "nope")).rejects.toThrow(/tidak ditemukan/);
+    await expect(compareVersions(db, sup, other, a1.versionId, a2.versionId)).rejects.toThrow(); // foreign project: not a member
+    await expect(compareVersions(db, out, pid, a1.versionId, a2.versionId)).rejects.toBeInstanceOf(ForbiddenError); // non-member
+    const { can } = await import("@/lib/auth/permissions");
+    expect(can("assistant", "budget.view")).toBe(true);
+    expect(can("assistant", "budget.edit")).toBe(false);
+  });
+
+  it("vendor comparison: cheapest, delta vs budget, state tags", async () => {
+    const { compareBids } = await import("@/lib/budget/vendors");
+    const rows = { scopes: [{ id: "s", budget: 1000 }], bids: [{ id: "x", scopeId: "s" }, { id: "y", scopeId: "s" }, { id: "z", scopeId: "s" }], docs: [{ id: "dx", bidId: "x", kind: "quote" as const }, { id: "dy", bidId: "y", kind: "quote" as const }, { id: "dz", bidId: "z", kind: "quote" as const }], versions: [{ id: "vx", docId: "dx", number: 1, status: "approved", subtotal: 1200 }, { id: "vy", docId: "dy", number: 1, status: "sent", subtotal: 800 }], picks: [{ scopeId: "s", bidId: "x", versionId: null }] };
+    const r = compareBids("s", rows, new Map([["x", "X"], ["y", "Y"], ["z", "Z"]]));
+    expect(r.map((x) => [x.state, x.chosen, x.cheapest, x.vsBudget, x.vsCheapest])).toEqual([["approved", true, false, -200, 400], ["provisional", false, true, 200, 0], ["none", false, false, null, null]]);
+  });
+
+  it("undo approval needs a note; pick stays and the scope turns provisional with a marker", async () => {
+    const { scopeId } = await b.createScope(db, sup, pid, { name: "Sound", category: "sound", budget: 5000 });
+    const A = await setup("A2", scopeId);
+    const v = await b.addVersion(db, sup, pid, A.docId, V([L("Mix", 1000, 4000)]));
+    await b.setVersionStatus(db, sup, pid, v.versionId, "approved", "");
+    await expect(b.setVersionStatus(db, sup, pid, v.versionId, "negotiating", " ")).rejects.toThrow(/alasan/);
+    await b.setVersionStatus(db, sup, pid, v.versionId, "negotiating", "harga berubah");
+    const data = await b.getBudget(db, sup, pid);
+    const row = rollup(data).rows.find((r) => r.scopeId === scopeId)!;
+    expect(row.state).toBe("provisional"); expect(row.cancelled).toBe(true);
+    expect(data.picks.some((p) => p.scopeId === scopeId && p.bidId === A.bidId)).toBe(true);
+  });
+});

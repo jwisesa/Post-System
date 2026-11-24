@@ -33,13 +33,18 @@ export const NEXT: Record<VersionStatusCode, VersionStatusCode[]> = {
   superseded: [],
 };
 
-// Indonesian tax rules, ESTIMATE ONLY (from general knowledge of the rules in force since 2025; not re-verified online):
-// - PPN: statutory rate 12% (UU HPP), but for non-luxury goods/services the tax base is "DPP nilai lain" = 11/12 of the price,
-//   so the effective rate is 11%. Charged only by vendors who are PKP.
-// - PPh 23: withheld by the payer, 2% of the amount excluding PPN for services (jasa) and equipment rental; not for goods.
-//   The rate is 100% higher (4%) when the vendor has no NPWP. Other income types (royalty, dividend...) use 15%.
+// Indonesian tax rules, ESTIMATE ONLY. Verified online 2026-11 (facts matched; labels unchanged):
+// - PPN: statutory rate 12% since 1 Jan 2025, but PMK 131/2024 sets the tax base for non-luxury goods/services (BKP/JKP nonmewah)
+//   at "DPP nilai lain" = 11/12 of the price, so the effective rate is 11%. Luxury goods use the full price (12%). Special
+//   regimes (PMK 11/2025) may differ. Charged only by vendors who are PKP.
+//   https://www.pajak.go.id/id/artikel/pmk-1312024-tarif-ppn-sebelas-dua-belas
+// - PPh 23: withheld by the payer, 2% of the amount excluding PPN for services (jasa) and equipment/asset rental; not for goods,
+//   and not for individuals under PPh 21. 4% (100% higher) when the vendor has no NPWP (still so when a NIK is not yet activated).
+//   Other income types (royalty, dividend...) use 15%. https://www.pajak.go.id/id/pemotongan-pajak-penghasilan-pasal-23
 // Both rates are editable per version; these are only the defaults.
 export const DEFAULT_PPN_BP = 1100;
 export const DEFAULT_PPH23_BP = 200;
 export const PPN_LABEL = "PPN 11% (efektif)";
+/** Marker stored at the start of statusNote when an approval is undone ("batal setujui"). */
+export const CANCEL_MARK = "Persetujuan dibatalkan";
 export const TAX_NOTE = "Perkiraan pajak, bukan nasihat pajak. Cek dengan finance/konsultan pajak.";
