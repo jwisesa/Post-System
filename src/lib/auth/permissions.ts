@@ -16,9 +16,11 @@ export type Action =
   | "deliverable.status"
   | "shot.edit" // save from the EDL tool, delete
   | "shot.status" // status, vendor, version, notes
-  | "script.edit"; // import, edit and delete script breakdowns (supervisor only)
+  | "script.edit" // import, edit and delete script breakdowns (supervisor only)
+  | "budget.view" // vendors, quotes and money: supervisor and assistant
+  | "budget.edit"; // supervisor only
 
-const ASSISTANT: ReadonlySet<Action> = new Set(["project.view", "team.edit", "schedule.status", "asset.edit", "comment.add", "deliverable.status", "shot.status"]);
+const ASSISTANT: ReadonlySet<Action> = new Set(["project.view", "team.edit", "schedule.status", "asset.edit", "comment.add", "deliverable.status", "shot.status", "budget.view"]);
 
 /** role = null means "not a member of this project". */
 export function can(role: Role | null, action: Action): boolean {

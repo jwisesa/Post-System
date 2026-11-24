@@ -99,6 +99,13 @@
       "when": 1795143470790,
       "tag": "0013_conscious_swordsman",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795513323230,
+      "tag": "0014_quick_karnak",
+      "breakpoints": true
     }
   ]
 }

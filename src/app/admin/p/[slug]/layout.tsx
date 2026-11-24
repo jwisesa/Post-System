@@ -21,6 +21,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
       <NavLink href={base} exact icon="today">Hari Ini</NavLink>
       <NavLink href={`${base}/timeline`} icon="timeline">Timeline</NavLink>
       <NavLink href={`${base}/deliverables`} icon="deliverables">Deliverables</NavLink>
+      {can(role, "budget.view") && <NavLink href={`${base}/budget`} icon="budget">Anggaran & vendor</NavLink>}
       <NavLink href={`${base}/assets`} icon="assets">Aset & dokumen</NavLink>
       <NavLink href={`${base}/technical`} icon="technical">Technical Page</NavLink>
       <NavLink href={`${base}/checks`} icon="check">Pemeriksaan</NavLink>

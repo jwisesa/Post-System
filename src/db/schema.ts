@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   date,
   index,
@@ -472,6 +473,141 @@ export const scriptTagKinds = ps.table(
     createdAt: createdAt(),
   },
   (t) => [unique().on(t.projectId, t.key), index("script_tag_kinds_project_idx").on(t.projectId)],
+);
+
+// ---------- budget ----------
+// Money is whole Rupiah (bigint, mode number; the service keeps |x| <= 1e15). Rates are integer basis points; quantities are thousandths.
+// Phase / deliverable links on a scope are id arrays with no foreign key (resolved on read), so a timeline edit never touches financial data.
+
+export type BudgetLine = { key: string; item: string; qtyMilli: number; unit: string; unitPrice: number; amount: number; note?: string };
+export type BudgetVersionStatus = "draft" | "sent" | "negotiating" | "approved" | "rejected" | "superseded";
+
+const money = (n: string) => bigint(n, { mode: "number" });
+const projectRef = () => uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" });
+
+export const budgetVendors = ps.table(
+  "budget_vendors",
+  {
+    id: id(),
+    projectId: projectRef(),
+    name: text("name").notNull(),
+    categories: jsonb("categories").$type<string[]>().notNull().default([]),
+    contactName: text("contact_name").notNull().default(""),
+    email: text("email").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    teamContactId: uuid("team_contact_id").references(() => teamContacts.id, { onDelete: "set null" }),
+    chargesPpn: boolean("charges_ppn").notNull().default(true),
+    withholdsPph23: boolean("withholds_pph23").notNull().default(true),
+    notes: text("notes").notNull().default(""),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [unique().on(t.projectId, t.name), index("budget_vendors_project_idx").on(t.projectId)],
+);
+
+export const budgetScopes = ps.table(
+  "budget_scopes",
+  {
+    id: id(),
+    projectId: projectRef(),
+    name: text("name").notNull(),
+    category: text("category").notNull().default("other"),
+    /** Target, before tax. */
+    budget: money("budget").notNull().default(0),
+    phaseIds: jsonb("phase_ids").$type<string[]>().notNull().default([]),
+    deliverableIds: jsonb("deliverable_ids").$type<string[]>().notNull().default([]),
+    notes: text("notes").notNull().default(""),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("budget_scopes_project_idx").on(t.projectId)],
+);
+
+/** A candidate vendor within a scope. The vendor FK has no ON DELETE action on purpose (NO ACTION is checked at statement end, so deleteProject still works). */
+export const budgetBids = ps.table(
+  "budget_bids",
+  {
+    id: id(),
+    projectId: projectRef(),
+    scopeId: uuid("scope_id").notNull().references(() => budgetScopes.id, { onDelete: "cascade" }),
+    vendorId: uuid("vendor_id").notNull().references(() => budgetVendors.id),
+    notes: text("notes").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (t) => [unique().on(t.scopeId, t.vendorId), index("budget_bids_project_idx").on(t.projectId)],
+);
+
+/** A document series under a bid: the quote, or a change order. Versions hang off it. */
+export const budgetDocs = ps.table(
+  "budget_docs",
+  {
+    id: id(),
+    projectId: projectRef(),
+    bidId: uuid("bid_id").notNull().references(() => budgetBids.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<"quote" | "change_order">().notNull(),
+    title: text("title").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("budget_docs_quote_uq").on(t.bidId).where(sql`kind = 'quote'`), index("budget_docs_project_idx").on(t.projectId)],
+);
+
+/** Immutable once saved (DB trigger): only the status columns may change. Totals are frozen at save time. */
+export const budgetVersions = ps.table(
+  "budget_versions",
+  {
+    id: id(),
+    projectId: projectRef(),
+    docId: uuid("doc_id").notNull().references(() => budgetDocs.id, { onDelete: "cascade" }),
+    number: integer("number").notNull(),
+    ref: text("ref").notNull().default(""),
+    docDate: date("doc_date", { mode: "string" }),
+    lines: jsonb("lines").$type<BudgetLine[]>().notNull().default([]),
+    subtotal: money("subtotal").notNull(),
+    ppnRateBp: integer("ppn_rate_bp"),
+    ppn: money("ppn").notNull().default(0),
+    pph23RateBp: integer("pph23_rate_bp"),
+    pph23: money("pph23").notNull().default(0),
+    notes: text("notes").notNull().default(""),
+    links: jsonb("links").$type<string[]>().notNull().default([]),
+    status: text("status").$type<BudgetVersionStatus>().notNull().default("draft"),
+    statusNote: text("status_note").notNull().default(""),
+    statusBy: uuid("status_by").references(() => users.id),
+    statusAt: timestamp("status_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique().on(t.docId, t.number),
+    uniqueIndex("budget_versions_approved_uq").on(t.docId).where(sql`status = 'approved'`),
+    index("budget_versions_project_idx").on(t.projectId),
+  ],
+);
+
+export const budgetScenarios = ps.table(
+  "budget_scenarios",
+  {
+    id: id(),
+    projectId: projectRef(),
+    name: text("name").notNull(),
+    notes: text("notes").notNull().default(""),
+    isActive: boolean("is_active").notNull().default(false),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("budget_scenarios_active_uq").on(t.projectId).where(sql`is_active`), index("budget_scenarios_project_idx").on(t.projectId)],
+);
+
+/** versionId null = follow the live approved version of the bid's quote. */
+export const budgetPicks = ps.table(
+  "budget_picks",
+  {
+    scenarioId: uuid("scenario_id").notNull().references(() => budgetScenarios.id, { onDelete: "cascade" }),
+    scopeId: uuid("scope_id").notNull().references(() => budgetScopes.id, { onDelete: "cascade" }),
+    bidId: uuid("bid_id").notNull().references(() => budgetBids.id, { onDelete: "cascade" }),
+    versionId: uuid("version_id").references(() => budgetVersions.id, { onDelete: "set null" }),
+    projectId: projectRef(),
+  },
+  (t) => [primaryKey({ columns: [t.scenarioId, t.scopeId] }), index("budget_picks_project_idx").on(t.projectId)],
 );
 
 // ---------- calendar feed ----------

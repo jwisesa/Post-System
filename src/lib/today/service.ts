@@ -146,7 +146,7 @@ export async function getWeeklyReport(db: Db, projectId: string, today: string) 
   const [data, schedule, activity] = await Promise.all([
     getToday(db, projectId, today, { includeInternal: true }),
     getSchedule(db, projectId, { includeInternal: true }),
-    listActivity(db, projectId, 500),
+    listActivity(db, projectId, 500, { hideBudget: true }),
   ]);
   const since = addDays(today, -7);
   return {

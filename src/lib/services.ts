@@ -1,7 +1,7 @@
 // All reads and writes go through here. Every mutation checks the caller's
 // role and writes an audit_log row in the same transaction.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, notLike } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import {
   auditLog,
@@ -352,12 +352,13 @@ export async function getViewerData(db: Db, token: string) {
 
 // ---------- change log ----------
 
-export async function listActivity(db: Db, projectId: string, limit = 200) {
+/** hideBudget: for pages that print summaries to a wider audience (Hari Ini, weekly report). */
+export async function listActivity(db: Db, projectId: string, limit = 200, opts: { hideBudget?: boolean } = {}) {
   return db
     .select({ entry: auditLog, userName: users.name })
     .from(auditLog)
     .leftJoin(users, eq(users.id, auditLog.userId))
-    .where(eq(auditLog.projectId, projectId))
+    .where(opts.hideBudget ? and(eq(auditLog.projectId, projectId), notLike(auditLog.entity, "budget_%")) : eq(auditLog.projectId, projectId))
     .orderBy(desc(auditLog.createdAt))
     .limit(limit);
 }

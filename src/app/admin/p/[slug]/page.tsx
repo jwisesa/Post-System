@@ -26,7 +26,7 @@ export default async function Overview({ params, searchParams }: { params: Promi
   const dt = canUseDriveTracker(user.email);
   const [data, recent, calendarToken, h, findings, drives, dtOptions] = await Promise.all([
     getToday(db, project.id, today, { includeInternal: true, feedback: true }),
-    listActivity(db, project.id, 6),
+    listActivity(db, project.id, 6, { hideBudget: true }),
     getOrCreateCalendarToken(db, user.id, project.id),
     headers(),
     getChecks(db, project.id, slug, today),
