@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ScopeView } from "@/components/budget/ScopeView";
 import { can } from "@/lib/auth/permissions";
-import { categoryLabel } from "@/lib/budget/catalog";
+import { categoryLabel, DEFAULT_PPH23_BP, DEFAULT_PPN_BP } from "@/lib/budget/catalog";
+import { invoiceRow, jakartaToday } from "@/lib/budget/invoice-view";
 import { formatRupiah } from "@/lib/budget/money";
 import { compareBids } from "@/lib/budget/vendors";
 import { getScope } from "@/lib/budget/service";
@@ -18,15 +19,23 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
   if (!d) notFound();
   const [phases, deliverables] = await Promise.all([listPhases(db, project.id), listDeliverables(db, project.id, { includeInternal: true })]);
   const pick = d.picks[0];
+  const today = jakartaToday();
+  const vrows = (docId: string) => d.versions.filter((v) => v.docId === docId).map((v) => ({ id: v.id, number: v.number, ref: v.ref, docDate: v.docDate, status: v.status, subtotal: v.subtotal, ppn: v.ppn, pph23: v.pph23, ppnRateBp: v.ppnRateBp, pph23RateBp: v.pph23RateBp, notes: v.notes, statusNote: v.statusNote, links: v.links, authorName: v.authorName, lines: v.lines.map((l) => ({ key: l.key, item: l.item, qtyMilli: l.qtyMilli, unit: l.unit, unitPrice: l.unitPrice })) }));
   const bids = d.bids.map((b) => {
     const doc = d.docs.find((x) => x.bidId === b.id && x.kind === "quote")!;
+    const vendor = d.vendors.find((v) => v.id === b.vendorId);
+    const mine = d.docs.filter((x) => x.bidId === b.id);
     return {
-      id: b.id, vendor: d.vendors.find((v) => v.id === b.vendorId)?.name ?? "—", docId: doc.id, picked: pick?.bidId === b.id,
-      versions: d.versions.filter((v) => v.docId === doc.id).map((v) => ({ id: v.id, number: v.number, ref: v.ref, docDate: v.docDate, status: v.status, subtotal: v.subtotal, ppn: v.ppn, pph23: v.pph23, ppnRateBp: v.ppnRateBp, pph23RateBp: v.pph23RateBp, notes: v.notes, statusNote: v.statusNote, links: v.links, authorName: v.authorName, lines: v.lines.map((l) => ({ key: l.key, item: l.item, qtyMilli: l.qtyMilli, unit: l.unit, unitPrice: l.unitPrice })) })),
+      id: b.id, vendor: vendor?.name ?? "—", vendorId: b.vendorId, docId: doc.id, picked: pick?.bidId === b.id,
+      versions: vrows(doc.id),
+      changeOrders: mine.filter((x) => x.kind === "change_order").map((x) => ({ docId: x.id, title: x.title, versions: vrows(x.id) })),
+      invoices: d.invoices.filter((i) => i.vendorId === b.vendorId).map((i) => invoiceRow(i, d.payments, d.scope.name, vendor?.name ?? "—", pick?.bidId === b.id)),
+      docs: mine.map((x) => ({ id: x.id, label: x.kind === "quote" ? "Penawaran" : `Tambahan: ${x.title}` })),
+      ppnBp: vendor?.chargesPpn === false ? null : DEFAULT_PPN_BP, pph23Bp: vendor?.withholdsPph23 === false ? null : DEFAULT_PPH23_BP,
     };
   });
   const names = new Map(d.bids.map((b) => [b.id, d.vendors.find((v) => v.id === b.vendorId)?.name ?? "—"]));
-  const cmp = compareBids(d.scope.id, { scopes: [{ id: d.scope.id, budget: d.scope.budget }], bids: d.bids, docs: d.docs, versions: d.versions, picks: d.picks }, names);
+  const cmp = compareBids(d.scope.id, { scopes: [{ id: d.scope.id, budget: d.scope.budget }], bids: d.bids, docs: d.docs, versions: d.versions, picks: d.picks, invoices: d.invoices, payments: d.payments }, names);
   const taken = new Set(d.bids.map((b) => b.vendorId));
   return (
     <div className="mx-auto max-w-[1100px] space-y-5">
@@ -39,6 +48,7 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
       <ScopeView
         slug={slug}
         canEdit={can(role, "budget.edit")}
+        today={today}
         scope={{ id: d.scope.id, name: d.scope.name, category: d.scope.category, budget: d.scope.budget, phaseIds: d.scope.phaseIds, deliverableIds: d.scope.deliverableIds, notes: d.scope.notes }}
         bids={bids}
         cmp={cmp}

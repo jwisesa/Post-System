@@ -34,3 +34,18 @@ export async function changeVersionStatus(slug: string, versionId: string, statu
 export async function chooseBid(slug: string, scopeId: string, bidId: string | null) {
   return run(slug, (db, u, p) => b.pickBid(db, u, p, scopeId, bidId).then(() => ({})));
 }
+export async function saveChangeOrder(slug: string, bidId: string, title: string, input: b.VersionInput) {
+  return run(slug, (db, u, p) => b.createChangeOrder(db, u, p, bidId, title, input).then((r) => ({ number: r.number })));
+}
+export async function saveInvoice(slug: string, id: string | null, input: b.InvoiceInput) {
+  return run(slug, (db, u, p) => (id ? b.updateInvoice(db, u, p, id, input).then(() => ({})) : b.addInvoice(db, u, p, input).then(() => ({}))));
+}
+export async function removeInvoice(slug: string, id: string) {
+  return run(slug, (db, u, p) => b.deleteInvoice(db, u, p, id).then(() => ({})));
+}
+export async function savePayment(slug: string, invoiceId: string, input: b.PaymentInput) {
+  return run(slug, (db, u, p) => b.addPayment(db, u, p, invoiceId, input).then(() => ({})));
+}
+export async function removePayment(slug: string, id: string) {
+  return run(slug, (db, u, p) => b.deletePayment(db, u, p, id).then(() => ({})));
+}

@@ -1136,3 +1136,7 @@ details.tl-details > summary::-webkit-details-marker { display: none; }
 .cmp-changed { background: color-mix(in srgb, var(--warn) 10%, transparent); }
 .bg-vhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); padding-bottom: 0.375rem; }
 .bg-vhead h2 { font-family: var(--font-display); font-size: 1rem; font-weight: 650; }
+
+/* ---------- budget B ---------- */
+.table td form.inline { display: inline; }
+@media (max-width: 640px) { .bg-vhead { gap: 0.375rem 0.5rem; } }

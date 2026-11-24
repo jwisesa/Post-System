@@ -10,17 +10,49 @@ import { CANCEL_MARK, VERSION_STATUSES, type VersionStatusCode } from "@/lib/bud
 import { formatRupiah } from "@/lib/budget/money";
 import type { VendorCmp } from "@/lib/budget/vendors";
 import { ScopeDrawer, type Option, type ScopeForm } from "./BudgetView";
+import { InvoiceTable, type DocOption, type InvoiceRow } from "./InvoiceParts";
 import { StatusSelect } from "./StatusSelect";
 import { VersionDrawer, type PrefillLine } from "./VersionDrawer";
 
 export type VersionRow = { id: string; number: number; ref: string; docDate: string | null; status: VersionStatusCode; subtotal: number; ppn: number; pph23: number; ppnRateBp: number | null; pph23RateBp: number | null; notes: string; statusNote: string; links: string[]; authorName: string; lines: PrefillLine[] };
-export type BidView = { id: string; vendor: string; docId: string; picked: boolean; versions: VersionRow[] };
+export type CoSeries = { docId: string; title: string; versions: VersionRow[] };
+export type BidView = { id: string; vendor: string; vendorId: string; docId: string; picked: boolean; versions: VersionRow[]; changeOrders: CoSeries[]; invoices: InvoiceRow[]; docs: DocOption[]; ppnBp: number | null; pph23Bp: number | null };
 
-export function ScopeView({ slug, canEdit, scope, bids, addable, phases, deliverables, cmp }: { slug: string; canEdit: boolean; cmp: VendorCmp[]; scope: ScopeForm; bids: BidView[]; addable: Option[]; phases: Option[]; deliverables: Option[] }) {
+function VersionTable({ slug, canEdit, versions, base }: { slug: string; canEdit: boolean; versions: VersionRow[]; base: string }) {
+  return (
+              <div className="overflow-x-auto">
+                <table className="table w-full text-sm">
+                  <thead><tr><th className="text-start">No</th><th className="text-start">Tanggal</th><th className="text-start">Status</th><th className="bg-num">Subtotal</th><th className="bg-num">PPN (perkiraan)</th><th className="bg-num">PPh 23 (perkiraan)</th><th className="bg-num">Net</th><th className="text-start">Catatan</th><th className="text-start">Links</th><th /></tr></thead>
+                  <tbody>
+                    {versions.map((v, i) => (
+                      <tr key={v.id}>
+                        <td className="tabular-nums">v{v.number}{v.ref && <span className="muted"> {v.ref}</span>}</td>
+                        <td className="tabular-nums">{v.docDate ?? "—"}</td>
+                        <td>{canEdit ? <StatusSelect slug={slug} versionId={v.id} status={v.status} /> : <span className={`tag ${v.status === "approved" ? "tag-ok" : v.status === "rejected" ? "tag-danger" : ""}`}>{VERSION_STATUSES[v.status]}</span>}</td>
+                        <td className="bg-num">{formatRupiah(v.subtotal)}</td>
+                        <td className="bg-num">{formatRupiah(v.ppn)}</td>
+                        <td className="bg-num">{formatRupiah(v.pph23)}</td>
+                        <td className="bg-num">{formatRupiah(v.subtotal + v.ppn - v.pph23)}</td>
+                        <td>{v.notes}</td>
+                        <td>{v.links.map((l, i) => <a key={l} href={l} target="_blank" rel="noreferrer noopener" className="me-2 underline">Link {i + 1}</a>)}</td>
+                        <td className="whitespace-nowrap text-sm">
+                          {v.status === "negotiating" && v.statusNote.startsWith(CANCEL_MARK) && <span className="tag tag-warn">persetujuan dibatalkan</span>}
+                          {i > 0 && <Link href={`${base}?a=${versions[i - 1].id}&b=${v.id}`} className="me-3 underline">Bandingkan dengan sebelumnya</Link>}
+                          <Link href={`${base}?a=${v.id}`} className="underline">Bandingkan…</Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+  );
+}
+
+export function ScopeView({ slug, canEdit, today, scope, bids, addable, phases, deliverables, cmp }: { slug: string; canEdit: boolean; today: string; cmp: VendorCmp[]; scope: ScopeForm; bids: BidView[]; addable: Option[]; phases: Option[]; deliverables: Option[] }) {
   const toast = useToast();
   const router = useRouter();
   const [editing, setEditing] = useState(false);
-  const [adding, setAdding] = useState<{ bid: BidView } | null>(null);
+  const [adding, setAdding] = useState<{ bid: BidView; co?: CoSeries | "new" } | null>(null);
   const [vendorId, setVendorId] = useState("");
   const [sel, setSel] = useState<string[]>([]);
   const latestOf = (id: string) => cmp.find((c) => c.bidId === id)?.latestVersionId;
@@ -93,35 +125,32 @@ export function ScopeView({ slug, canEdit, scope, bids, addable, phases, deliver
               )}
             </div>
             {b.versions.length === 0 ? <p className="muted text-sm">Belum ada versi penawaran.</p> : (
-              <div className="overflow-x-auto">
-                <table className="table w-full text-sm">
-                  <thead><tr><th className="text-start">No</th><th className="text-start">Tanggal</th><th className="text-start">Status</th><th className="bg-num">Subtotal</th><th className="bg-num">PPN (perkiraan)</th><th className="bg-num">PPh 23 (perkiraan)</th><th className="bg-num">Net</th><th className="text-start">Catatan</th><th className="text-start">Links</th><th /></tr></thead>
-                  <tbody>
-                    {b.versions.map((v, i) => (
-                      <tr key={v.id}>
-                        <td className="tabular-nums">v{v.number}{v.ref && <span className="muted"> {v.ref}</span>}</td>
-                        <td className="tabular-nums">{v.docDate ?? "—"}</td>
-                        <td>{canEdit ? <StatusSelect slug={slug} versionId={v.id} status={v.status} /> : <span className={`tag ${v.status === "approved" ? "tag-ok" : v.status === "rejected" ? "tag-danger" : ""}`}>{VERSION_STATUSES[v.status]}</span>}</td>
-                        <td className="bg-num">{formatRupiah(v.subtotal)}</td>
-                        <td className="bg-num">{formatRupiah(v.ppn)}</td>
-                        <td className="bg-num">{formatRupiah(v.pph23)}</td>
-                        <td className="bg-num">{formatRupiah(v.subtotal + v.ppn - v.pph23)}</td>
-                        <td>{v.notes}</td>
-                        <td>{v.links.map((l, i) => <a key={l} href={l} target="_blank" rel="noreferrer noopener" className="me-2 underline">Link {i + 1}</a>)}</td>
-                        <td className="whitespace-nowrap text-sm">
-                          {v.status === "negotiating" && v.statusNote.startsWith(CANCEL_MARK) && <span className="tag tag-warn">persetujuan dibatalkan</span>}
-                          {i > 0 && <Link href={`${base}?a=${b.versions[i - 1].id}&b=${v.id}`} className="me-3 underline">Bandingkan dengan sebelumnya</Link>}
-                          <Link href={`${base}?a=${v.id}`} className="underline">Bandingkan…</Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <VersionTable slug={slug} canEdit={canEdit} versions={b.versions} base={base} />
+            )}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold">Tambahan pekerjaan</h3>
+                {canEdit && <button type="button" className="btn-secondary" onClick={() => setAdding({ bid: b, co: "new" })}>Tambahan baru</button>}
               </div>
-            )}
-            {adding?.bid.id === b.id && (
-              <VersionDrawer key={b.id} slug={slug} docId={b.docId} vendor={b.vendor} prefill={latest?.lines ?? []} ppnBp={latest?.ppnRateBp ?? null} pph23Bp={latest?.pph23RateBp ?? null} first={!latest} onClose={() => setAdding(null)} />
-            )}
+              {b.changeOrders.length === 0 && <p className="muted text-sm">Belum ada change order.</p>}
+              {b.changeOrders.map((c) => {
+                const last = c.versions[c.versions.length - 1];
+                return (
+                  <div key={c.docId} className="space-y-1">
+                    <p className="flex flex-wrap items-center gap-2 text-sm"><span className="font-medium">{c.title}</span>{last && last.subtotal < 0 && <span className="tag">Pengurangan</span>}{canEdit && <button type="button" className="btn-ghost" onClick={() => setAdding({ bid: b, co: c })}>Versi baru</button>}</p>
+                    <VersionTable slug={slug} canEdit={canEdit} versions={c.versions} base={base} />
+                  </div>
+                );
+              })}
+              {b.changeOrders.some((c) => c.versions.some((v) => v.status === "approved")) && b.versions.length > 1 && <p className="muted text-xs">Pastikan tambahan pekerjaan belum termasuk di versi penawaran terbaru.</p>}
+            </div>
+            <InvoiceTable slug={slug} canEdit={canEdit} today={today} invoices={b.invoices} scopeId={scope.id!} vendorId={b.vendorId} vendor={b.vendor} ppnBp={b.ppnBp} pph23Bp={b.pph23Bp} docs={b.docs} />
+            {adding?.bid.id === b.id && (() => {
+              const c = adding.co;
+              const series = c && c !== "new" ? c : null;
+              const lv = series ? series.versions[series.versions.length - 1] : c ? undefined : latest;
+              return <VersionDrawer key={`${b.id}${series?.docId ?? c ?? ""}`} slug={slug} docId={series ? series.docId : b.docId} co={c === "new" ? { bidId: b.id } : undefined} negative={!!c} vendor={series ? `${b.vendor} · ${series.title}` : b.vendor} prefill={lv?.lines ?? []} ppnBp={lv?.ppnRateBp ?? null} pph23Bp={lv?.pph23RateBp ?? null} first={!lv} onClose={() => setAdding(null)} />;
+            })()}
           </section>
         );
       })}

@@ -8,9 +8,10 @@ import { Drawer } from "@/components/ui/controls";
 import { useToast } from "@/components/ui/toast";
 import { categoryLabel, SERVICE_CATEGORIES, TAX_NOTE } from "@/lib/budget/catalog";
 import { formatRupiah, MoneyError, parseRupiah } from "@/lib/budget/money";
+import { InvoiceList, type InvoiceRow } from "./InvoiceParts";
 import { VendorPanel, type VendorRow } from "./VendorPanel";
 
-export type ScopeRow = { id: string; name: string; category: string; budget: number; chosen: number; state: string; variance: number; vendor: string | null; cancelled: boolean };
+export type ScopeRow = { id: string; name: string; category: string; budget: number; chosen: number; invoiced: number; paid: number; overInvoiced: number; overpaid: number; state: string; variance: number; vendor: string | null; cancelled: boolean };
 export type Option = { id: string; name: string };
 export type ScopeForm = { id: string | null; name: string; category: string; budget: number; phaseIds: string[]; deliverableIds: string[]; notes: string };
 
@@ -58,11 +59,11 @@ export function ScopeDrawer({ slug, init, phases, deliverables, onClose }: { slu
   );
 }
 
-export function BudgetView({ slug, canEdit, rows, total, phases, deliverables, vendors, contacts }: {
-  slug: string; canEdit: boolean; rows: ScopeRow[]; total: { budget: number; chosen: number; provisional: boolean };
+export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases, deliverables, vendors, contacts }: {
+  slug: string; canEdit: boolean; rows: ScopeRow[]; total: { budget: number; chosen: number; invoiced: number; paid: number; overpaid: number; provisional: boolean }; today: string; invoices: InvoiceRow[];
   phases: Option[]; deliverables: Option[]; vendors: VendorRow[]; contacts: Option[];
 }) {
-  const [tab, setTab] = useState<"sum" | "vendor">("sum");
+  const [tab, setTab] = useState<"sum" | "bills" | "vendor">("sum");
   const [adding, setAdding] = useState(false);
   const over = (n: number) => (n < 0 ? "text-danger" : "");
   return (
@@ -70,6 +71,7 @@ export function BudgetView({ slug, canEdit, rows, total, phases, deliverables, v
       <div className="flex flex-wrap items-center gap-3">
         <div className="seg" role="group" aria-label="Tampilan anggaran">
           <button type="button" aria-pressed={tab === "sum"} onClick={() => setTab("sum")}>Ringkasan</button>
+          <button type="button" aria-pressed={tab === "bills"} onClick={() => setTab("bills")}>Tagihan</button>
           <button type="button" aria-pressed={tab === "vendor"} onClick={() => setTab("vendor")}>Vendor</button>
         </div>
         {tab === "sum" && canEdit && rows.length > 0 && <button type="button" className="btn-secondary" onClick={() => setAdding(true)}>Tambah lingkup</button>}
@@ -81,17 +83,19 @@ export function BudgetView({ slug, canEdit, rows, total, phases, deliverables, v
         </div>
       ) : (
         <>
-          <div className="muted text-sm"><p>Semua angka sebelum pajak (DPP).</p><details><summary className="cursor-pointer underline">Soal pajak</summary><p>Pajak hanya perkiraan: PPN efektif 11% (12% atas DPP nilai lain 11/12) dan PPh 23 2% dari jumlah sebelum PPN, tergantung vendor. {TAX_NOTE} Rinciannya ada di tiap versi penawaran.</p></details></div>
+          <div className="muted text-sm"><p>Semua angka sebelum pajak (DPP). Dipilih = penawaran + tambahan pekerjaan disetujui. Dibayar = bagian sebelum pajak dari tagihan diterima yang sudah dibayar.</p><details><summary className="cursor-pointer underline">Soal pajak</summary><p>Pajak hanya perkiraan: PPN efektif 11% (12% atas DPP nilai lain 11/12) dan PPh 23 2% dari jumlah sebelum PPN, tergantung vendor. {TAX_NOTE} Rinciannya ada di tiap versi penawaran.</p></details></div>
           <div className="overflow-x-auto">
             <table className="table w-full text-sm">
-              <thead><tr><th className="text-start">Lingkup</th><th className="bg-num">Budget</th><th className="bg-num">Dipilih</th><th className="bg-num">Selisih</th><th className="text-start">Vendor terpilih</th></tr></thead>
+              <thead><tr><th className="text-start">Lingkup</th><th className="bg-num">Budget</th><th className="bg-num">Dipilih</th><th className="bg-num">Ditagih</th><th className="bg-num">Dibayar</th><th className="bg-num">Selisih</th><th className="text-start">Vendor terpilih</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
                     <td><Link href={`/admin/p/${slug}/budget/scope/${r.id}`} className="font-medium underline">{r.name}</Link> <span className="muted">{categoryLabel(r.category)}</span></td>
                     <td className="bg-num">{formatRupiah(r.budget)}</td>
                     <td className="bg-num">{r.state === "none" ? <span className="muted">Belum dipilih</span> : <>{formatRupiah(r.chosen)} {r.state === "provisional" ? <><span className="tag tag-warn">perkiraan</span>{r.cancelled && <span className="tag tag-warn">persetujuan dibatalkan</span>}</> : <span className="tag tag-ok">{r.state === "pinned" ? "Terpilih" : "Disetujui"}</span>}</>}</td>
-                    <td className={`bg-num ${r.state === "none" ? "muted" : over(r.variance)}`}>{r.state === "none" ? "—" : formatRupiah(r.variance)}</td>
+                    <td className={`bg-num ${r.overInvoiced > 0 ? "text-danger" : ""}`}>{formatRupiah(r.invoiced)}</td>
+                    <td className={`bg-num ${r.overpaid > 0 ? "text-danger" : ""}`}>{formatRupiah(r.paid)}</td>
+                    <td className={`bg-num ${r.state === "none" ? "muted" : r.overpaid > 0 ? "text-danger" : over(r.variance)}`}>{r.state === "none" ? "—" : formatRupiah(r.variance)}</td>
                     <td>{r.vendor ?? <span className="muted">Belum dipilih</span>}</td>
                   </tr>
                 ))}
@@ -99,12 +103,14 @@ export function BudgetView({ slug, canEdit, rows, total, phases, deliverables, v
               <tfoot><tr className="font-medium">
                 <td>Total</td><td className="bg-num">{formatRupiah(total.budget)}</td>
                 <td className="bg-num">{formatRupiah(total.chosen)} {total.provisional && <span className="tag tag-warn">perkiraan</span>}</td>
+                <td className="bg-num">{formatRupiah(total.invoiced)}</td><td className={`bg-num ${total.overpaid > 0 ? "text-danger" : ""}`}>{formatRupiah(total.paid)}</td>
                 <td className={`bg-num ${over(total.budget - total.chosen)}`}>{formatRupiah(total.budget - total.chosen)}</td><td />
               </tr></tfoot>
             </table>
           </div>
         </>
       ))}
+      {tab === "bills" && <InvoiceList slug={slug} invoices={invoices} today={today} />}
       {tab === "vendor" && <VendorPanel slug={slug} canEdit={canEdit} vendors={vendors} contacts={contacts} />}
       {adding && <ScopeDrawer slug={slug} init={{ id: null, name: "", category: "other", budget: 0, phaseIds: [], deliverableIds: [], notes: "" }} phases={phases} deliverables={deliverables} onClose={() => setAdding(false)} />}
     </section>

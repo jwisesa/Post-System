@@ -3,11 +3,12 @@ import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createPgliteDb, type Db } from "@/db/client";
-import { budgetVersions } from "@/db/schema";
+import { budgetInvoices, budgetPayments, budgetVersions } from "@/db/schema";
 import { ForbiddenError } from "@/lib/auth/permissions";
 import { diffVersions } from "@/lib/budget/diff";
 import { formatRupiah, lineAmount, paidPortion, parseQty, parseRateBp, parseRupiah, taxOf } from "@/lib/budget/money";
-import { rollup } from "@/lib/budget/rollup";
+import { invoiceRow } from "@/lib/budget/invoice-view";
+import { invoiceState, rollup } from "@/lib/budget/rollup";
 import * as b from "@/lib/budget/service";
 import { getWeeklyReport } from "@/lib/today/service";
 import { getToday } from "@/lib/today/service";
@@ -181,12 +182,20 @@ describe("budget service", () => {
     const p = (await s.createProject(db, sup, { name: "Bocor", productionType: "feature_theatrical", platforms: ["Bioskop"], unitCount: null })).id;
     const vid = (await b.createVendor(db, sup, p, { name: "VENDOR-RAHASIA" })).vendorId;
     const sid = (await b.createScope(db, sup, p, { name: "S", budget: 987654321 })).scopeId;
-    await b.addBid(db, sup, p, sid, vid);
+    const bid = (await b.addBid(db, sup, p, sid, vid)).bidId;
+    const inv = (await b.addInvoice(db, sup, p, { scopeId: sid, vendorId: vid, termin: "DP-RAHASIA", ref: "", issueDate: "2026-05-01", dueDate: "2026-05-05", subtotal: 987654321, status: "received", links: [], notes: "" })).invoiceId;
+    await b.addPayment(db, sup, p, inv, { paidOn: "2026-05-06", amount: 987654321, note: "", link: "" });
+    expect(bid).toBeTruthy();
     const link = await s.createShareLink(db, sup, p, "x");
     const out = JSON.stringify([await s.getViewerData(db, link.token), await getToday(db, p, "2026-05-05", { includeInternal: false }), await getToday(db, p, "2026-05-05", { includeInternal: true }), await getWeeklyReport(db, p, "2026-05-05")]);
     expect(out).not.toContain("VENDOR-RAHASIA");
     expect(out).not.toContain("987654321");
     expect(JSON.stringify(await s.listActivity(db, p, 50))).toContain("VENDOR-RAHASIA"); // the full change log still has it
+    const hidden = JSON.stringify(await s.listActivity(db, p, 50, { hideBudget: true }));
+    expect(hidden).not.toContain("VENDOR-RAHASIA");
+    expect(hidden).not.toContain("DP-RAHASIA");
+    const log = (await s.listActivity(db, p, 50)).map((r) => r.entry).filter((r) => r.entity.startsWith("budget_"));
+    for (const r of log) expect(r.summary).not.toMatch(/\d{5,}/); // no amounts in any audit summary
   });
 
   it("phase ids survive deleteItem + restoreVersion", async () => {
@@ -271,5 +280,119 @@ describe("budget A2: compare, vendor table, undo approval", () => {
     const row = rollup(data).rows.find((r) => r.scopeId === scopeId)!;
     expect(row.state).toBe("provisional"); expect(row.cancelled).toBe(true);
     expect(data.picks.some((p) => p.scopeId === scopeId && p.bidId === A.bidId)).toBe(true);
+  });
+});
+
+describe("budget B: change orders, invoices, payments", () => {
+  let db: Db, sup: string, asst: string, projectId: string;
+  const ver = (over: Partial<b.VersionInput> = {}): b.VersionInput => ({ ref: "", docDate: "", lines: [], lumpSum: 50000000, ppnBp: 1100, pph23Bp: 200, notes: "n", links: [], ...over });
+  const inv = (scopeId: string, vendorId: string, over: Partial<b.InvoiceInput> = {}): b.InvoiceInput => ({ scopeId, vendorId, termin: "DP 50%", ref: "", issueDate: "", dueDate: "", subtotal: 25000000, status: "received", links: [], notes: "", ...over });
+  const pay = (amount: number, paidOn = "2026-06-01") => ({ paidOn, amount, note: "", link: "" });
+  const mk = async (name: string, pid = projectId) => {
+    const vendorId = (await b.createVendor(db, sup, pid, { name })).vendorId;
+    const scopeId = (await b.createScope(db, sup, pid, { name: `S ${name}`, budget: 150000000 })).scopeId;
+    const { bidId } = await b.addBid(db, sup, pid, scopeId, vendorId);
+    const docId = (await b.getBudget(db, sup, pid)).docs.find((d) => d.bidId === bidId && d.kind === "quote")!.id;
+    const v = await b.addVersion(db, sup, pid, docId, ver());
+    await b.setVersionStatus(db, sup, pid, v.versionId, "approved", "");
+    return { vendorId, scopeId, bidId, docId };
+  };
+  const nums = async (scopeId: string) => { const d = await b.getBudget(db, sup, projectId); return rollup(d).rows.find((r) => r.scopeId === scopeId)!; };
+  beforeAll(async () => {
+    db = await createPgliteDb();
+    sup = (await s.createUser(db, { name: "Sup", email: "sup@x.id", password: "password1" })).id;
+    projectId = (await s.createProject(db, sup, { name: "Film", productionType: "feature_theatrical", platforms: ["Bioskop"], unitCount: null })).id;
+    await s.addMember(db, sup, projectId, { email: "asst@x.id", role: "assistant", name: "Asst", password: "password1" });
+    asst = (await s.listMembers(db, projectId)).find((m) => m.role === "assistant")!.userId;
+  });
+
+  it("approved change orders add to chosen; rejected do not; negative totals reduce", async () => {
+    const x = await mk("CO-A", projectId);
+    const co = await b.createChangeOrder(db, sup, projectId, x.bidId, "Tambah 2 hari", ver({ lumpSum: 10000000 }));
+    expect((await nums(x.scopeId)).chosen).toBe(50000000); // draft does not count
+    await b.setVersionStatus(db, sup, projectId, co.versionId, "approved", "");
+    expect((await nums(x.scopeId)).chosen).toBe(60000000);
+    const co2 = await b.createChangeOrder(db, sup, projectId, x.bidId, "Kurangi", ver({ lumpSum: -4000000 }));
+    await b.setVersionStatus(db, sup, projectId, co2.versionId, "approved", "");
+    expect((await nums(x.scopeId)).chosen).toBe(56000000);
+    const co3 = await b.createChangeOrder(db, sup, projectId, x.bidId, "Ditolak", ver({ lumpSum: 99000000 }));
+    await b.setVersionStatus(db, sup, projectId, co3.versionId, "rejected", "");
+    expect((await nums(x.scopeId)).chosen).toBe(56000000);
+    await expect(b.addVersion(db, sup, projectId, x.docId, ver({ lumpSum: -1, notes: "x" }))).rejects.toThrow(/negatif/); // a quote cannot be negative
+  });
+
+  it("paidPortion is proportional and capped; lunas when payments >= net; overpayment flagged", async () => {
+    const x = await mk("Pay-A");
+    const i = (await b.addInvoice(db, sup, projectId, inv(x.scopeId, x.vendorId))).invoiceId; // 25.000.000 + 11% - 2% = 27.250.000
+    const row = () => b.getBudget(db, sup, projectId).then((d) => d.invoices.find((r) => r.id === i)!);
+    expect(await row()).toMatchObject({ ppn: 2750000, pph23: 500000, ppnRateBp: 1100 });
+    await b.addPayment(db, sup, projectId, i, pay(13625000));
+    let st = invoiceState(await row(), (await b.getBudget(db, sup, projectId)).payments);
+    expect(st).toMatchObject({ net: 27250000, remaining: 13625000, lunas: false, portion: 12500000 });
+    expect((await nums(x.scopeId)).paid).toBe(12500000);
+    await b.addPayment(db, sup, projectId, i, pay(13625000, "2099-01-01")); // a future date is allowed
+    st = invoiceState(await row(), (await b.getBudget(db, sup, projectId)).payments);
+    expect(st).toMatchObject({ lunas: true, overpaid: 0, portion: 25000000 });
+    await b.addPayment(db, sup, projectId, i, pay(1000));
+    st = invoiceState(await row(), (await b.getBudget(db, sup, projectId)).payments);
+    expect(st).toMatchObject({ overpaid: 1000, portion: 25000000 }); // capped
+    expect((await nums(x.scopeId)).paid).toBe(25000000);
+    await expect(b.addPayment(db, sup, projectId, i, pay(0))).rejects.toThrow(/lebih dari 0/);
+    await expect(b.addPayment(db, sup, projectId, i, pay(5, "x"))).rejects.toThrow();
+  });
+
+  it("planned counts as planned, not invoiced; a non-chosen vendor's invoice still counts, tagged", async () => {
+    const x = await mk("Plan-A");
+    await b.addInvoice(db, sup, projectId, inv(x.scopeId, x.vendorId, { termin: "Pelunasan", status: "planned", ppnBp: null, pph23Bp: null }));
+    await b.addInvoice(db, sup, projectId, inv(x.scopeId, x.vendorId, { subtotal: 20000000 }));
+    expect(await nums(x.scopeId)).toMatchObject({ planned: 25000000, invoiced: 20000000, notInvoiced: 30000000, overInvoiced: 0 });
+    const other = (await b.createVendor(db, sup, projectId, { name: "Plan-B" })).vendorId;
+    await b.addBid(db, sup, projectId, x.scopeId, other);
+    await b.addInvoice(db, sup, projectId, inv(x.scopeId, other, { subtotal: 40000000 }));
+    const d = await b.getBudget(db, sup, projectId);
+    expect(rollup(d).rows.find((r) => r.scopeId === x.scopeId)).toMatchObject({ invoiced: 60000000, overInvoiced: 10000000 });
+    const pick = d.picks.find((p) => p.scopeId === x.scopeId)!;
+    const tags = d.invoices.filter((i) => i.scopeId === x.scopeId).map((i) => invoiceRow(i, d.payments, "S", "V", d.bids.find((bb) => bb.id === pick.bidId)!.vendorId === i.vendorId).offChosen);
+    expect(tags.filter(Boolean)).toHaveLength(1);
+    await expect(b.addInvoice(db, sup, projectId, inv(x.scopeId, (await mk("Elsewhere")).vendorId))).rejects.toThrow(/bukan bagian/);
+    expect((await b.addInvoice(db, sup, projectId, inv(x.scopeId, x.vendorId, { termin: "Tanpa pajak", ppnBp: null, pph23Bp: null }))).invoiceId).toBeTruthy();
+  });
+
+  it("blocks: deleteInvoice with payments, cancel with payments, delete scope/bid/vendor with invoices", async () => {
+    const x = await mk("Blk-A");
+    const i = (await b.addInvoice(db, sup, projectId, inv(x.scopeId, x.vendorId))).invoiceId;
+    await b.addPayment(db, sup, projectId, i, pay(1000000));
+    await expect(b.deleteInvoice(db, sup, projectId, i)).rejects.toThrow(/pembayaran/);
+    await expect(b.updateInvoice(db, sup, projectId, i, inv(x.scopeId, x.vendorId, { status: "cancelled" }))).rejects.toThrow(/pembayaran/);
+    await b.updateInvoice(db, sup, projectId, i, inv(x.scopeId, x.vendorId, { subtotal: 26000000 })); // editing is fine
+    await expect(b.deleteScope(db, sup, projectId, x.scopeId)).rejects.toThrow(/Masih ada tagihan/);
+    await expect(b.deleteBid(db, sup, projectId, x.bidId)).rejects.toThrow(/Masih ada tagihan/);
+    await expect(b.deleteVendor(db, sup, projectId, x.vendorId)).rejects.toThrow(/Arsipkan/);
+    const pid = (await b.getBudget(db, sup, projectId)).payments.find((p) => p.invoiceId === i)!.id;
+    await b.deletePayment(db, sup, projectId, pid);
+    await b.updateInvoice(db, sup, projectId, i, inv(x.scopeId, x.vendorId, { status: "cancelled" }));
+    expect((await nums(x.scopeId)).invoiced).toBe(0);
+    await b.deleteInvoice(db, sup, projectId, i);
+    await b.deleteBid(db, sup, projectId, x.bidId);
+  });
+
+  it("assistant can read invoices, cannot write them", async () => {
+    const x = await mk("Asst-A");
+    const i = (await b.addInvoice(db, sup, projectId, inv(x.scopeId, x.vendorId))).invoiceId;
+    expect((await b.getScope(db, asst, projectId, x.scopeId))!.invoices).toHaveLength(1);
+    await expect(b.addInvoice(db, asst, projectId, inv(x.scopeId, x.vendorId))).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(b.addPayment(db, asst, projectId, i, pay(5))).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(b.deleteInvoice(db, asst, projectId, i)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(b.createChangeOrder(db, asst, projectId, x.bidId, "X", ver())).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("deleteProject still succeeds with invoices and payments", async () => {
+    const p = (await s.createProject(db, sup, { name: "Hapus2", productionType: "feature_theatrical", platforms: ["Bioskop"], unitCount: null })).id;
+    const x = await mk("Del-A", p);
+    const i = (await b.addInvoice(db, sup, p, inv(x.scopeId, x.vendorId))).invoiceId;
+    await b.addPayment(db, sup, p, i, pay(1000));
+    await s.deleteProject(db, sup, p, "Hapus2");
+    expect((await db.select().from(budgetInvoices).where(eq(budgetInvoices.projectId, p))).length).toBe(0);
+    expect((await db.select().from(budgetPayments).where(eq(budgetPayments.projectId, p))).length).toBe(0);
   });
 });

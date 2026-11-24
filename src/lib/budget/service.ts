@@ -7,11 +7,11 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, max, ne } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
-import { budgetBids, budgetDocs, budgetPicks, budgetScenarios, budgetScopes, budgetVendors, budgetVersions, teamContacts, users, type BudgetLine, type BudgetVersionStatus } from "@/db/schema";
+import { budgetBids, budgetDocs, budgetInvoices, budgetPayments, budgetPicks, budgetScenarios, budgetScopes, budgetVendors, budgetVersions, teamContacts, users, type BudgetLine, type BudgetVersionStatus } from "@/db/schema";
 import { listDeliverables } from "../deliverables/service";
 import { listPhases } from "../script/service";
 import { InputError, record, requireRole, type Tx } from "../services";
-import { CANCEL_MARK, NEXT, SERVICE_CATEGORIES, VERSION_STATUSES, type VersionStatusCode } from "./catalog";
+import { CANCEL_MARK, DEFAULT_PPH23_BP, DEFAULT_PPN_BP, NEXT, SERVICE_CATEGORIES, VERSION_STATUSES, type VersionStatusCode } from "./catalog";
 import { lineAmount, MAX_RP, taxOf } from "./money";
 
 const view = (db: Db, u: string, p: string) => requireRole(db, u, p, "budget.view");
@@ -36,17 +36,19 @@ export async function ensureActiveScenario(tx: Tx, projectId: string): Promise<s
 
 export async function getBudget(db: Db, userId: string, projectId: string) {
   await view(db, userId, projectId);
-  const [vendors, scopes, bids, docs, versions, scenario] = await Promise.all([
+  const [vendors, scopes, bids, docs, versions, scenario, invoices, payments] = await Promise.all([
     db.select().from(budgetVendors).where(eq(budgetVendors.projectId, projectId)).orderBy(asc(budgetVendors.name)),
     db.select().from(budgetScopes).where(eq(budgetScopes.projectId, projectId)).orderBy(asc(budgetScopes.sortOrder), asc(budgetScopes.createdAt), asc(budgetScopes.id)),
     db.select().from(budgetBids).where(eq(budgetBids.projectId, projectId)).orderBy(asc(budgetBids.createdAt)),
     db.select().from(budgetDocs).where(eq(budgetDocs.projectId, projectId)).orderBy(asc(budgetDocs.createdAt)),
     db.select({ v: budgetVersions, author: users.name }).from(budgetVersions).leftJoin(users, eq(users.id, budgetVersions.createdBy)).where(eq(budgetVersions.projectId, projectId)).orderBy(asc(budgetVersions.number)),
     db.select({ id: budgetScenarios.id }).from(budgetScenarios).where(and(eq(budgetScenarios.projectId, projectId), eq(budgetScenarios.isActive, true))),
+    db.select().from(budgetInvoices).where(eq(budgetInvoices.projectId, projectId)).orderBy(asc(budgetInvoices.dueDate), asc(budgetInvoices.createdAt)),
+    db.select().from(budgetPayments).where(eq(budgetPayments.projectId, projectId)).orderBy(asc(budgetPayments.paidOn), asc(budgetPayments.createdAt)),
   ]);
   const scenarioId = scenario[0]?.id ?? null;
   const picks = scenarioId ? await db.select().from(budgetPicks).where(eq(budgetPicks.scenarioId, scenarioId)) : [];
-  return { scenarioId, vendors, scopes, bids, docs, versions: versions.map((r) => ({ ...r.v, authorName: r.author ?? "—" })), picks };
+  return { scenarioId, vendors, scopes, bids, docs, versions: versions.map((r) => ({ ...r.v, authorName: r.author ?? "—" })), picks, invoices, payments };
 }
 export type BudgetData = Awaited<ReturnType<typeof getBudget>>;
 
@@ -68,6 +70,8 @@ export async function getScope(db: Db, userId: string, projectId: string, scopeI
     docs,
     versions: all.versions.filter((v) => docs.some((d) => d.id === v.docId)),
     picks: all.picks.filter((p) => p.scopeId === scopeId),
+    invoices: all.invoices.filter((i) => i.scopeId === scopeId),
+    payments: all.payments.filter((p) => all.invoices.some((i) => i.id === p.invoiceId && i.scopeId === scopeId)),
   };
 }
 
@@ -142,13 +146,16 @@ export async function deleteVendor(db: Db, userId: string, projectId: string, ve
   await db.transaction(async (tx) => {
     const [row] = await tx.select().from(budgetVendors).where(and(eq(budgetVendors.id, vendorId), eq(budgetVendors.projectId, projectId)));
     if (!row) throw new InputError("Vendor tidak ditemukan.");
-    // TODO phase B: also refuse while the vendor has invoices.
+    const [inv] = await tx.select({ id: budgetInvoices.id }).from(budgetInvoices).where(eq(budgetInvoices.vendorId, vendorId)).limit(1);
+    if (inv) throw new InputError("Vendor masih dipakai di penawaran/tagihan. Arsipkan saja.");
     const [used] = await tx.select({ id: budgetBids.id }).from(budgetBids).where(eq(budgetBids.vendorId, vendorId)).limit(1);
     if (used) throw new InputError("Vendor masih dipakai di penawaran/tagihan. Arsipkan saja.");
     await tx.delete(budgetVendors).where(eq(budgetVendors.id, vendorId));
     await record(tx, { projectId, userId, entity: "budget_vendor", entityId: vendorId, action: "delete", summary: `Menghapus vendor "${row.name}"`, before: row });
   });
 }
+
+const HAS_INVOICES = "Masih ada tagihan. Hapus tagihan atau batalkan lingkup di anggaran.";
 
 // ---------- scopes ----------
 
@@ -204,7 +211,8 @@ export async function updateScope(db: Db, userId: string, projectId: string, sco
 export async function deleteScope(db: Db, userId: string, projectId: string, scopeId: string) {
   await edit(db, userId, projectId);
   await db.transaction(async (tx) => {
-    // TODO phase B: refuse while any bid of this scope has invoices.
+    const [inv] = await tx.select({ id: budgetInvoices.id }).from(budgetInvoices).where(eq(budgetInvoices.scopeId, scopeId)).limit(1);
+    if (inv) throw new InputError(HAS_INVOICES);
     const [row] = await tx.delete(budgetScopes).where(and(eq(budgetScopes.id, scopeId), eq(budgetScopes.projectId, projectId))).returning();
     if (!row) throw new InputError("Lingkup tidak ditemukan.");
     await record(tx, { projectId, userId, entity: "budget_scope", entityId: scopeId, action: "delete", summary: `Menghapus lingkup "${row.name}" beserta penawarannya`, before: row });
@@ -234,9 +242,10 @@ export async function addBid(db: Db, userId: string, projectId: string, scopeId:
 export async function deleteBid(db: Db, userId: string, projectId: string, bidId: string) {
   await edit(db, userId, projectId);
   await db.transaction(async (tx) => {
-    // TODO phase B: refuse while the bid has invoices.
     const [b] = isUuid(bidId) ? await tx.select({ bid: budgetBids, vendor: budgetVendors.name, scope: budgetScopes.name }).from(budgetBids).innerJoin(budgetVendors, eq(budgetVendors.id, budgetBids.vendorId)).innerJoin(budgetScopes, eq(budgetScopes.id, budgetBids.scopeId)).where(and(eq(budgetBids.id, bidId), eq(budgetBids.projectId, projectId))) : [];
     if (!b) throw new InputError("Penawaran tidak ditemukan.");
+    const [inv] = await tx.select({ id: budgetInvoices.id }).from(budgetInvoices).where(and(eq(budgetInvoices.scopeId, b.bid.scopeId), eq(budgetInvoices.vendorId, b.bid.vendorId))).limit(1);
+    if (inv) throw new InputError(HAS_INVOICES);
     await tx.delete(budgetBids).where(eq(budgetBids.id, bidId));
     await record(tx, { projectId, userId, entity: "budget_scope", entityId: b.bid.scopeId, action: "delete", summary: `Menghapus vendor "${b.vendor}" dari lingkup "${b.scope}"`, before: b.bid });
   });
@@ -254,6 +263,17 @@ export async function addChangeOrder(db: Db, userId: string, projectId: string, 
     await record(tx, { projectId, userId, entity: "budget_scope", entityId: b.scopeId, action: "create", summary: `Menambah change order "${t}"` });
     return { docId: doc.id };
   });
+}
+
+/** New change order series with its first version (a change order total may be negative: "Pengurangan"). */
+export async function createChangeOrder(db: Db, userId: string, projectId: string, bidId: string, title: string, input: VersionInput) {
+  const { docId } = await addChangeOrder(db, userId, projectId, bidId, title);
+  try {
+    return { docId, ...(await addVersion(db, userId, projectId, docId, input)) };
+  } catch (e) {
+    await db.delete(budgetDocs).where(eq(budgetDocs.id, docId)); // no empty orphan series
+    throw e;
+  }
 }
 
 // ---------- versions ----------
@@ -281,7 +301,7 @@ const VersionSchema = z.object({
     unitPrice: rp, // may be negative: a "Diskon" line
     note: str(200).optional(),
   })).max(300),
-  lumpSum: rp.min(0).optional(),
+  lumpSum: rp.optional(), // may be negative for a change order ("Pengurangan"); quotes are checked against the doc kind below
   ppnBp: bp,
   pph23Bp: bp,
   notes: str(1000).default(""),
@@ -317,12 +337,12 @@ export async function addVersion(db: Db, userId: string, projectId: string, docI
     if (d.lumpSum == null) throw new InputError("Isi rincian item atau jumlah lump sum.");
     subtotal = d.lumpSum;
   }
-  if (subtotal < 0) throw new InputError("Subtotal tidak boleh negatif.");
   if (!Number.isSafeInteger(subtotal) || subtotal > MAX_RP) throw new InputError("Jumlah terlalu besar.");
   const tax = taxOf(subtotal, d.ppnBp, d.pph23Bp);
   return db.transaction(async (tx) => {
     const [doc] = isUuid(docId) ? await tx.select().from(budgetDocs).where(and(eq(budgetDocs.id, docId), eq(budgetDocs.projectId, projectId))).for("update") : [];
     if (!doc) throw new InputError("Dokumen tidak ditemukan.");
+    if (subtotal < 0 && doc.kind === "quote") throw new InputError("Subtotal penawaran tidak boleh negatif.");
     const [m] = await tx.select({ n: max(budgetVersions.number) }).from(budgetVersions).where(eq(budgetVersions.docId, docId));
     const number = (m?.n ?? 0) + 1;
     if (number > 1 && !d.notes) throw new InputError("Catatan perubahan wajib diisi untuk versi baru.");
@@ -384,5 +404,112 @@ export async function pickBid(db: Db, userId: string, projectId: string, scopeId
     if (bidId) await tx.insert(budgetPicks).values({ scenarioId, scopeId, bidId, versionId: null, projectId }).onConflictDoUpdate({ target: [budgetPicks.scenarioId, budgetPicks.scopeId], set: { bidId, versionId: null } });
     else await tx.delete(budgetPicks).where(and(eq(budgetPicks.scenarioId, scenarioId), eq(budgetPicks.scopeId, scopeId)));
     await record(tx, { projectId, userId, entity: "budget_scenario", entityId: scenarioId, action: "update", summary: bidId ? `Memilih "${vendor}" untuk lingkup "${scope.name}"` : `Membatalkan pilihan vendor untuk lingkup "${scope.name}"`, after: { scopeId, bidId } });
+  });
+}
+
+// ---------- invoices & payments ----------
+
+export type InvoiceInput = {
+  scopeId: string; vendorId: string; docId?: string | null;
+  termin: string; ref: string; issueDate: string; dueDate: string;
+  subtotal: number; ppnBp?: number | null; pph23Bp?: number | null; // undefined = the vendor's default
+  status: "planned" | "received" | "cancelled"; links: string[]; notes: string;
+};
+const date = z.string().refine((s) => s === "" || (/^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s))), "Tanggal tidak valid.");
+const InvoiceSchema = z.object({
+  scopeId: z.string(), vendorId: z.string(), docId: z.string().nullish(),
+  termin: str(80).refine((s) => s.length > 0, "Nama termin wajib diisi."),
+  ref: str(80).default(""), issueDate: date.default(""), dueDate: date.default(""),
+  subtotal: rp.min(1, "Subtotal harus lebih dari 0."),
+  ppnBp: bp.optional(), pph23Bp: bp.optional(),
+  status: z.enum(["planned", "received", "cancelled"]),
+  links: z.array(str(500)).max(5, "Maksimal 5 link."), notes: str(1000).default(""),
+});
+
+async function checkInvoice(tx: Tx, projectId: string, input: InvoiceInput) {
+  const p = InvoiceSchema.safeParse(input);
+  if (!p.success) return fail(p);
+  const d = p.data;
+  checkLinks(d.links);
+  if (!isUuid(d.scopeId) || !isUuid(d.vendorId)) throw new InputError("Lingkup atau vendor tidak ditemukan.");
+  const [bid] = await tx.select({ id: budgetBids.id, vendor: budgetVendors }).from(budgetBids).innerJoin(budgetVendors, eq(budgetVendors.id, budgetBids.vendorId)).where(and(eq(budgetBids.projectId, projectId), eq(budgetBids.scopeId, d.scopeId), eq(budgetBids.vendorId, d.vendorId)));
+  if (!bid) throw new InputError("Vendor itu bukan bagian dari lingkup ini.");
+  if (d.docId) {
+    const [doc] = isUuid(d.docId) ? await tx.select({ id: budgetDocs.id }).from(budgetDocs).where(and(eq(budgetDocs.id, d.docId), eq(budgetDocs.bidId, bid.id))) : [];
+    if (!doc) throw new InputError("Dokumen penawaran tidak ditemukan untuk vendor ini.");
+  }
+  const ppnBp = d.ppnBp === undefined ? (bid.vendor.chargesPpn ? DEFAULT_PPN_BP : null) : d.ppnBp;
+  const pph23Bp = d.pph23Bp === undefined ? (bid.vendor.withholdsPph23 ? DEFAULT_PPH23_BP : null) : d.pph23Bp;
+  const tax = taxOf(d.subtotal, ppnBp, pph23Bp); // frozen at save, like versions
+  return { d, vendor: bid.vendor.name, row: { scopeId: d.scopeId, vendorId: d.vendorId, docId: d.docId || null, termin: d.termin, ref: d.ref, issueDate: d.issueDate || null, dueDate: d.dueDate || null, subtotal: d.subtotal, ppnRateBp: ppnBp, ppn: tax.ppn, pph23RateBp: pph23Bp, pph23: tax.pph23, status: d.status, links: d.links, notes: d.notes } };
+}
+
+const paymentsOf = (tx: Tx, invoiceId: string) => tx.select({ id: budgetPayments.id }).from(budgetPayments).where(eq(budgetPayments.invoiceId, invoiceId)).limit(1);
+
+export async function addInvoice(db: Db, userId: string, projectId: string, input: InvoiceInput) {
+  await edit(db, userId, projectId);
+  return db.transaction(async (tx) => {
+    const c = await checkInvoice(tx, projectId, input);
+    const [inv] = await tx.insert(budgetInvoices).values({ ...c.row, projectId, createdBy: userId }).returning();
+    await record(tx, { projectId, userId, entity: "budget_scope", entityId: inv.scopeId, action: "create", summary: `Menambah tagihan "${inv.termin}" dari "${c.vendor}"`, after: inv });
+    return { invoiceId: inv.id };
+  });
+}
+
+/** Scope and vendor of an invoice never change; everything else is editable with before/after in the log. */
+export async function updateInvoice(db: Db, userId: string, projectId: string, invoiceId: string, input: InvoiceInput) {
+  await edit(db, userId, projectId);
+  await db.transaction(async (tx) => {
+    const [old] = isUuid(invoiceId) ? await tx.select().from(budgetInvoices).where(and(eq(budgetInvoices.id, invoiceId), eq(budgetInvoices.projectId, projectId))).for("update") : [];
+    if (!old) throw new InputError("Tagihan tidak ditemukan.");
+    const c = await checkInvoice(tx, projectId, { ...input, scopeId: old.scopeId, vendorId: old.vendorId });
+    if (c.row.status !== "received" && (await paymentsOf(tx, invoiceId)).length) throw new InputError("Tagihan ini sudah ada pembayaran. Hapus pembayaran dulu sebelum membatalkan atau mengubahnya jadi rencana.");
+    const keys = (Object.keys(c.row) as (keyof typeof c.row)[]).filter((k) => JSON.stringify(c.row[k]) !== JSON.stringify(old[k]));
+    if (!keys.length) return;
+    await tx.update(budgetInvoices).set({ ...c.row, updatedAt: new Date() }).where(eq(budgetInvoices.id, invoiceId));
+    await record(tx, { projectId, userId, entity: "budget_scope", entityId: old.scopeId, action: "update", summary: `Tagihan "${c.row.termin}" dari "${c.vendor}": ${keys.join(", ")} diubah`, before: Object.fromEntries(keys.map((k) => [k, old[k]])), after: Object.fromEntries(keys.map((k) => [k, c.row[k]])) });
+  });
+}
+
+export async function deleteInvoice(db: Db, userId: string, projectId: string, invoiceId: string) {
+  await edit(db, userId, projectId);
+  await db.transaction(async (tx) => {
+    const [inv] = isUuid(invoiceId) ? await tx.select().from(budgetInvoices).where(and(eq(budgetInvoices.id, invoiceId), eq(budgetInvoices.projectId, projectId))).for("update") : [];
+    if (!inv) throw new InputError("Tagihan tidak ditemukan.");
+    if ((await paymentsOf(tx, invoiceId)).length) throw new InputError("Tagihan ini sudah ada pembayaran. Hapus pembayaran dulu.");
+    await tx.delete(budgetInvoices).where(eq(budgetInvoices.id, invoiceId));
+    await record(tx, { projectId, userId, entity: "budget_scope", entityId: inv.scopeId, action: "delete", summary: `Menghapus tagihan "${inv.termin}"`, before: inv });
+  });
+}
+
+export type PaymentInput = { paidOn: string; amount: number; note: string; link: string };
+const PaymentSchema = z.object({
+  paidOn: date.refine((s) => s !== "", "Tanggal bayar wajib diisi."), // a future date is allowed (scheduled transfer)
+  amount: rp.min(1, "Jumlah bayar harus lebih dari 0."),
+  note: str(500).default(""), link: str(500).default(""),
+});
+
+export async function addPayment(db: Db, userId: string, projectId: string, invoiceId: string, input: PaymentInput) {
+  await edit(db, userId, projectId);
+  const p = PaymentSchema.safeParse(input);
+  if (!p.success) return fail(p);
+  if (p.data.link) checkLinks([p.data.link]);
+  return db.transaction(async (tx) => {
+    const [inv] = isUuid(invoiceId) ? await tx.select().from(budgetInvoices).where(and(eq(budgetInvoices.id, invoiceId), eq(budgetInvoices.projectId, projectId))).for("update") : [];
+    if (!inv) throw new InputError("Tagihan tidak ditemukan.");
+    if (inv.status !== "received") throw new InputError("Tandai tagihan sebagai diterima dulu sebelum mencatat pembayaran.");
+    const [pay] = await tx.insert(budgetPayments).values({ ...p.data, projectId, invoiceId, createdBy: userId }).returning();
+    await record(tx, { projectId, userId, entity: "budget_scope", entityId: inv.scopeId, action: "create", summary: `Mencatat pembayaran tagihan "${inv.termin}"`, after: pay });
+    return { paymentId: pay.id };
+  });
+}
+
+export async function deletePayment(db: Db, userId: string, projectId: string, paymentId: string) {
+  await edit(db, userId, projectId);
+  await db.transaction(async (tx) => {
+    const [r] = isUuid(paymentId) ? await tx.select({ pay: budgetPayments, scopeId: budgetInvoices.scopeId, termin: budgetInvoices.termin }).from(budgetPayments).innerJoin(budgetInvoices, eq(budgetInvoices.id, budgetPayments.invoiceId)).where(and(eq(budgetPayments.id, paymentId), eq(budgetPayments.projectId, projectId))) : [];
+    if (!r) throw new InputError("Pembayaran tidak ditemukan.");
+    await tx.delete(budgetPayments).where(eq(budgetPayments.id, paymentId));
+    await record(tx, { projectId, userId, entity: "budget_scope", entityId: r.scopeId, action: "delete", summary: `Menghapus pembayaran tagihan "${r.termin}"`, before: r.pay });
   });
 }

@@ -610,6 +610,52 @@ export const budgetPicks = ps.table(
   (t) => [primaryKey({ columns: [t.scenarioId, t.scopeId] }), index("budget_picks_project_idx").on(t.projectId)],
 );
 
+/** A termin / invoice of a vendor within a scope. "planned" = payment-terms plan, "received" = a real invoice. "Lunas" is derived from payments, never stored.
+ *  scope/vendor FKs have no ON DELETE action on purpose (NO ACTION, checked at statement end, so deleteProject still works). */
+export const budgetInvoices = ps.table(
+  "budget_invoices",
+  {
+    id: id(),
+    projectId: projectRef(),
+    scopeId: uuid("scope_id").notNull().references(() => budgetScopes.id),
+    vendorId: uuid("vendor_id").notNull().references(() => budgetVendors.id),
+    docId: uuid("doc_id").references(() => budgetDocs.id, { onDelete: "set null" }),
+    termin: text("termin").notNull().default(""),
+    ref: text("ref").notNull().default(""),
+    issueDate: date("issue_date", { mode: "string" }),
+    dueDate: date("due_date", { mode: "string" }),
+    subtotal: money("subtotal").notNull(),
+    ppnRateBp: integer("ppn_rate_bp"),
+    ppn: money("ppn").notNull().default(0),
+    pph23RateBp: integer("pph23_rate_bp"),
+    pph23: money("pph23").notNull().default(0),
+    status: text("status").$type<"planned" | "received" | "cancelled">().notNull().default("planned"),
+    links: jsonb("links").$type<string[]>().notNull().default([]),
+    notes: text("notes").notNull().default(""),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("budget_invoices_project_idx").on(t.projectId), index("budget_invoices_scope_idx").on(t.scopeId)],
+);
+
+/** Money actually transferred against an invoice (the net amount, after PPh 23 withholding). */
+export const budgetPayments = ps.table(
+  "budget_payments",
+  {
+    id: id(),
+    projectId: projectRef(),
+    invoiceId: uuid("invoice_id").notNull().references(() => budgetInvoices.id),
+    paidOn: date("paid_on", { mode: "string" }).notNull(),
+    amount: money("amount").notNull(),
+    note: text("note").notNull().default(""),
+    link: text("link").notNull().default(""),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index("budget_payments_project_idx").on(t.projectId), index("budget_payments_invoice_idx").on(t.invoiceId)],
+);
+
 // ---------- calendar feed ----------
 
 export const calendarTokens = ps.table("calendar_tokens", {
