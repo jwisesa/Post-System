@@ -43,7 +43,13 @@ export function ScriptUpload({ slug }: { slug: string }) {
     if (!preview) return;
     setBusy(true);
     const { title, sourceName, pages, scenes } = preview; // scenes carry their text blocks
-    const r = await saveScript(slug, { title, sourceName, pages, scenes });
+    let r;
+    try {
+      r = await saveScript(slug, { title, sourceName, pages, scenes });
+    } catch {
+      setBusy(false);
+      return setError("Gagal menyimpan: server menolak atau tidak merespons. Coba lagi; jika berulang, naskah mungkin terlalu besar.");
+    }
     setBusy(false);
     if (!r.ok) return setError(r.error);
     toast({ message: `Naskah disimpan: ${r.scenes} adegan.` });

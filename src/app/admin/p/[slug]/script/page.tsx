@@ -6,6 +6,9 @@ import { fmtDate } from "@/lib/schedule/dates";
 import { loadProject } from "@/lib/project-context";
 import { getScript, kindUsage, listKinds, listPhases, listScripts } from "@/lib/script/service";
 
+// Saving a long script writes many rows; the default function limit can cut it off.
+export const maxDuration = 60;
+
 export default async function ScriptPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ script?: string; new?: string; tag?: string; scene?: string }> }) {
   const { slug } = await params;
   const q = await searchParams;
