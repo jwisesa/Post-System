@@ -1,14 +1,11 @@
 import { getDocumentProxy } from "unpdf";
-import { InputError } from "../services";
+import { InputError, pgSafe } from "../services";
 import { REVISION_MARK, type PdfLine, type PdfPage } from "./types";
 
 export const MAX_BYTES = 4 * 1024 * 1024;
 export const MAX_PAGES = 400;
 
 const NOT_CONTENT = /^(?:\d{1,3}[.)]?|\(?(?:CONTINUED|CONT'?D|LANJUT|BERSAMBUNG|MORE)\)?:?(?:\s*\(?\d{1,3}\)?)?|\d{1,3}\s+CONTINUED:?)$/i;
-
-// Postgres jsonb rejects \u0000, and the rest are invisible junk some PDF fonts emit.
-const CONTROL_CHARS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
 
 type Item = { str: string; x: number; y: number; w: number; h: number };
 
@@ -85,7 +82,7 @@ export async function extractPages(buf: Uint8Array): Promise<PdfPage[]> {
     const page = await pdf.getPage(n);
     heights.push(page.getViewport({ scale: 1 }).height);
     const tc = await page.getTextContent();
-    raw.push(tc.items.flatMap((i) => ("str" in i ? [{ str: i.str.replace(CONTROL_CHARS, ""), x: i.transform[4], y: i.transform[5], w: i.width, h: i.height }] : [])));
+    raw.push(tc.items.flatMap((i) => ("str" in i ? [{ str: pgSafe(i.str), x: i.transform[4], y: i.transform[5], w: i.width, h: i.height }] : [])));
   }
   return dropRepeating(raw).map((items, n) => {
     const lines = groupLines(items);

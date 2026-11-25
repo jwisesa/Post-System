@@ -135,5 +135,6 @@ export function markDuplicates(existing: { ref: string; body: string }[], incomi
 export function decodeText(buf: ArrayBuffer): string {
   const b = new Uint8Array(buf);
   const enc = b[0] === 0xff && b[1] === 0xfe ? "utf-16le" : b[0] === 0xfe && b[1] === 0xff ? "utf-16be" : "utf-8";
-  return new TextDecoder(enc).decode(b);
+  // Postgres rejects NUL and lone surrogates; strip them at the door (kept inline: this module also runs in the browser).
+  return new TextDecoder(enc).decode(b).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "");
 }

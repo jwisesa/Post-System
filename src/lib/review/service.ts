@@ -6,7 +6,7 @@ import { feedbackPoints, projects, reviewerLinks, scheduleItems, signoffs, users
 import { parsePoints } from "../feedback/parse";
 import { getSchedule } from "../schedule/service";
 import { statusLabel } from "../schedule/templates";
-import { InputError, record, requireRole } from "../services";
+import { InputError, pgSafe, record, requireRole } from "../services";
 
 const clean = (v: string, n: number) => v.trim().slice(0, n);
 
@@ -105,7 +105,7 @@ export async function submitReviewerFeedback(db: Db, token: string, itemId: stri
     const [{ top }] = await tx.select({ top: max(feedbackPoints.sortOrder) }).from(feedbackPoints).where(eq(feedbackPoints.itemId, itemId));
     const rows = await tx
       .insert(feedbackPoints)
-      .values(parsed.map((p, n) => ({ projectId: link.projectId, itemId, body: p.body, ref: p.ref.slice(0, 40), fromWho: link.name.slice(0, 60), reviewerLinkId: link.id, sortOrder: (top ?? 0) + n + 1, createdBy: null })))
+      .values(parsed.map((p, n) => ({ projectId: link.projectId, itemId, body: pgSafe(p.body), ref: pgSafe(p.ref.slice(0, 40)), fromWho: link.name.slice(0, 60), reviewerLinkId: link.id, sortOrder: (top ?? 0) + n + 1, createdBy: null })))
       .returning({ id: feedbackPoints.id });
     await record(tx, { projectId: link.projectId, userId: null, entity: "feedback", entityId: rows[0].id, action: "create", summary: `${link.name} (link reviewer) menambah ${rows.length} poin di "${item.name}"`, after: { points: parsed.slice(0, 20) } });
     return rows.length;

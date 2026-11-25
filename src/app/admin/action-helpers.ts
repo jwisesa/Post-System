@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { notFound, redirect } from "next/navigation";
+import { notFound, redirect, unstable_rethrow } from "next/navigation";
 import { getDb, type Db } from "@/db/client";
 import { ForbiddenError } from "@/lib/auth/permissions";
 import { requireUser } from "@/lib/auth/session";
@@ -45,7 +45,9 @@ export async function runForClient<T extends object>(slug: string, fn: (db: Db, 
     revalidatePath(`/admin/p/${slug}`, "layout");
     return { ok: true, ...result };
   } catch (e) {
-    if (!isExpected(e)) throw e;
-    return { ok: false, error: e.message };
+    if (isExpected(e)) return { ok: false, error: e.message };
+    unstable_rethrow(e); // redirect/notFound must still propagate
+    console.error(e);
+    return { ok: false, error: "Gagal menyimpan karena kesalahan server. Coba lagi." };
   }
 }

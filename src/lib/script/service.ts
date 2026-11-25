@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
 import { scriptSceneText, scriptScenes, scriptTagKinds, scripts } from "@/db/schema";
-import { InputError, record, requireRole, type Tx } from "../services";
+import { InputError, pgSafe, record, requireRole, type Tx } from "../services";
 import { aggregate } from "./aggregate";
 import { getSchedule } from "../schedule/service";
 import { needsByPhase, type Phase } from "./needs";
@@ -11,10 +11,10 @@ import { BLOCK_TYPES, BUILTIN_KINDS, INT_EXTS, isBuiltinKind, kindDef, MAX_BLOCK
 
 const omit = <T extends object, K extends keyof T>(o: T, k: K): Omit<T, K> => { const c = { ...o }; delete c[k]; return c; };
 // Postgres jsonb/text reject \u0000; drop it and other control characters before anything is stored.
-const clean = (s: string) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "");
+const clean = pgSafe;
 const str = (max: number) => z.string().max(max).transform((s) => clean(s).trim());
 const TagSchema = z.object({ kind: z.enum(TAG_KINDS), note: str(200).default(""), auto: z.boolean().default(true), keyword: str(30).optional(), excerpt: str(500).optional() });
-const BlockSchema = z.object({ t: z.enum(BLOCK_TYPES as [string, ...string[]]), text: z.string().max(MAX_BLOCK_CHARS).transform(clean), ext: z.string().max(60).optional() });
+const BlockSchema = z.object({ t: z.enum(BLOCK_TYPES as [string, ...string[]]), text: z.string().max(MAX_BLOCK_CHARS).transform(clean), ext: z.string().max(60).transform(clean).optional() });
 const page = z.number().finite().min(0).max(1000);
 
 /** What the upload preview sends back for saving. Everything is re-validated; nothing from the client is trusted. */
@@ -84,7 +84,7 @@ export type ScenePatch = { heading?: string; number?: string; location?: string;
 export async function updateScene(db: Db, userId: string, projectId: string, sceneId: string, patch: ScenePatch) {
   await requireRole(db, userId, projectId, "script.edit");
   const next: Partial<Pick<SceneRow, "heading" | "number" | "location" | "intExt" | "timeOfDay" | "notes">> = {};
-  const clip = (v: string, max: number) => v.trim().slice(0, max);
+  const clip = (v: string, max: number) => pgSafe(v.trim().slice(0, max));
   if (patch.heading != null) next.heading = clip(patch.heading, 200);
   if (patch.number != null) {
     next.number = clip(patch.number, 20).toUpperCase();
@@ -261,7 +261,7 @@ async function resolvePhase(db: Db, projectId: string, kind: string, want: strin
 export async function setTags(db: Db, userId: string, projectId: string, sceneIds: string[], input: { kind: string; note?: string; itemId?: string | null }) {
   await requireRole(db, userId, projectId, "script.edit");
   const { key: kind, label } = await resolveKind(db, projectId, input.kind);
-  const note = input.note === undefined ? undefined : input.note.trim().slice(0, 200); // undefined keeps an existing note
+  const note = input.note === undefined ? undefined : pgSafe(input.note.trim().slice(0, 200)); // undefined keeps an existing note
   const itemId = await resolvePhase(db, projectId, kind, input.itemId);
   await db.transaction(async (tx) => {
     const rows = await loadScenes(tx, projectId, sceneIds);
@@ -302,14 +302,14 @@ export const removeTag = (db: Db, userId: string, projectId: string, sceneId: st
 export async function addTagFromSelection(db: Db, userId: string, projectId: string, sceneId: string, kindIn: string, excerptIn: string, note = "", itemId?: string | null) {
   await requireRole(db, userId, projectId, "script.edit");
   const { key: kind, label } = await resolveKind(db, projectId, kindIn);
-  const excerpt = excerptIn.replace(/\s+/g, " ").trim().slice(0, 500);
+  const excerpt = pgSafe(excerptIn.replace(/\s+/g, " ").trim().slice(0, 500));
   if (!excerpt) throw new InputError("Pilih teks di naskah terlebih dahulu.");
   const phase = await resolvePhase(db, projectId, kind, itemId);
   await db.transaction(async (tx) => {
     const [row] = await loadScenes(tx, projectId, [sceneId]);
     const old = row.postTags.find((t) => t.kind === kind);
-    const joined = old?.excerpt && !old.excerpt.includes(excerpt) ? `${old.excerpt} … ${excerpt}`.slice(0, 500) : old?.excerpt?.includes(excerpt) ? old.excerpt : excerpt;
-    const next: PostTag = { kind, note: note.trim().slice(0, 200) || old?.note || "", auto: false, itemId: itemId === undefined && old?.itemId ? old.itemId : phase, excerpt: joined, ...(old?.keyword ? { keyword: old.keyword } : {}) };
+    const joined = old?.excerpt && !old.excerpt.includes(excerpt) ? pgSafe(`${old.excerpt} … ${excerpt}`.slice(0, 500)) : old?.excerpt?.includes(excerpt) ? old.excerpt : excerpt;
+    const next: PostTag = { kind, note: pgSafe(note.trim().slice(0, 200)) || old?.note || "", auto: false, itemId: itemId === undefined && old?.itemId ? old.itemId : phase, excerpt: joined, ...(old?.keyword ? { keyword: old.keyword } : {}) };
     await tx.update(scriptScenes).set({ postTags: [...row.postTags.filter((t) => t.kind !== kind), next] }).where(eq(scriptScenes.id, sceneId));
     await record(tx, { projectId, userId, entity: "script_scene", entityId: sceneId, action: "update", summary: `Adegan ${row.number}: tag ${label} ditambahkan dari teks naskah`, after: { kind, itemId: phase } });
   });
@@ -348,7 +348,8 @@ export async function searchScript(db: Db, projectId: string, scriptId: string, 
   for (const r of rows) {
     const matches: SearchHit["matches"] = [];
     r.blocks.forEach((b, block) => {
-      for (let at = b.text.toLowerCase().indexOf(q); at >= 0 && total < MAX_HITS; at = b.text.toLowerCase().indexOf(q, at + q.length)) {
+      const low = b.text.toLowerCase();
+      for (let at = low.indexOf(q); at >= 0 && total < MAX_HITS; at = low.indexOf(q, at + q.length)) {
         total++;
         matches.push({ block, pre: (at > 50 ? "…" : "") + b.text.slice(Math.max(0, at - 50), at), hit: b.text.slice(at, at + q.length), post: b.text.slice(at + q.length, at + q.length + 70) + (at + q.length + 70 < b.text.length ? "…" : "") });
       }

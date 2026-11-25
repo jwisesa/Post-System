@@ -5,7 +5,10 @@ import { extractPages, MAX_BYTES } from "@/lib/script/extract";
 import { parseScreenplay } from "@/lib/script/parse";
 import { textBytes } from "@/lib/script/types";
 import { aggregate } from "@/lib/script/aggregate";
+import { ImportSchema } from "@/lib/script/service";
 import { getProjectForUser, InputError } from "@/lib/services";
+
+export const maxDuration = 60;
 
 const json = (body: object, status = 200) => Response.json(body, { status });
 
@@ -22,6 +25,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     if (!(file instanceof File) || !file.size) throw new InputError("Pilih file PDF naskah.");
     if (file.size > MAX_BYTES) throw new InputError("File terlalu besar (maksimal 4 MB).");
     const { scenes, pages, warnings } = parseScreenplay(await extractPages(new Uint8Array(await file.arrayBuffer())));
+    const check = ImportSchema.safeParse({ title: "x", sourceName: "x", pages, scenes });
+    if (!check.success) {
+      const at = check.error.issues[0]?.path[1];
+      const sc = typeof at === "number" ? scenes[at] : undefined;
+      return json({ error: sc ? `Adegan ${sc.number} terlalu panjang (${sc.lines.toLocaleString("id-ID")} baris): judul adegan berikutnya tidak terbaca.` : "Hasil baca naskah tidak valid. Periksa isi PDF." }, 400);
+    }
     const agg = aggregate(scenes, pages);
     return json({
       title: file.name.replace(/\.pdf$/i, "").slice(0, 200), sourceName: file.name.slice(0, 200), pages, scenes, warnings,
@@ -29,6 +38,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     });
   } catch (e) {
     if (e instanceof InputError) return json({ error: e.message }, 400);
+    console.error(e);
     return json({ error: "Naskah tidak dikenali: file tidak bisa dibaca sebagai PDF." }, 400);
   }
 }

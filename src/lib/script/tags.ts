@@ -15,6 +15,9 @@ const MATCHERS = Object.entries(WORDS).map(([kind, w]) => [kind as TagKind, re(w
 const EXTENSION = /\((?:V\.?\s?O\.?|O\.?\s?S\.?|OFF)\)/i;
 const CUE_NAME = re(ADR_CUES);
 
+// Not services.pgSafe: this module is bundled into client components. Slicing can only split a surrogate pair, so well-formedness is all it needs.
+const pgSafe = (s: string) => s.toWellFormed();
+
 const MAX_EXCERPT = 240;
 
 /** The sentence (or the line, when it has no sentence break) around a match, at most 240 chars, keyword kept. */
@@ -24,7 +27,7 @@ export function excerptOf(text: string, at: number, len: number): string {
   const from = bounds[Math.max(0, i)], sentence = text.slice(from, bounds[i + 1] ?? text.length).trim();
   if (sentence.length <= MAX_EXCERPT) return sentence;
   const start = Math.max(from, at - 100), end = Math.min(text.length, at + len + 100);
-  return `${start > from ? "…" : ""}${text.slice(start, end).trim()}${end < text.length ? "…" : ""}`.slice(0, MAX_EXCERPT);
+  return pgSafe(`${start > from ? "…" : ""}${text.slice(start, end).trim()}${end < text.length ? "…" : ""}`.slice(0, MAX_EXCERPT));
 }
 
 /**
@@ -39,8 +42,8 @@ export function suggestTags(lines: string[], cues: string[] = [], dialogues: str
     const name = CUE_NAME.exec(c.replace(/\([^)]*\)/g, " "))?.[0];
     if (!ext && !name) return;
     const who = c.replace(/\([^)]*\)/g, " ").replace(/[\^*]/g, "").replace(/[:.\s]+$/, "").replace(/\s+/g, " ").trim().toUpperCase() || c.trim(), shown = ext ? `${who} ${ext.toUpperCase().replace(/\s+/g, "")}` : who;
-    const said = (dialogues[i] ?? "").slice(0, 120).trim();
-    found.set("adr", { keyword: (ext ?? name!).toUpperCase().replace(/\s+/g, " "), excerpt: (said ? `${shown}: ${said}` : shown).slice(0, MAX_EXCERPT) });
+    const said = pgSafe((dialogues[i] ?? "").slice(0, 120)).trim();
+    found.set("adr", { keyword: (ext ?? name!).toUpperCase().replace(/\s+/g, " "), excerpt: pgSafe((said ? `${shown}: ${said}` : shown).slice(0, MAX_EXCERPT)) });
   });
   for (const text of lines) {
     for (const [kind, rx] of MATCHERS) {

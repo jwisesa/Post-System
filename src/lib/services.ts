@@ -21,6 +21,9 @@ export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export class InputError extends Error {}
 
+/** Text safe for Postgres jsonb/text: no control or invisible bidi/zero-width characters, no lone surrogates (a slice can split an emoji pair). */
+export const pgSafe = (s: string) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u00ad\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/g, "").toWellFormed();
+
 export type Change = {
   projectId: string;
   userId: string | null;

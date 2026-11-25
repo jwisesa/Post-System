@@ -1,4 +1,4 @@
-import { InputError } from "../services";
+import { InputError, pgSafe } from "../services";
 import { suggestTags } from "./tags";
 import { MAX_BLOCK_CHARS, MAX_TEXT_BYTES, placeOf, REVISION_MARK, textBytes, type Block, type BlockType, type ParsedCharacter, type ParsedScene, type PdfPage } from "./types";
 
@@ -16,13 +16,13 @@ const TIME_WORDS: Record<string, string> = {
 const TW = Object.keys(TIME_WORDS).join("|");
 // One or more time words ("SIANG LANJUTAN", "DINI HARI", "MALAM HARI"), optionally two joined by - / & DAN AND, optional "(...)".
 const TIME_PHRASE = String.raw`(?:${TW})(?:\s+(?:${TW}|HARI|THAT|LATER|SAMA))*`;
-const TIME_AT_END = new RegExp(String.raw`^(.*?)(?:\s*[-–—.,/]+\s*|\s+)(${TIME_PHRASE}(?:\s*(?:[-–—/&]|DAN|AND)\s*${TIME_PHRASE})?)(?:\s*\([^)]*\))?\s*$`, "i");
-const BARE_TIME = new RegExp(String.raw`^(${TIME_PHRASE})(?:\s*\([^)]*\))?$`, "i");
+const TIME_AT_END = new RegExp(String.raw`^(.*?)(?:\s*[-–—.,/]+\s*|\s+)(${TIME_PHRASE}(?:\s*(?:[-–—/&]|DAN|AND)\s*${TIME_PHRASE})?)(?:\s*[(\[][^)\]]*[)\]])*\s*$`, "i");
+const BARE_TIME = new RegExp(String.raw`^(${TIME_PHRASE})(?:\s*[(\[][^)\]]*[)\]])*$`, "i");
 
-const IE = String.raw`(?:INT|DLM|DALAM)\.?\s*[/.\-]\s*(?:EXT|EKS|LUAR)\.?|(?:EXT|EKS|LUAR)\.?\s*[/.\-]\s*(?:INT|DLM|DALAM)\.?|I\s*/\s*E\.?|INT|EXT|EKS|DLM|DALAM|LUAR`;
-const HEAD = new RegExp(String.raw`^(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?(?:(\d+(?:-?[A-Z]{1,2})?)\s*[.:)\-–]?\s+)?(${IE})(?=[\s.\-–—]|$)\.?\s*(.*)$`, "i");
+const IE = String.raw`(?:INT|DLM|DALAM)\.?\s*[/.\-]\s*(?:EXT|EKS|LUAR)\.?|(?:EXT|EKS|LUAR)\.?\s*[/.\-]\s*(?:INT|DLM|DALAM)\.?|I\s*/\s*E\.?|E\s*/\s*I\.?|INT|EXT|EKS|DLM|DALAM|LUAR`;
+const HEAD = new RegExp(String.raw`^(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?(?:(\d+(?:-?[A-Z]{1,2})?)(?:\s*[.:)\-–]\s*|\s+))?(${IE})(?=[\s.\-–—]|$)\.?\s*(.*)$`, "i");
 // Scene modifiers: split off the location; the time of day is inherited from the previous scene when none is given.
-const MOD = String.raw`(?:BEBERAPA SAAT KEMUDIAN|SEDETIK KEMUDIAN|MOMENTS? LATER|ANOTHER ANGLE|SUDUT LAIN|SAME TIME|CONTINUOUS|MEANWHILE|LANJUTAN|LATER|SAMA|SAME)`;
+const MOD = String.raw`(?:NEXT MOMENTS?|SAAT BERIKUTNYA|TAK LAMA KEMUDIAN|BEBERAPA WAKTU KEMUDIAN|BEBERAPA SAAT KEMUDIAN|SEDETIK KEMUDIAN|MOMENTS? LATER|ANOTHER ANGLE|SUDUT LAIN|SAME TIME|CONTINUOUS|MEANWHILE|LANJUTAN|LATER|SAMA|SAME)`;
 const MOD_END = new RegExp(String.raw`^(.*?)(?:\s*[-–—.,/]+\s*|\s+|^)(${MOD})\s*$`, "i");
 function peel(s: string): { s: string; mod: boolean } {
   let mod = false, m: RegExpExecArray | null;
@@ -33,12 +33,14 @@ function peel(s: string): { s: string; mod: boolean } {
   return { s, mod };
 }
 const LEAD = /^(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?\d+(?:-?[A-Z]{1,2})?\s*[.:)\-–]?\s+/i;
-const TRAIL = /\s+(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?\d+(?:-?[A-Z]{1,2})?\.?$/i;
-const TRAIL_NUM = /^(.*\S)\s+(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?(\d+(?:-?[A-Z]{1,2})?)\.?$/i;
+// A margin scene number at the end; the space may be missing right after a letter ("CONTINUOUS36").
+const TRAIL_NUM = /^(.*?)(?:\s+|(?<=[A-Z]))(?:(?:SC|SCN|SCENE|ADEGAN|ADG)\.?\s*)?(\d+(?:-?[A-Z]{1,2})?)\.?$/i;
+// No INT/EXT at all, but the same number on both sides and all caps: "12 RUMAH BUDI - SIANG 12".
+const NO_IE = /^(\d+[A-Z]?)\s+([^a-z]{3,120}?)\s+\1$/;
 
 function intExt(prefix: string): string {
   const p = prefix.toUpperCase().replace(/\s+/g, "");
-  if (/^I\/E/.test(p)) return "INT/EXT";
+  if (/^(?:I\/E|E\/I)/.test(p)) return "INT/EXT";
   const hasInt = /INT|DLM|DALAM/.test(p), hasExt = /EXT|EKS|LUAR/.test(p);
   return hasInt && hasExt ? "INT/EXT" : hasInt ? "INT" : "EXT";
 }
@@ -56,23 +58,35 @@ export type Heading = { heading: string; number: string; intExt: string; locatio
 /** Parses one line as a scene heading (English or Indonesian), or returns null. */
 export function parseHeading(raw: string): Heading | null {
   const line = raw.replace(REVISION_MARK, " ").replace(/\s+/g, " ").trim();
-  const m = HEAD.exec(line);
-  if (!m) return null;
-  const [, lead, prefix] = m;
-  let rest = m[3].trim();
-  if (/^(DALAM|LUAR)$/i.test(prefix.trim()) || /^(DALAM|LUAR)\b/i.test(prefix)) {
-    if (/[a-z]/.test(line)) return null; // "Dalam kegelapan, ..." is prose
+  const noIe = HEAD.test(line) ? null : NO_IE.exec(line);
+  const m = noIe ? null : HEAD.exec(line);
+  if (!m && !noIe) return null;
+  const lead = noIe ? noIe[1] : m![1], prefix = noIe ? "" : m![2];
+  const rawRest = (noIe ? noIe[2] : m![3]).trim();
+  let rest = rawRest.replace(/[.:;\s]+$/, "");
+  if (!noIe) {
+    if (/^(DALAM|LUAR)$/i.test(prefix.trim()) || /^(DALAM|LUAR)\b/i.test(prefix)) {
+      if (/[a-z]/.test(line)) return null; // "Dalam kegelapan, ..." is prose
+    }
+    if (!rest && !/[./]/.test(prefix)) return null; // bare "INT" or "EKS" is not a heading
+    if (rest.length > 120 || /[a-z]{4,}\s+[a-z]{4,}\s+[a-z]{4,}/.test(rest)) return null; // lowercase prose
   }
-  if (!rest && !/[./]/.test(prefix)) return null; // bare "INT" or "EKS" is not a heading
-  if (rest.length > 120 || /[a-z]{4,}\s+[a-z]{4,}\s+[a-z]{4,}/.test(rest)) return null; // lowercase prose
   let number = lead ?? "";
   // The heading as shown keeps INT/EXT, location and time, without the scene numbers printed in the margins.
-  let heading = lead ? line.replace(LEAD, "") : line;
-  const tn = TRAIL_NUM.exec(rest);
-  if (tn && (number ? tn[2].toUpperCase() === number.toUpperCase() : TIME_AT_END.test(tn[1]) || peel(tn[1]).mod)) {
-    number = number || tn[2];
-    rest = tn[1].trim();
-    heading = heading.replace(TRAIL, "");
+  let heading = noIe ? noIe[2].trim() : lead ? line.replace(LEAD, "") : line;
+  // Up to two trailing margin numbers ("DAY 47 48"); what is left must still end in a time or modifier.
+  const okEnd = (x: string) => TIME_AT_END.test(x) || BARE_TIME.test(x) || peel(x).mod;
+  let cur = rest, best: { rest: string; num: string } | null = null;
+  for (let k = 0; k < 2; k++) {
+    const tn = TRAIL_NUM.exec(cur);
+    if (!tn || (number && tn[2].toUpperCase() !== number.toUpperCase())) break;
+    cur = tn[1].trim();
+    if (okEnd(cur)) best = { rest: cur, num: tn[2] };
+  }
+  if (best) {
+    number = number || best.num;
+    heading = heading.slice(0, heading.length - (rawRest.length - best.rest.length)).trim();
+    rest = best.rest;
   }
   let timeOfDay = "";
   const pm = peel(rest);
@@ -88,7 +102,7 @@ export function parseHeading(raw: string): Heading | null {
   }
   if (pm.mod && !timeOfDay) timeOfDay = "LAINNYA";
   location = location.replace(/[\s\-–—.,/]+$/, "").replace(/^[\s\-–—.,/]+/, "").replace(/\s+/g, " ").toUpperCase();
-  return { heading, number: number.toUpperCase(), intExt: intExt(prefix), location, place: placeOf(location), timeOfDay, modifier: pm.mod };
+  return { heading, number: number.toUpperCase(), intExt: prefix ? intExt(prefix) : "", location, place: placeOf(location), timeOfDay, modifier: pm.mod };
 }
 
 // ---------- cues ----------
@@ -116,7 +130,7 @@ const cueExtension = (raw: string) => (raw.match(EXT_GROUPS) ?? []).join(" ") + 
 const TRANSITION = /^(?:(?:FADE|CUT|DISSOLVE|SMASH CUT|MATCH CUT|WIPE|IRIS|POTONG|BERALIH|MEMUDAR|PUDAR|SAMBUNG)\b.*|.*\b(?:TO|KE)):?\.?$/;
 const isTransition = (t: string) => isUpper(t) && t.length <= 30 && TRANSITION.test(t) && /(?:[:.]$|\bTO:?$|\bKE:?$|^FADE|^CUT)/.test(t);
 
-const OMITTED = /^(?:(\d+(?:-?[A-Z]{1,2})?)\s+)?OMITTED(?:\s+(\d+(?:-?[A-Z]{1,2})?))?$/i;
+const OMITTED = /^(?:(\d+(?:-?[A-Z]{1,2})?)\.?\s+)?(?:OMITTED|OMIT|DIHAPUS|DIBUANG)\.?(?:\s+(\d+(?:-?[A-Z]{1,2})?)\.?)?$/i;
 
 // ---------- blocks (the scene text) ----------
 
@@ -135,9 +149,9 @@ function addBlock(a: BlockAcc, r: { page: number; y: number }, kind: string, raw
   a.last = r;
   if (t === "cue") {
     const ext = cueExtension(text).replace(/\)\s*\(/g, ", ").replace(/[()]/g, "").trim();
-    a.blocks.push({ t, text: (normalizeCue(text) || text).slice(0, MAX_BLOCK_CHARS), ...(ext ? { ext } : {}) });
-  } else if (prev && prev.t === t && t !== "transition" && flows && (t !== "paren" || !prev.text.endsWith(")"))) prev.text = `${prev.text} ${text}`.slice(0, MAX_BLOCK_CHARS);
-  else a.blocks.push({ t, text: text.slice(0, MAX_BLOCK_CHARS) });
+    a.blocks.push({ t, text: pgSafe((normalizeCue(text) || text).slice(0, MAX_BLOCK_CHARS)), ...(ext ? { ext } : {}) });
+  } else if (prev && prev.t === t && t !== "transition" && flows && (t !== "paren" || !prev.text.endsWith(")"))) prev.text = pgSafe(`${prev.text} ${text}`.slice(0, MAX_BLOCK_CHARS));
+  else a.blocks.push({ t, text: pgSafe(text.slice(0, MAX_BLOCK_CHARS)) });
 }
 
 /** The first dialogue after each cue, in cue order (for the ADR excerpt). */
@@ -182,7 +196,20 @@ export function detectLayout(rows: Row[]): Layout {
 /** Classifies every row after the first heading and builds scenes. */
 export function parseScreenplay(pages: PdfPage[]): { scenes: ParsedScene[]; pages: number; warnings: string[] } {
   const rows: Row[] = [];
-  for (const p of pages) for (const l of p.lines) if (!l.skip) rows.push({ page: p.page, y: l.y, x: l.x, text: l.text, head: parseHeading(l.text) });
+  for (const p of pages) {
+    for (let k = 0; k < p.lines.length; k++) {
+      const l = p.lines[k];
+      if (l.skip) continue;
+      let text = l.text;
+      // A heading wrapped onto a second line ("INT. HOUSE -" / "NIGHT"): merge a short all-caps time line.
+      const nx = p.lines[k + 1];
+      if (/[-–—/,]\s*$/.test(text) && parseHeading(text) && nx && !nx.skip && nx.text.length <= 40 && isUpper(nx.text) && BARE_TIME.test(nx.text.trim())) {
+        text = `${text} ${nx.text}`;
+        k++;
+      }
+      rows.push({ page: p.page, y: l.y, x: l.x, text, head: parseHeading(text) });
+    }
+  }
   if (rows.length < 5) throw new InputError("Naskah tidak dikenali: PDF hampir tidak berisi teks (mungkin hasil scan). Gunakan PDF yang teksnya bisa diseleksi.");
   const first = rows.findIndex((r) => r.head);
   if (first < 0) throw new InputError("Naskah tidak dikenali: tidak ada judul adegan (INT./EXT., DLM./LUAR) yang ditemukan. Pastikan PDF berisi teks (bukan hasil scan) dan judul adegan diawali INT./EXT. atau DLM./LUAR.");
@@ -253,15 +280,18 @@ export function parseScreenplay(pages: PdfPage[]): { scenes: ParsedScene[]; page
     const pe = Math.max(ps, end.page + Math.ceil(frac(end) * 8) / 8);
     const characters: ParsedCharacter[] = [...a.blocks].map(([name, blocks]) => ({ name, blocks }));
     return {
-      position: i + 1, number: h.number || String(i + 1), heading: h.heading.slice(0, 200), intExt: h.intExt, location: h.location, place: h.place, timeOfDay: h.timeOfDay,
+      position: i + 1, number: h.number || (anyNumber ? "?" : "") + (i + 1), heading: h.heading.slice(0, 200), intExt: h.intExt, location: h.location, place: h.place, timeOfDay: h.timeOfDay,
       pageStart: ps, pageEnd: pe, lines, estSeconds: Math.round((lines / LINES_PER_PAGE) * SECONDS_PER_PAGE), characters, postTags: suggestTags([a.rows[0].text, ...a.text.blocks.map((b) => b.text)], a.cues, firstDialogues(a.text.blocks)), blocks: a.text.blocks,
     };
   });
   if (scenes.reduce((n, x) => n + textBytes(x.blocks), 0) > MAX_TEXT_BYTES) throw new InputError("Teks naskah lebih dari 2,5 MB, terlalu besar untuk disimpan. Periksa apakah PDF berisi teks berulang.");
   const noNumber = anyNumber ? accs.filter((a) => !a.head.number).length : 0;
   if (noNumber) warnings.push(`${noNumber} adegan tanpa nomor diberi nomor urut otomatis.`);
-  const dup = scenes.find((s, i) => scenes.findIndex((x) => x.number === s.number) !== i);
-  if (dup) warnings.push(`Nomor adegan ganda: ${dup.number}.`);
+  const dups = [...new Set(scenes.filter((s, i) => scenes.findIndex((x) => x.number === s.number) !== i).map((s) => s.number))];
+  if (dups.length) warnings.push(`Nomor adegan ganda: ${dups.join(", ")}.`);
+  const blank = pages.filter((p) => !p.lines.length).length;
+  if (blank) warnings.push(`${blank} halaman tanpa teks (mungkin hasil scan).`);
+  if (pages.length && scenes.length / pages.length < 0.25) warnings.push(`Hanya ${scenes.length} adegan untuk ${pages.length} halaman.`);
   const omittedNums = omitted.filter(Boolean);
   if (omittedNums.length) warnings.push(`${omittedNums.length} adegan OMITTED: ${omittedNums.join(", ")}`);
   const printed = new Set([...scenes.filter((_, i) => accs[i].head.number).map((x) => x.number.toUpperCase()), ...omittedNums]);

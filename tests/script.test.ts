@@ -626,3 +626,30 @@ describe("script text service", () => {
     for (const w of ["KUTIPAN-RAHASIA-XYZ", secret, "excerpt", '"blocks"']) expect(review).not.toContain(w);
   });
 });
+
+describe("parseHeading accuracy (synthetic)", () => {
+  it("handles new modifiers, bracketed times, trailing punctuation and margin numbers", () => {
+    expect(parseHeading("INT. KANTOR - NEXT MOMENTS")).toMatchObject({ location: "KANTOR", modifier: true });
+    expect(parseHeading("INT. KANTOR - TAK LAMA KEMUDIAN")).toMatchObject({ modifier: true });
+    expect(parseHeading("EXT. JALAN - MALAM [FLASHBACK]")).toMatchObject({ location: "JALAN", timeOfDay: "MALAM" });
+    expect(parseHeading("EXT. JALAN - MALAM.")).toMatchObject({ location: "JALAN", timeOfDay: "MALAM" });
+    expect(parseHeading("INT. KANTOR - DAY 47 48")).toMatchObject({ location: "KANTOR", timeOfDay: "SIANG", number: "47", heading: "INT. KANTOR - DAY" });
+    expect(parseHeading("INT. KANTOR - CONTINUOUS36")).toMatchObject({ location: "KANTOR", modifier: true, number: "36" });
+  });
+  it("handles no INT/EXT, E/I and no space after the number dot", () => {
+    expect(parseHeading("12A RUMAH BUDI - SIANG 12A")).toMatchObject({ intExt: "", number: "12A", location: "RUMAH BUDI", timeOfDay: "SIANG" });
+    expect(parseHeading("E/I. MOBIL - MALAM")).toMatchObject({ intExt: "INT/EXT", location: "MOBIL" });
+    expect(parseHeading("75.INT. KANTOR - SIANG")).toMatchObject({ number: "75", intExt: "INT", location: "KANTOR" });
+  });
+  it("numbers unnumbered scenes with ? when others are numbered, lists every duplicate, flags omitted forms", () => {
+    const line = (text: string, y: number) => ({ text, x: 72, y });
+    const lines = [
+      line("1 INT. A - DAY 1", 700), line("Aksi.", 680), line("INT. B - DAY", 660), line("Aksi.", 640),
+      line("1 INT. C - DAY 1", 620), line("Aksi.", 600), line("2 INT. D - DAY 2", 580), line("Aksi.", 560), line("2 INT. E - DAY 2", 540), line("Aksi.", 520), line("OMITTED 9", 500), line("10 OMIT", 480),
+    ];
+    const r = parseScreenplay([{ page: 1, height: 800, lines } as never]);
+    expect(r.scenes[1].number).toBe("?2");
+    expect(r.warnings.some((w) => /ganda: 1, 2\./.test(w))).toBe(true);
+    expect(r.warnings.some((w) => /2 adegan OMITTED: 9, 10/.test(w))).toBe(true);
+  });
+});
