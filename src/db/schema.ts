@@ -591,6 +591,8 @@ export const budgetScenarios = ps.table(
     name: text("name").notNull(),
     notes: text("notes").notNull().default(""),
     isActive: boolean("is_active").notNull().default(false),
+    /** Drive capacity calculator inputs (DriveCalc, validated by calcSchema). */
+    driveCalc: jsonb("drive_calc").$type<Record<string, unknown>>(),
     createdBy: uuid("created_by").references(() => users.id),
     createdAt: createdAt(),
   },
@@ -655,6 +657,37 @@ export const budgetPayments = ps.table(
   },
   (t) => [index("budget_payments_project_idx").on(t.projectId), index("budget_payments_invoice_idx").on(t.invoiceId)],
 );
+
+/** Shopping list of drives. vendor FK has no ON DELETE action on purpose (NO ACTION). */
+export const budgetDriveLines = ps.table(
+  "budget_drive_lines",
+  {
+    id: id(),
+    projectId: projectRef(),
+    scenarioId: uuid("scenario_id").notNull().references(() => budgetScenarios.id, { onDelete: "cascade" }),
+    scopeId: uuid("scope_id").notNull().references(() => budgetScopes.id, { onDelete: "cascade" }),
+    vendorId: uuid("vendor_id").references(() => budgetVendors.id),
+    purpose: text("purpose").$type<"ocf" | "proxy" | "grade" | "vfx" | "master" | "archive" | "other">().notNull(),
+    media: text("media").$type<"ssd" | "hdd" | "raid" | "lto" | "other">().notNull().default("ssd"),
+    capacityGb: integer("capacity_gb").notNull(),
+    qty: integer("qty").notNull().default(1),
+    unitPrice: money("unit_price").notNull().default(0),
+    ppnRateBp: integer("ppn_rate_bp"),
+    neededBy: date("needed_by", { mode: "string" }),
+    status: text("status").$type<"planned" | "ordered" | "received" | "cancelled">().notNull().default("planned"),
+    notes: text("notes").notNull().default(""),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("budget_drive_lines_project_idx").on(t.projectId), index("budget_drive_lines_scope_idx").on(t.scopeId)],
+);
+
+/** Per-project edits/additions to the built-in data-rate table. */
+export const budgetSettings = ps.table("budget_settings", {
+  projectId: uuid("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  rates: jsonb("rates").$type<unknown[]>().notNull().default([]),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // ---------- calendar feed ----------
 

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { BudgetView } from "@/components/budget/BudgetView";
 import { can } from "@/lib/auth/permissions";
 import { invoiceRow, jakartaToday } from "@/lib/budget/invoice-view";
+import { getDrivePlan } from "@/lib/budget/drives";
 import { rollup } from "@/lib/budget/rollup";
 import { getBudget } from "@/lib/budget/service";
 import { listDeliverables } from "@/lib/deliverables/service";
@@ -15,6 +16,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ slug: s
   if (!can(role, "budget.view")) notFound();
   const data = await getBudget(db, user.id, project.id);
   const { rows, total } = rollup(data);
+  const plan = await getDrivePlan(db, user.id, project.id, { email: user.email });
   const [phases, deliverables, team] = await Promise.all([listPhases(db, project.id), listDeliverables(db, project.id, { includeInternal: true }), getTeam(db, project.id, { includeInternal: true })]);
   return (
     <div className="mx-auto max-w-[1100px] space-y-4">
@@ -23,9 +25,14 @@ export default async function BudgetPage({ params }: { params: Promise<{ slug: s
         <p className="page-meta">Budget per lingkup, penawaran vendor, dan versinya. Angka sebelum pajak.</p>
       </div>
       <BudgetView
+        drive={{
+          calc: plan.calc, seeded: plan.seeded, rates: plan.rates, projectRateIds: plan.projectRateIds, tech: plan.tech, tracker: plan.tracker,
+          vendors: data.vendors.filter((v) => !v.archivedAt).map((v) => ({ id: v.id, name: v.name })),
+          lines: plan.lines.map((l) => ({ id: l.id, purpose: l.purpose, media: l.media, capacityGb: l.capacityGb, qty: l.qty, unitPrice: l.unitPrice, ppnRateBp: l.ppnRateBp, vendorId: l.vendorId, vendor: l.vendor, neededBy: l.neededBy, status: l.status, notes: l.notes })),
+        }}
         slug={slug}
         canEdit={can(role, "budget.edit")}
-        rows={rows.map((r) => { const s = data.scopes.find((x) => x.id === r.scopeId)!; return { id: s.id, name: s.name, category: s.category, budget: r.budget, chosen: r.chosen, invoiced: r.invoiced, paid: r.paid, overInvoiced: r.overInvoiced, overpaid: r.overpaid, state: r.state, variance: r.variance, cancelled: r.cancelled, vendor: (() => { const pk = data.picks.find((x) => x.scopeId === s.id); const bid = pk && data.bids.find((x) => x.id === pk.bidId); return bid ? data.vendors.find((v) => v.id === bid.vendorId)?.name ?? null : null; })() }; })}
+        rows={rows.map((r) => { const s = data.scopes.find((x) => x.id === r.scopeId)!; return { id: s.id, name: s.name, category: s.category, budget: r.budget, chosen: r.chosen, invoiced: r.invoiced, paid: r.paid, overInvoiced: r.overInvoiced, overpaid: r.overpaid, state: r.state, variance: r.variance, cancelled: r.cancelled, drives: r.drives, vendor: (() => { const pk = data.picks.find((x) => x.scopeId === s.id); const bid = pk && data.bids.find((x) => x.id === pk.bidId); return bid ? data.vendors.find((v) => v.id === bid.vendorId)?.name ?? null : null; })() }; })}
         total={{ budget: total.budget, chosen: total.chosen, invoiced: total.invoiced, paid: total.paid, overpaid: total.overpaid, provisional: total.provisional }}
         today={jakartaToday()}
         invoices={data.invoices.map((i) => {

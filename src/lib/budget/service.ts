@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, max, ne } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
-import { budgetBids, budgetDocs, budgetInvoices, budgetPayments, budgetPicks, budgetScenarios, budgetScopes, budgetVendors, budgetVersions, teamContacts, users, type BudgetLine, type BudgetVersionStatus } from "@/db/schema";
+import { budgetBids, budgetDocs, budgetDriveLines, budgetInvoices, budgetPayments, budgetPicks, budgetScenarios, budgetScopes, budgetVendors, budgetVersions, teamContacts, users, type BudgetLine, type BudgetVersionStatus } from "@/db/schema";
 import { listDeliverables } from "../deliverables/service";
 import { listPhases } from "../script/service";
 import { InputError, record, requireRole, type Tx } from "../services";
@@ -48,7 +48,8 @@ export async function getBudget(db: Db, userId: string, projectId: string) {
   ]);
   const scenarioId = scenario[0]?.id ?? null;
   const picks = scenarioId ? await db.select().from(budgetPicks).where(eq(budgetPicks.scenarioId, scenarioId)) : [];
-  return { scenarioId, vendors, scopes, bids, docs, versions: versions.map((r) => ({ ...r.v, authorName: r.author ?? "—" })), picks, invoices, payments };
+  const driveLines = scenarioId ? await db.select().from(budgetDriveLines).where(eq(budgetDriveLines.scenarioId, scenarioId)) : [];
+  return { scenarioId, vendors, scopes, bids, docs, versions: versions.map((r) => ({ ...r.v, authorName: r.author ?? "—" })), picks, invoices, payments, driveLines };
 }
 export type BudgetData = Awaited<ReturnType<typeof getBudget>>;
 
@@ -150,6 +151,8 @@ export async function deleteVendor(db: Db, userId: string, projectId: string, ve
     if (inv) throw new InputError("Vendor masih dipakai di penawaran/tagihan. Arsipkan saja.");
     const [used] = await tx.select({ id: budgetBids.id }).from(budgetBids).where(eq(budgetBids.vendorId, vendorId)).limit(1);
     if (used) throw new InputError("Vendor masih dipakai di penawaran/tagihan. Arsipkan saja.");
+    const [dl] = await tx.select({ id: budgetDriveLines.id }).from(budgetDriveLines).where(eq(budgetDriveLines.vendorId, vendorId)).limit(1);
+    if (dl) throw new InputError("Vendor masih dipakai di penawaran/tagihan. Arsipkan saja.");
     await tx.delete(budgetVendors).where(eq(budgetVendors.id, vendorId));
     await record(tx, { projectId, userId, entity: "budget_vendor", entityId: vendorId, action: "delete", summary: `Menghapus vendor "${row.name}"`, before: row });
   });

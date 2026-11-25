@@ -8,10 +8,11 @@ import { Drawer } from "@/components/ui/controls";
 import { useToast } from "@/components/ui/toast";
 import { categoryLabel, SERVICE_CATEGORIES, TAX_NOTE } from "@/lib/budget/catalog";
 import { formatRupiah, MoneyError, parseRupiah } from "@/lib/budget/money";
+import { DriveTab, type DriveProps } from "./DriveTab";
 import { InvoiceList, type InvoiceRow } from "./InvoiceParts";
 import { VendorPanel, type VendorRow } from "./VendorPanel";
 
-export type ScopeRow = { id: string; name: string; category: string; budget: number; chosen: number; invoiced: number; paid: number; overInvoiced: number; overpaid: number; state: string; variance: number; vendor: string | null; cancelled: boolean };
+export type ScopeRow = { id: string; name: string; category: string; budget: number; chosen: number; invoiced: number; paid: number; overInvoiced: number; overpaid: number; state: string; variance: number; vendor: string | null; cancelled: boolean; drives: number };
 export type Option = { id: string; name: string };
 export type ScopeForm = { id: string | null; name: string; category: string; budget: number; phaseIds: string[]; deliverableIds: string[]; notes: string };
 
@@ -59,11 +60,12 @@ export function ScopeDrawer({ slug, init, phases, deliverables, onClose }: { slu
   );
 }
 
-export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases, deliverables, vendors, contacts }: {
+export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases, deliverables, vendors, contacts, drive }: {
+  drive: Omit<DriveProps, "slug" | "canEdit">;
   slug: string; canEdit: boolean; rows: ScopeRow[]; total: { budget: number; chosen: number; invoiced: number; paid: number; overpaid: number; provisional: boolean }; today: string; invoices: InvoiceRow[];
   phases: Option[]; deliverables: Option[]; vendors: VendorRow[]; contacts: Option[];
 }) {
-  const [tab, setTab] = useState<"sum" | "bills" | "vendor">("sum");
+  const [tab, setTab] = useState<"sum" | "bills" | "vendor" | "drive">("sum");
   const [adding, setAdding] = useState(false);
   const over = (n: number) => (n < 0 ? "text-danger" : "");
   return (
@@ -73,6 +75,7 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
           <button type="button" aria-pressed={tab === "sum"} onClick={() => setTab("sum")}>Ringkasan</button>
           <button type="button" aria-pressed={tab === "bills"} onClick={() => setTab("bills")}>Tagihan</button>
           <button type="button" aria-pressed={tab === "vendor"} onClick={() => setTab("vendor")}>Vendor</button>
+          <button type="button" aria-pressed={tab === "drive"} onClick={() => setTab("drive")}>Hard drive</button>
         </div>
         {tab === "sum" && canEdit && rows.length > 0 && <button type="button" className="btn-secondary" onClick={() => setAdding(true)}>Tambah lingkup</button>}
       </div>
@@ -92,10 +95,10 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
                   <tr key={r.id}>
                     <td><Link href={`/admin/p/${slug}/budget/scope/${r.id}`} className="font-medium underline">{r.name}</Link> <span className="muted">{categoryLabel(r.category)}</span></td>
                     <td className="bg-num">{formatRupiah(r.budget)}</td>
-                    <td className="bg-num">{r.state === "none" ? <span className="muted">Belum dipilih</span> : <>{formatRupiah(r.chosen)} {r.state === "provisional" ? <><span className="tag tag-warn">perkiraan</span>{r.cancelled && <span className="tag tag-warn">persetujuan dibatalkan</span>}</> : <span className="tag tag-ok">{r.state === "pinned" ? "Terpilih" : "Disetujui"}</span>}</>}</td>
+                    <td className="bg-num">{r.state === "none" && r.drives === 0 ? <span className="muted">Belum dipilih</span> : r.state === "none" ? <>{formatRupiah(r.chosen)} <span className="tag">belanja drive</span></> : <>{formatRupiah(r.chosen)} {r.state === "provisional" ? <><span className="tag tag-warn">perkiraan</span>{r.cancelled && <span className="tag tag-warn">persetujuan dibatalkan</span>}</> : <span className="tag tag-ok">{r.state === "pinned" ? "Terpilih" : "Disetujui"}</span>}</>}</td>
                     <td className={`bg-num ${r.overInvoiced > 0 ? "text-danger" : ""}`}>{formatRupiah(r.invoiced)}</td>
                     <td className={`bg-num ${r.overpaid > 0 ? "text-danger" : ""}`}>{formatRupiah(r.paid)}</td>
-                    <td className={`bg-num ${r.state === "none" ? "muted" : r.overpaid > 0 ? "text-danger" : over(r.variance)}`}>{r.state === "none" ? "—" : formatRupiah(r.variance)}</td>
+                    <td className={`bg-num ${r.state === "none" && r.drives === 0 ? "muted" : r.overpaid > 0 ? "text-danger" : over(r.variance)}`}>{r.state === "none" && r.drives === 0 ? "—" : formatRupiah(r.variance)}</td>
                     <td>{r.vendor ?? <span className="muted">Belum dipilih</span>}</td>
                   </tr>
                 ))}
@@ -111,6 +114,7 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
         </>
       ))}
       {tab === "bills" && <InvoiceList slug={slug} invoices={invoices} today={today} />}
+      {tab === "drive" && <DriveTab key={`${drive.seeded}${JSON.stringify(drive.calc)}${drive.rates.length}`} slug={slug} canEdit={canEdit} {...drive} />}
       {tab === "vendor" && <VendorPanel slug={slug} canEdit={canEdit} vendors={vendors} contacts={contacts} />}
       {adding && <ScopeDrawer slug={slug} init={{ id: null, name: "", category: "other", budget: 0, phaseIds: [], deliverableIds: [], notes: "" }} phases={phases} deliverables={deliverables} onClose={() => setAdding(false)} />}
     </section>

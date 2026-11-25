@@ -1,5 +1,5 @@
 import { CANCEL_MARK } from "./catalog";
-import { paidPortion } from "./money";
+import { lineAmount, paidPortion } from "./money";
 // The four numbers per scope: budget (target), chosen, invoiced, paid. All PRE-TAX.
 // Takes plain rows so it runs on the server and in client components.
 
@@ -10,7 +10,8 @@ export type VersionR = { id: string; docId: string; number: number; status: stri
 export type PickR = { scopeId: string; bidId: string; versionId: string | null };
 export type InvoiceR = { id: string; scopeId: string; vendorId?: string; subtotal: number; ppn: number; pph23: number; status: string };
 export type PaymentR = { invoiceId: string; amount: number };
-export type BudgetRows = { scopes: ScopeR[]; bids: BidR[]; docs: DocR[]; versions: VersionR[]; picks: PickR[]; invoices?: InvoiceR[]; payments?: PaymentR[]; driveLines?: never[] }; // driveLines arrive in phase C
+export type DriveR = { scopeId: string; qty: number; unitPrice: number; status: string };
+export type BudgetRows = { scopes: ScopeR[]; bids: BidR[]; docs: DocR[]; versions: VersionR[]; picks: PickR[]; invoices?: InvoiceR[]; payments?: PaymentR[]; driveLines?: DriveR[] };
 
 /** One invoice against its payments. net = what is transferred; cash = payments so far; portion = pre-tax share covered (capped). */
 export function invoiceState(inv: { subtotal: number; ppn: number; pph23: number }, pays: { amount: number }[]) {
@@ -39,8 +40,8 @@ export function scopeNumbers(scopeId: string, d: BudgetRows) {
   const budget = d.scopes.find((s) => s.id === scopeId)?.budget ?? 0;
   const pick = d.picks.find((p) => p.scopeId === scopeId);
   const bv = pick ? bidValue(pick.bidId, d, pick.versionId) : null;
-  const drives = 0; // phase B/C: drive lines
-  const chosen = bv ? bv.quote + bv.changeOrders + drives : 0;
+  const drives = (d.driveLines ?? []).filter((l) => l.scopeId === scopeId && l.status !== "cancelled").reduce((n, l) => n + lineAmount(l.qty * 1000, l.unitPrice), 0);
+  const chosen = (bv ? bv.quote + bv.changeOrders : 0) + drives;
   let invoiced = 0, planned = 0, paid = 0, overpaid = 0;
   for (const i of (d.invoices ?? []).filter((x) => x.scopeId === scopeId)) {
     if (i.status === "planned") planned += i.subtotal;

@@ -1,6 +1,7 @@
 "use server";
 // Anggaran & Vendor. Amounts arrive as integers; the service re-validates everything.
 
+import * as d from "@/lib/budget/drives";
 import * as b from "@/lib/budget/service";
 import { runForClient as run } from "./action-helpers";
 
@@ -48,4 +49,21 @@ export async function savePayment(slug: string, invoiceId: string, input: b.Paym
 }
 export async function removePayment(slug: string, id: string) {
   return run(slug, (db, u, p) => b.deletePayment(db, u, p, id).then(() => ({})));
+}
+
+// ---------- hard drive ----------
+export async function saveCalc(slug: string, calc: unknown) {
+  return run(slug, (db, u, p) => d.saveDriveCalc(db, u, p, calc).then(() => ({})));
+}
+export async function reseedCalc(slug: string) {
+  return run(slug, (db, u, p) => d.reseedDriveCalc(db, u, p).then(() => ({})));
+}
+export async function saveRateTable(slug: string, rows: unknown) {
+  return run(slug, (db, u, p) => d.saveRates(db, u, p, rows).then(() => ({})));
+}
+export async function saveDrive(slug: string, id: string | null, input: d.DriveLineInput) {
+  return run(slug, (db, u, p) => (id ? d.updateDriveLine(db, u, p, id, input).then(() => ({})) : d.addDriveLine(db, u, p, input).then(() => ({}))));
+}
+export async function removeDrive(slug: string, id: string) {
+  return run(slug, (db, u, p) => d.deleteDriveLine(db, u, p, id).then(() => ({})));
 }
