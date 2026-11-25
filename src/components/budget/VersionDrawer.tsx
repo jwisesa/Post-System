@@ -39,9 +39,16 @@ export function VersionDrawer({ slug, docId, vendor, prefill, ppnBp, pph23Bp, fi
   const rowKey = (e: React.KeyboardEvent, i: number) => {
     if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
     if (e.metaKey || e.ctrlKey) { e.preventDefault(); e.currentTarget.closest("form")?.requestSubmit(); return; }
-    if ((e.target as HTMLElement).tagName !== "INPUT") return;
     e.preventDefault();
     if (i === rows.length - 1) addRow(); else setFocus(rows[i + 1].key);
+  };
+  /** Pasting spreadsheet rows (item, qty, unit, price; tab separated) fills one row per line. */
+  const paste = (e: React.ClipboardEvent, i: number) => {
+    const t = e.clipboardData.getData("text");
+    if (!/[\t\n]/.test(t.trim())) return;
+    e.preventDefault();
+    const add = t.split(/\r?\n/).filter((l) => l.trim()).map((l) => { const [item = "", qty = "", unit = "", price = ""] = l.split("\t").map((c) => c.trim()); return { key: crypto.randomUUID(), item, qty: qty || "1", unit, price }; });
+    setRows((r) => [...r.slice(0, i), ...(!r[i].item && !r[i].price ? [] : [r[i]]), ...add, ...r.slice(i + 1)]);
   };
   const set = (i: number, k: keyof Row, v: string) => setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
 
@@ -103,7 +110,7 @@ export function VersionDrawer({ slug, docId, vendor, prefill, ppnBp, pph23Bp, fi
           <div className="space-y-1.5">
             {rows.map((r, i) => (
               <div key={r.key} className="bg-lines pb-2" onKeyDown={(e) => rowKey(e, i)} style={{ borderBottom: "1px solid var(--line)" }}>
-                <input data-k={r.key} aria-invalid={bad?.i === i && bad.k === "item" || undefined} aria-label="Item" placeholder="Item" className="bg-item" value={r.item} maxLength={200} onChange={(e) => set(i, "item", e.target.value)} />
+                <textarea rows={1} data-k={r.key} aria-invalid={bad?.i === i && bad.k === "item" || undefined} aria-label="Item" placeholder="Item (tempel dari spreadsheet: item, qty, satuan, harga)" className="bg-item" value={r.item} maxLength={200} onChange={(e) => set(i, "item", e.target.value)} onPaste={(e) => paste(e, i)} />
                 <input data-k={`${r.key}-qty`} aria-invalid={bad?.i === i && bad.k === "qty" || undefined} aria-label="Qty" placeholder="mis. 2,5" inputMode="decimal" value={r.qty} onChange={(e) => set(i, "qty", e.target.value)} />
                 <input aria-label="Satuan" placeholder="Satuan" value={r.unit} maxLength={20} onChange={(e) => set(i, "unit", e.target.value)} />
                 <input data-k={`${r.key}-price`} aria-invalid={bad?.i === i && bad.k === "price" || undefined} aria-label="Harga satuan" inputMode="numeric" placeholder="Harga satuan" value={r.price} onChange={(e) => set(i, "price", e.target.value)} />
@@ -128,12 +135,14 @@ export function VersionDrawer({ slug, docId, vendor, prefill, ppnBp, pph23Bp, fi
           <dt>Subtotal</dt><dd className="bg-amount">{formatRupiah(tax.subtotal)}</dd>
           <dt>Perkiraan PPN</dt><dd className="bg-amount">{formatRupiah(tax.ppn)}</dd>
           <dt>Perkiraan PPh 23</dt><dd className="bg-amount">{formatRupiah(-tax.pph23)}</dd>
-          <dt className="font-medium">Perkiraan net dibayar</dt><dd className="bg-amount font-medium">{formatRupiah(tax.net)}</dd>
         </dl>
         <p className="muted text-xs">{TAX_NOTE}</p>
         <label className="grid gap-1">Catatan perubahan{first ? " (opsional)" : " (wajib)"}<textarea rows={2} value={notes} maxLength={1000} required={!first} onChange={(e) => setNotes(e.target.value)} /></label>
         <label className="grid gap-1">Link (satu per baris, maks. 5, http/https)<textarea rows={2} value={links} onChange={(e) => setLinks(e.target.value)} /></label>
-        <button className="btn" disabled={busy}>{busy ? "Menyimpan…" : "Simpan versi"}</button>
+        <div className="drawer-foot">
+          <button className="btn" disabled={busy}>{busy ? "Menyimpan…" : "Simpan versi"}</button>
+          <span className="muted ms-auto self-center tabular-nums">Perkiraan net dibayar <b className="text-ink">{formatRupiah(tax.net)}</b></span>
+        </div>
       </form>
     </Drawer>
   );

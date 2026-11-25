@@ -8,7 +8,7 @@ import { ConfirmButton, Drawer } from "@/components/ui/controls";
 import { Icon } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/toast";
 import { PPN_LABEL, TAX_NOTE } from "@/lib/budget/catalog";
-import { formatRateBp, formatRupiah, MoneyError, parseRateBp, parseRupiah, plainRupiah, taxOf } from "@/lib/budget/money";
+import { fmt, formatRateBp, formatRupiah, MoneyError, parseRateBp, parseRupiah, plainRupiah, taxOf } from "@/lib/budget/money";
 import { invoiceState } from "@/lib/budget/rollup";
 
 export type PayRow = { id: string; paidOn: string; amount: number; note: string; link: string };
@@ -87,7 +87,6 @@ export function InvoiceDrawer({ slug, scopeId, vendorId, vendor, ppnBp, pph23Bp,
         <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 tabular-nums">
           <dt>Perkiraan PPN</dt><dd className="bg-amount">{formatRupiah(tax.ppn)}</dd>
           <dt>Perkiraan PPh 23</dt><dd className="bg-amount">{formatRupiah(-tax.pph23)}</dd>
-          <dt className="font-medium">Perkiraan net dibayar</dt><dd className="bg-amount font-medium">{formatRupiah(tax.net)}</dd>
         </dl>
         <p className="muted text-xs">{TAX_NOTE}</p>
         {docs.length > 0 && <label className="grid gap-1">Merujuk dokumen (opsional)
@@ -95,7 +94,10 @@ export function InvoiceDrawer({ slug, scopeId, vendorId, vendor, ppnBp, pph23Bp,
         </label>}
         <label className="grid gap-1">Catatan<textarea rows={2} value={f.notes} maxLength={1000} onChange={(e) => setF({ ...f, notes: e.target.value })} /></label>
         <label className="grid gap-1">Link (satu per baris, maks. 5, http/https)<textarea rows={2} value={f.links} onChange={(e) => setF({ ...f, links: e.target.value })} /></label>
-        <button className="btn" disabled={busy}>{busy ? "Menyimpan…" : "Simpan tagihan"}</button>
+        <div className="drawer-foot">
+          <button className="btn" disabled={busy}>{busy ? "Menyimpan…" : "Simpan tagihan"}</button>
+          <span className="muted ms-auto self-center tabular-nums">Perkiraan net dibayar <b className="text-ink">{formatRupiah(tax.net)}</b></span>
+        </div>
       </form>
     </Drawer>
   );
@@ -183,7 +185,7 @@ export function InvoiceTable({ slug, canEdit, today, invoices, scopeId, vendorId
       {invoices.length === 0 ? <p className="muted text-sm">Belum ada termin atau tagihan.</p> : (
         <div className="overflow-x-auto">
           <table className="table w-full text-sm">
-            <thead><tr><th className="text-start">Termin</th><th className="text-start">No.</th><th className="text-start">Jatuh tempo</th><th className="bg-num">Subtotal</th><th className="bg-num">PPN</th><th className="bg-num">PPh 23</th><th className="bg-num">Net</th><th className="bg-num">Dibayar</th><th className="bg-num">Sisa</th><th className="text-start">Status</th><th /></tr></thead>
+            <thead><tr><th className="text-start">Termin</th><th className="text-start">No.</th><th className="text-start">Jatuh tempo</th><th className="bg-num">Subtotal (Rp)</th><th className="bg-num">PPN (Rp)</th><th className="bg-num">PPh 23 (Rp)</th><th className="bg-num">Net (Rp)</th><th className="bg-num">Dibayar (Rp)</th><th className="bg-num">Sisa (Rp)</th><th className="text-start">Status</th><th /></tr></thead>
             <tbody>
               {invoices.map((i) => {
                 const st = invState(i, today);
@@ -192,12 +194,12 @@ export function InvoiceTable({ slug, canEdit, today, invoices, scopeId, vendorId
                     <td className="font-medium">{i.termin}</td>
                     <td>{i.ref || "—"}</td>
                     <td className={`tabular-nums ${st.overdue ? "text-danger" : ""}`}>{i.dueDate ?? "—"}</td>
-                    <td className="bg-num">{formatRupiah(i.subtotal)}</td>
-                    <td className="bg-num">{formatRupiah(i.ppn)}</td>
-                    <td className="bg-num">{formatRupiah(i.pph23)}</td>
-                    <td className="bg-num">{formatRupiah(st.net)}</td>
-                    <td className="bg-num">{formatRupiah(st.cash)}</td>
-                    <td className="bg-num">{formatRupiah(st.remaining)}</td>
+                    <td className="bg-num">{fmt(i.subtotal)}</td>
+                    <td className="bg-num">{fmt(i.ppn)}</td>
+                    <td className="bg-num">{fmt(i.pph23)}</td>
+                    <td className="bg-num">{fmt(st.net)}</td>
+                    <td className="bg-num">{fmt(st.cash)}</td>
+                    <td className="bg-num">{fmt(st.remaining)}</td>
                     <td><InvoiceTags inv={i} today={today} /></td>
                     <td className="whitespace-nowrap">
                       <button type="button" className="btn-ghost" onClick={() => setPay(i.id)}>{canEdit && i.status === "received" ? "Bayar" : "Pembayaran"}</button>
@@ -211,7 +213,7 @@ export function InvoiceTable({ slug, canEdit, today, invoices, scopeId, vendorId
           </table>
         </div>
       )}
-      <p className="muted text-xs">Pajak adalah perkiraan. {TAX_NOTE} Dibayar dan Sisa dihitung dari net.</p>
+      <p className="muted text-xs">Pajak adalah perkiraan. Dibayar dan Sisa dihitung dari net.</p>
       {edit && <InvoiceDrawer key={edit === "new" ? "new" : edit.id} slug={slug} scopeId={scopeId} vendorId={vendorId} vendor={vendor} ppnBp={ppnBp} pph23Bp={pph23Bp} docs={docs} init={edit === "new" ? undefined : edit} onClose={() => setEdit(null)} />}
       {payInv && <PaymentDrawer key={payInv.id} slug={slug} inv={payInv} canEdit={canEdit} today={today} onClose={() => setPay(null)} />}
     </section>
@@ -223,21 +225,23 @@ export function InvoiceList({ slug, invoices, today }: { slug: string; invoices:
   const [status, setStatus] = useState("");
   const [vendor, setVendor] = useState("");
   const vendors = [...new Map(invoices.map((i) => [i.vendorId, i.vendor])).entries()];
-  const shown = invoices.filter((i) => (!status || (status === "lunas" ? invState(i, today).lunas && i.status === "received" : status === "overdue" ? invState(i, today).overdue : i.status === status)) && (!vendor || i.vendorId === vendor));
+  const match = (i: InvoiceRow) => { const st = invState(i, today); return !status || (status === "lunas" ? st.lunas && i.status === "received" : status === "overdue" ? st.overdue : i.status !== "cancelled" && !st.lunas); };
+  const shown = invoices.filter((i) => match(i) && (!vendor || i.vendorId === vendor));
+  const sum = shown.reduce((a, i) => { const st = invState(i, today); return { net: a.net + st.net, cash: a.cash + st.cash, remaining: a.remaining + st.remaining }; }, { net: 0, cash: 0, remaining: 0 });
   if (invoices.length === 0) return <p className="muted text-sm">Belum ada tagihan. Tambahkan termin dari halaman lingkup.</p>;
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="Filter status" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">Semua status</option><option value="planned">Rencana</option><option value="received">Diterima</option><option value="cancelled">Dibatalkan</option><option value="overdue">Jatuh tempo</option><option value="lunas">Lunas</option>
-        </select>
+        <div className="seg" role="group" aria-label="Filter status">
+          {[["", "Semua"], ["overdue", "Jatuh tempo"], ["unpaid", "Belum lunas"], ["lunas", "Lunas"]].map(([v, l]) => <button key={v} type="button" aria-pressed={status === v} onClick={() => setStatus(v)}>{l}</button>)}
+        </div>
         <select aria-label="Filter vendor" value={vendor} onChange={(e) => setVendor(e.target.value)}>
           <option value="">Semua vendor</option>{vendors.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
         </select>
       </div>
       <div className="overflow-x-auto">
         <table className="table w-full text-sm">
-          <thead><tr><th className="text-start">Jatuh tempo</th><th className="text-start">Lingkup</th><th className="text-start">Vendor</th><th className="text-start">Termin</th><th className="text-start">No.</th><th className="bg-num">Net</th><th className="bg-num">Dibayar</th><th className="bg-num">Sisa</th><th className="text-start">Status</th></tr></thead>
+          <thead><tr><th className="text-start">Jatuh tempo</th><th className="text-start">Lingkup</th><th className="text-start">Vendor</th><th className="text-start">Termin</th><th className="text-start">No.</th><th className="bg-num">Net (Rp)</th><th className="bg-num">Dibayar (Rp)</th><th className="bg-num">Sisa (Rp)</th><th className="text-start">Status</th></tr></thead>
           <tbody>
             {shown.map((i) => {
               const st = invState(i, today);
@@ -248,15 +252,16 @@ export function InvoiceList({ slug, invoices, today }: { slug: string; invoices:
                   <td>{i.vendor}</td>
                   <td className="font-medium">{i.termin}</td>
                   <td>{i.ref || "—"}</td>
-                  <td className="bg-num">{formatRupiah(st.net)}</td>
-                  <td className="bg-num">{formatRupiah(st.cash)}</td>
-                  <td className="bg-num">{formatRupiah(st.remaining)}</td>
+                  <td className="bg-num">{fmt(st.net)}</td>
+                  <td className="bg-num">{fmt(st.cash)}</td>
+                  <td className="bg-num">{fmt(st.remaining)}</td>
                   <td><InvoiceTags inv={i} today={today} /></td>
                 </tr>
               );
             })}
             {shown.length === 0 && <tr><td colSpan={9} className="muted">Tidak ada tagihan yang cocok.</td></tr>}
           </tbody>
+          {shown.length > 0 && <tfoot><tr className="font-medium"><td colSpan={5}>Total ({shown.length} tagihan)</td><td className="bg-num">{fmt(sum.net)}</td><td className="bg-num">{fmt(sum.cash)}</td><td className="bg-num">{fmt(sum.remaining)}</td><td /></tr></tfoot>}
         </table>
       </div>
     </div>

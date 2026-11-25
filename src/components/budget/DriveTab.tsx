@@ -250,7 +250,7 @@ function LineDrawer({ slug, scenarioId, init, vendors, onClose }: { slug: string
         <label className="grid gap-1">Dibutuhkan sebelum<input type="date" value={f.neededBy} onChange={(e) => setF({ ...f, neededBy: e.target.value })} /></label>
         {sel("status", STATUS, "Status")}
         <label className="grid gap-1">Catatan<textarea rows={2} maxLength={500} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></label>
-        <button className="btn" disabled={busy}>{busy ? "Menyimpan…" : "Simpan"}</button>
+        <div className="drawer-foot"><button className="btn" disabled={busy}>{busy ? "Menyimpan…" : "Simpan"}</button></div>
       </form>
     </Drawer>
   );

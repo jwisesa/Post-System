@@ -8,7 +8,7 @@ import { Drawer } from "@/components/ui/controls";
 import { Icon } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/toast";
 import { categoryLabel, SERVICE_CATEGORIES, TAX_NOTE } from "@/lib/budget/catalog";
-import { formatRupiah, MoneyError, parseRupiah, plainRupiah } from "@/lib/budget/money";
+import { fmt, MoneyError, parseRupiah, plainRupiah } from "@/lib/budget/money";
 import { ScenarioTab, type ScenarioInfo, type PickScope } from "./ScenarioTab";
 import type { Comparison } from "@/lib/budget/scenarios";
 import { DriveTab, type DriveProps } from "./DriveTab";
@@ -74,7 +74,7 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
   const [adding, setAdding] = useState(false);
   const over = (n: number) => (n < 0 ? "text-danger" : "");
   const dash = <span className="muted">—</span>;
-  const money = (n: number) => (n === 0 ? dash : formatRupiah(n));
+  const money = (n: number) => (n === 0 ? dash : fmt(n));
   const picked = rows.filter((r) => r.state !== "none" || r.drives > 0);
   const totalVar = picked.reduce((n, r) => n + r.variance, 0);
   const exp = useRef<HTMLDetailsElement>(null);
@@ -96,7 +96,7 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
           <button type="button" aria-pressed={tab === "drive"} onClick={() => setTab("drive")}>Hard drive</button>
           <button type="button" aria-pressed={tab === "plans"} onClick={() => setTab("plans")}>Rencana</button>
         </div>
-        {plans.scenarioName && tab !== "plans" && tab !== "drive" && <span className="muted text-sm"><span className="tag">Rencana: {plans.scenarioName}</span> <button type="button" className="underline" onClick={() => setTab("plans")}>Ganti rencana</button></span>}
+        {plans.scenarioName && tab !== "plans" && tab !== "drive" && <button type="button" className="tag" title="Buka tab Rencana" onClick={() => setTab("plans")}>Rencana: {plans.scenarioName}</button>}
         {tab === "sum" && canEdit && rows.length > 0 && <button type="button" className="btn-secondary" onClick={() => setAdding(true)}>Tambah lingkup</button>}
         <details ref={exp} className="tl-details relative ml-auto">
           <summary className="btn-secondary cursor-pointer" aria-label="Export"><Icon name="download" /> Export</summary>
@@ -120,25 +120,25 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
           <div className="muted text-sm"><p>Semua angka sebelum pajak (DPP). Dipilih = penawaran + tambahan pekerjaan disetujui. Dibayar = bagian sebelum pajak dari tagihan diterima yang sudah dibayar.</p><details><summary className="cursor-pointer underline">Soal pajak</summary><p>Pajak hanya perkiraan: PPN efektif 11% (12% atas DPP nilai lain 11/12) dan PPh 23 2% dari jumlah sebelum PPN, tergantung vendor. {TAX_NOTE} Rinciannya ada di tiap versi penawaran.</p></details></div>
           <div className="overflow-x-auto">
             <table className="table w-full text-sm">
-              <thead><tr><th className="text-start">Lingkup</th><th className="bg-num">Budget</th><th className="bg-num">Dipilih</th><th className="bg-num">Ditagih</th><th className="bg-num">Dibayar</th><th className="bg-num" title="Budget dikurangi nilai dipilih. Negatif (merah) = melebihi budget.">Sisa budget</th><th className="text-start">Vendor terpilih</th></tr></thead>
+              <thead><tr><th className="text-start">Lingkup</th><th className="bg-num">Budget (Rp)</th><th className="bg-num">Dipilih (Rp)</th><th className="bg-num">Ditagih (Rp)</th><th className="bg-num">Dibayar (Rp)</th><th className="bg-num" title="Budget dikurangi nilai dipilih. Negatif (merah) = melebihi budget.">Sisa budget (Rp)</th><th className="text-start">Vendor terpilih</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
                     <td><Link href={`/admin/p/${slug}/budget/scope/${r.id}`} className="font-medium underline">{r.name}</Link>{categoryLabel(r.category).toLowerCase() !== r.name.trim().toLowerCase() && <> <span className="muted">{categoryLabel(r.category)}</span></>}</td>
-                    <td className="bg-num">{formatRupiah(r.budget)}</td>
-                    <td className="bg-num">{r.state === "none" && r.drives === 0 ? <span className="muted">Belum dipilih</span> : r.state === "none" ? <>{formatRupiah(r.chosen)} <span className="tag">belanja drive</span></> : <>{formatRupiah(r.chosen)} {r.state === "provisional" ? <><span className="tag tag-warn">perkiraan</span>{r.cancelled && <span className="tag tag-warn">persetujuan dibatalkan</span>}</> : <span className="tag tag-ok">{r.state === "pinned" ? "Terpilih" : "Disetujui"}</span>}</>}</td>
+                    <td className="bg-num">{fmt(r.budget)}</td>
+                    <td className="bg-num">{r.state === "none" && r.drives === 0 ? <span className="muted">Belum dipilih</span> : r.state === "none" ? <>{fmt(r.chosen)} <span className="tag">belanja drive</span></> : <>{fmt(r.chosen)} {r.state === "provisional" ? <><span className="tag tag-warn">perkiraan</span>{r.cancelled && <span className="tag tag-warn">persetujuan dibatalkan</span>}</> : <span className="tag tag-ok">{r.state === "pinned" ? "Terpilih" : "Disetujui"}</span>}</>}</td>
                     <td className={`bg-num ${r.overInvoiced > 0 ? "text-danger" : ""}`}>{money(r.invoiced)}</td>
                     <td className={`bg-num ${r.overpaid > 0 ? "text-danger" : ""}`}>{money(r.paid)}</td>
-                    <td className={`bg-num ${r.state === "none" && r.drives === 0 ? "muted" : r.overpaid > 0 ? "text-danger" : over(r.variance)}`}>{r.state === "none" && r.drives === 0 ? "—" : formatRupiah(r.variance)}</td>
+                    <td className={`bg-num ${r.state === "none" && r.drives === 0 ? "muted" : r.overpaid > 0 ? "text-danger" : over(r.variance)}`}>{r.state === "none" && r.drives === 0 ? "—" : <>{fmt(r.variance)}{r.budget > 0 && r.chosen > 0 && <span className="bg-meter" aria-hidden="true"><i style={{ inlineSize: `${Math.min(r.chosen / r.budget, 1) * 100}%`, background: r.chosen > r.budget ? "var(--danger)" : "var(--ok)" }} /></span>}{r.chosen > r.budget && <> <span className="tag tag-danger">melebihi</span></>}</>}</td>
                     <td>{r.vendor ?? <span className="muted">Belum dipilih</span>}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot><tr className="font-medium">
-                <td>Total</td><td className="bg-num">{formatRupiah(total.budget)}</td>
+                <td>Total</td><td className="bg-num">{fmt(total.budget)}</td>
                 <td className="bg-num">{money(total.chosen)} {total.provisional && <span className="tag tag-warn">perkiraan</span>}</td>
                 <td className="bg-num">{money(total.invoiced)}</td><td className={`bg-num ${total.overpaid > 0 ? "text-danger" : ""}`}>{money(total.paid)}</td>
-                <td className={`bg-num ${over(totalVar)}`} title="Hanya lingkup yang sudah dipilih">{total.chosen === 0 ? dash : formatRupiah(totalVar)}</td><td />
+                <td className={`bg-num ${over(totalVar)}`} title="Hanya lingkup yang sudah dipilih">{total.chosen === 0 ? dash : fmt(totalVar)}</td><td />
               </tr></tfoot>
             </table>
           </div>

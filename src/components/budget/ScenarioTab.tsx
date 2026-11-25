@@ -5,7 +5,7 @@ import { useState } from "react";
 import { editScenario, newScenario, removeScenario, setScenarioPick, switchScenario } from "@/app/admin/budget-actions";
 import { ConfirmButton, Drawer } from "@/components/ui/controls";
 import { useToast } from "@/components/ui/toast";
-import { formatRupiah } from "@/lib/budget/money";
+import { fmt, formatRupiah } from "@/lib/budget/money";
 import type { Comparison } from "@/lib/budget/scenarios";
 
 export type ScenarioInfo = { id: string; name: string; notes: string; isActive: boolean; pickCount: number; driveLineCount: number };
@@ -13,7 +13,7 @@ export type PickScope = { id: string; name: string; bids: { id: string; vendor: 
 type Drw = { kind: "new"; from: string } | { kind: "rename"; id: string } | { kind: "pick"; scenarioId: string; scopeId: string } | null;
 
 const danger = (n: number) => (n < 0 ? "text-danger" : "");
-const signed = (n: number) => (n > 0 ? `+${formatRupiah(n)}` : formatRupiah(n));
+const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : fmt(n));
 
 export function ScenarioTab({ slug, canEdit, scenarios, cmp, scopes, live }: { slug: string; canEdit: boolean; scenarios: ScenarioInfo[]; cmp: Comparison; scopes: PickScope[]; live: { invoiced: number; paid: number } }) {
   const toast = useToast();
@@ -45,7 +45,7 @@ export function ScenarioTab({ slug, canEdit, scenarios, cmp, scopes, live }: { s
         <p className="muted text-sm">Rencana menyimpan vendor dan versi penawaran yang dipilih per lingkup, ditambah rencana hard drive. Rencana aktif dipakai di Ringkasan.</p>
         <div className="overflow-x-auto">
           <table className="table w-full text-sm">
-            <thead><tr><th className="text-start">Bandingkan</th><th className="text-start">Rencana</th><th className="bg-num">Dipilih (sebelum pajak)</th><th className="bg-num">Selisih vs budget</th><th /></tr></thead>
+            <thead><tr><th className="text-start">Bandingkan</th><th className="text-start">Rencana</th><th className="bg-num">Dipilih sebelum pajak (Rp)</th><th className="bg-num">Selisih vs budget (Rp)</th><th /></tr></thead>
             <tbody>
               {scenarios.map((s) => {
                 const v = byId(s.id);
@@ -53,8 +53,8 @@ export function ScenarioTab({ slug, canEdit, scenarios, cmp, scopes, live }: { s
                   <tr key={s.id}>
                     <td><input type="checkbox" aria-label={`Bandingkan ${s.name}`} checked={sel.includes(s.id)} disabled={!sel.includes(s.id) && sel.length >= 4} onChange={() => toggle(s.id)} /></td>
                     <td><span className="font-medium">{s.name}</span> {s.isActive && <span className="tag tag-ok">Aktif</span>}<div className="muted">{s.notes || `${s.pickCount} pilihan vendor, ${s.driveLineCount} belanja drive`}</div></td>
-                    <td className="bg-num">{v ? <>{formatRupiah(v.total.chosen)} {v.total.provisional && <span className="tag tag-warn">perkiraan</span>}</> : "—"}</td>
-                    <td className={`bg-num ${v ? danger(v.vsBudget) : ""}`}>{v ? formatRupiah(v.vsBudget) : "—"}</td>
+                    <td className="bg-num">{v ? <>{fmt(v.total.chosen)} {v.total.provisional && <span className="tag tag-warn">perkiraan</span>}</> : "—"}</td>
+                    <td className={`bg-num ${v ? danger(v.vsBudget) : ""}`}>{v ? fmt(v.vsBudget) : "—"}</td>
                     <td className="whitespace-nowrap">
                       {canEdit && (
                         <span className="inline-flex flex-wrap gap-1">
@@ -79,18 +79,18 @@ export function ScenarioTab({ slug, canEdit, scenarios, cmp, scopes, live }: { s
           <>
             <div className="overflow-x-auto">
               <table className="table sc-cmp w-full text-sm">
-                <thead><tr><th className="text-start">Lingkup</th><th className="bg-num">Budget</th>{shown.map((s) => <th key={s.id} className="text-start">{s.name} {s.isActive && <span className="tag tag-ok">Aktif</span>}</th>)}</tr></thead>
+                <thead><tr><th className="text-start">Lingkup</th><th className="bg-num">Budget (Rp)</th>{shown.map((s) => <th key={s.id} className="text-start">{s.name} {s.isActive && <span className="tag tag-ok">Aktif</span>}</th>)}</tr></thead>
                 <tbody>
                   {cmp.scopes.map((sc) => (
                     <tr key={sc.id}>
                       <td>{sc.name}</td>
-                      <td className="bg-num">{formatRupiah(sc.budget)}</td>
+                      <td className="bg-num">{fmt(sc.budget)}</td>
                       {shown.map((s) => {
                         const c = s.cells[sc.id];
                         return (
                           <td key={s.id}>
                             <div className="sc-cell">
-                              {c?.vendor ? <><span className="font-medium">{c.vendor}</span><span className="muted">{c.label}</span>{c.stale && <span className="tag tag-warn">versi sudah digantikan</span>}<span className="bg-num">{formatRupiah(c.amount)}</span></> : <span className="muted">Belum dipilih</span>}
+                              {c?.vendor ? <><span className="font-medium">{c.vendor}</span><span className="muted">{c.label}</span>{c.stale && <span className="tag tag-warn">versi sudah digantikan</span>}<span className="bg-num">{fmt(c.amount)}</span></> : <span className="muted">Belum dipilih</span>}
                               {canEdit && <button type="button" className="btn-ghost" onClick={() => setDrawer({ kind: "pick", scenarioId: s.id, scopeId: sc.id })}>Pilih</button>}
                             </div>
                           </td>
@@ -100,12 +100,12 @@ export function ScenarioTab({ slug, canEdit, scenarios, cmp, scopes, live }: { s
                   ))}
                   <tr>
                     <td>Hard drive</td><td className="bg-num muted">—</td>
-                    {shown.map((s) => <td key={s.id} className="bg-num">{formatRupiah(s.drives)}</td>)}
+                    {shown.map((s) => <td key={s.id} className="bg-num">{fmt(s.drives)}</td>)}
                   </tr>
                 </tbody>
                 <tfoot>
-                  <tr className="font-medium"><td>Total dipilih</td><td className="bg-num">{formatRupiah(totalBudget)}</td>{shown.map((s) => <td key={s.id} className="bg-num">{formatRupiah(s.total.chosen)} {s.total.provisional && <span className="tag tag-warn">perkiraan</span>}</td>)}</tr>
-                  <tr><td>Selisih vs budget</td><td />{shown.map((s) => <td key={s.id} className={`bg-num ${danger(s.vsBudget)}`}>{formatRupiah(s.vsBudget)}</td>)}</tr>
+                  <tr className="font-medium"><td>Total dipilih</td><td className="bg-num">{fmt(totalBudget)}</td>{shown.map((s) => <td key={s.id} className="bg-num">{fmt(s.total.chosen)} {s.total.provisional && <span className="tag tag-warn">perkiraan</span>}</td>)}</tr>
+                  <tr><td>Selisih vs budget</td><td />{shown.map((s) => <td key={s.id} className={`bg-num ${danger(s.vsBudget)}`}>{fmt(s.vsBudget)}</td>)}</tr>
                   <tr><td>Selisih vs {shown[0].name}</td><td />{shown.map((s, i) => <td key={s.id} className="bg-num">{i === 0 ? "—" : signed(s.diffFirst)}</td>)}</tr>
                 </tfoot>
               </table>

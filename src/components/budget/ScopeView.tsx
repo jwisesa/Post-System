@@ -7,7 +7,7 @@ import { addScopeBid, chooseBid, removeBid, removeScope } from "@/app/admin/budg
 import { ConfirmButton } from "@/components/ui/controls";
 import { useToast } from "@/components/ui/toast";
 import { CANCEL_MARK, TAX_NOTE, VERSION_STATUSES, type VersionStatusCode } from "@/lib/budget/catalog";
-import { formatRupiah } from "@/lib/budget/money";
+import { fmt } from "@/lib/budget/money";
 import type { VendorCmp } from "@/lib/budget/vendors";
 import { ScopeDrawer, type Option, type ScopeForm } from "./BudgetView";
 import { InvoiceTable, type DocOption, type InvoiceRow } from "./InvoiceParts";
@@ -25,7 +25,7 @@ function VersionTable({ slug, canEdit, versions, base, vendor }: { slug: string;
   return (
               <div className="overflow-x-auto">
                 <table className="table w-full text-sm">
-                  <thead><tr><th className="text-start">No</th><th className="text-start">Tanggal</th><th className="text-start">Status</th><th className="bg-num">Subtotal</th><th className="bg-num">PPN (perkiraan)</th><th className="bg-num">PPh 23 (perkiraan)</th><th className="bg-num">Net</th><th className="text-start">Catatan</th><th className="text-start">Links</th><th /></tr></thead>
+                  <thead><tr><th className="text-start">No</th><th className="text-start">Tanggal</th><th className="text-start">Status</th><th className="bg-num">DPP (Rp)</th><th className="bg-num" title="DPP + PPN − PPh 23, perkiraan">Net perk. (Rp)</th><th className="text-start">Catatan</th><th className="text-start">Links</th><th /></tr></thead>
                   <tbody>
                     {newest.map((v, ni) => {
                       const prev = newest[ni + 1];
@@ -34,23 +34,19 @@ function VersionTable({ slug, canEdit, versions, base, vendor }: { slug: string;
                         <td className="tabular-nums">v{v.number}{v.ref && <span className="muted"> {v.ref}</span>}</td>
                         <td className="tabular-nums whitespace-nowrap" title={v.docDate ?? undefined}>{shortDate(v.docDate)}{v.authorName && <> · <span className="muted">{v.authorName}</span></>}</td>
                         <td className="whitespace-nowrap"><span className={`tag ${v.status === "approved" ? "tag-ok" : v.status === "rejected" ? "tag-danger" : ""}`} style={v.status === "superseded" ? { opacity: 0.7 } : undefined}>{VERSION_STATUSES[v.status]}</span>{canEdit && <StatusSelect slug={slug} versionId={v.id} status={v.status} number={v.number} vendor={vendor} />}</td>
-                        <td className="bg-num">{formatRupiah(v.subtotal)}</td>
-                        <td className="bg-num">{formatRupiah(v.ppn)}</td>
-                        <td className="bg-num">{formatRupiah(v.pph23)}</td>
-                        <td className="bg-num">{formatRupiah(v.subtotal + v.ppn - v.pph23)}</td>
+                        <td className="bg-num">{fmt(v.subtotal)}</td>
+                        <td className="bg-num" title={`PPN ${fmt(v.ppn)} · PPh 23 ${fmt(v.pph23)}`}>{fmt(v.subtotal + v.ppn - v.pph23)}</td>
                         <td className="max-w-[18rem]"><span className="line-clamp-2" title={v.notes}>{v.notes}</span></td>
                         <td>{v.links.map((l, i) => <a key={l} href={l} target="_blank" rel="noreferrer noopener" className="me-2 underline">Link {i + 1}</a>)}</td>
                         <td className="whitespace-nowrap text-sm">
                           {v.status === "negotiating" && v.statusNote.startsWith(CANCEL_MARK) && <span className="tag tag-warn">persetujuan dibatalkan</span>}
-                          {prev && <Link href={`${base}?a=${prev.id}&b=${v.id}`} className="me-3 underline">Bandingkan dengan sebelumnya</Link>}
-                          <Link href={`${base}?a=${v.id}`} className="underline">Bandingkan…</Link>
+                          <Link href={prev ? `${base}?a=${prev.id}&b=${v.id}` : `${base}?a=${v.id}`} className="underline">Bandingkan</Link>
                         </td>
                       </tr>
                       );
                     })}
                   </tbody>
                 </table>
-                <p className="muted text-xs">{TAX_NOTE}</p>
               </div>
   );
 }
@@ -97,16 +93,16 @@ export function ScopeView({ slug, canEdit, today, scope, bids, addable, phases, 
           <h2 className="text-sm font-semibold">Perbandingan vendor</h2>
           <div className="overflow-x-auto">
             <table className="table w-full text-sm">
-              <thead><tr><th /><th className="text-start">Vendor</th><th className="bg-num">Nilai (sebelum pajak)</th><th className="text-start">Status nilai</th><th className="bg-num">Selisih vs budget</th><th className="bg-num">Vs termurah</th><th className="bg-num">Versi</th><th className="text-start">Status terakhir</th><th /></tr></thead>
+              <thead><tr><th /><th className="text-start">Vendor</th><th className="bg-num">Nilai sebelum pajak (Rp)</th><th className="text-start">Status nilai</th><th className="bg-num">Selisih vs budget (Rp)</th><th className="bg-num">Vs termurah (Rp)</th><th className="bg-num">Versi</th><th className="text-start">Status terakhir</th><th /></tr></thead>
               <tbody>
                 {cmp.map((c) => (
                   <tr key={c.bidId}>
                     <td><input type="checkbox" aria-label={`Pilih ${c.vendor} untuk dibandingkan`} disabled={!c.latestVersionId || (!sel.includes(c.bidId) && sel.length >= 2)} checked={sel.includes(c.bidId)} onChange={(e) => setSel(e.target.checked ? [...sel, c.bidId] : sel.filter((x) => x !== c.bidId))} /></td>
                     <td className="font-medium">{c.vendor} {c.chosen ? <span className="tag tag-ok">Dipilih</span> : <span className="tag">Alternatif</span>}</td>
-                    <td className="bg-num">{c.state === "none" ? "—" : formatRupiah(c.value)}</td>
+                    <td className="bg-num">{c.state === "none" ? "—" : fmt(c.value)}</td>
                     <td>{STATE(c)}</td>
-                    <td className={`bg-num ${c.vsBudget != null && c.vsBudget < 0 ? "text-danger" : ""}`}>{c.vsBudget == null ? "—" : formatRupiah(c.vsBudget)}</td>
-                    <td className="bg-num">{!valued || c.vsCheapest == null ? "—" : c.cheapest ? <span className="tag tag-ok">Termurah</span> : `+${formatRupiah(c.vsCheapest)}`}</td>
+                    <td className={`bg-num ${c.vsBudget != null && c.vsBudget < 0 ? "text-danger" : ""}`}>{c.vsBudget == null ? "—" : fmt(c.vsBudget)}</td>
+                    <td className="bg-num">{!valued || c.vsCheapest == null ? "—" : c.cheapest ? <span className="tag tag-ok">Termurah</span> : `+${fmt(c.vsCheapest)}`}</td>
                     <td className="bg-num">{c.versions}</td>
                     <td>{c.lastStatus ? VERSION_STATUSES[c.lastStatus as VersionStatusCode] : "—"}</td>
                     <td>{canEdit && !c.chosen && <button type="button" className="btn-secondary" disabled={!!busy} onClick={() => act(`p${c.bidId}`, () => chooseBid(slug, scope.id!, c.bidId), "Vendor dipilih.")}>{busy === `p${c.bidId}` ? "Menyimpan…" : "Pilih vendor ini"}</button>}</td>
@@ -118,6 +114,7 @@ export function ScopeView({ slug, canEdit, today, scope, bids, addable, phases, 
           {pair.length === 2 ? <Link className="btn-secondary" href={`${base}?a=${pair[0]}&b=${pair[1]}`}>Bandingkan versi terbaru kedua vendor</Link> : <p className="muted text-xs">Centang dua vendor untuk membandingkan versi terbarunya. Nilai = penawaran + change order disetujui; semua sebelum pajak (DPP).</p>}
         </section>
       )}
+      {bids.some((b) => b.versions.length > 0) && <p className="muted text-xs">{TAX_NOTE}</p>}
       {bids.length === 0 && <p className="muted text-sm">Belum ada vendor di lingkup ini.</p>}
       {bids.map((b) => {
         const latest = b.versions[b.versions.length - 1];
@@ -130,7 +127,6 @@ export function ScopeView({ slug, canEdit, today, scope, bids, addable, phases, 
               <span className="grow" />
               {canEdit && (
                 <>
-                  {!b.picked && <button type="button" className="btn-secondary" disabled={!!busy} onClick={() => act(`p${b.id}`, () => chooseBid(slug, scope.id!, b.id), "Vendor dipilih.")}>{busy === `p${b.id}` ? "Menyimpan…" : "Pilih vendor ini"}</button>}
                   <button type="button" className="btn" onClick={() => setAdding({ bid: b })}>Versi baru</button>
                   <form action={async () => act("rb", () => removeBid(slug, b.id), "Vendor dihapus dari lingkup.")}><ConfirmButton className="btn-ghost" message={`Hapus ${b.vendor} dari lingkup ini beserta semua versinya?`}>Hapus</ConfirmButton></form>
                 </>
@@ -139,7 +135,7 @@ export function ScopeView({ slug, canEdit, today, scope, bids, addable, phases, 
             {b.versions.length === 0 ? <p className="muted text-sm">Belum ada versi penawaran.</p> : (
               <VersionTable slug={slug} canEdit={canEdit} versions={b.versions} base={base} vendor={b.vendor} />
             )}
-            <div className="space-y-2">
+            {latest && <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-semibold">Tambahan pekerjaan</h3>
                 {canEdit && <button type="button" className="btn-secondary" onClick={() => setAdding({ bid: b, co: "new" })}>Tambahan baru</button>}
@@ -155,7 +151,7 @@ export function ScopeView({ slug, canEdit, today, scope, bids, addable, phases, 
                 );
               })}
               {b.changeOrders.some((c) => c.versions.some((v) => v.status === "approved")) && b.versions.length > 1 && <p className="muted text-xs">Pastikan tambahan pekerjaan belum termasuk di versi penawaran terbaru.</p>}
-            </div>
+            </div>}
             <InvoiceTable slug={slug} canEdit={canEdit} today={today} invoices={b.invoices} scopeId={scope.id!} vendorId={b.vendorId} vendor={b.vendor} ppnBp={b.ppnBp} pph23Bp={b.pph23Bp} docs={b.docs} />
             {adding?.bid.id === b.id && (() => {
               const c = adding.co;

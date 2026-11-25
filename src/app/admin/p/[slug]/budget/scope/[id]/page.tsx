@@ -5,6 +5,7 @@ import { can } from "@/lib/auth/permissions";
 import { categoryLabel, DEFAULT_PPH23_BP, DEFAULT_PPN_BP } from "@/lib/budget/catalog";
 import { invoiceRow, jakartaToday } from "@/lib/budget/invoice-view";
 import { formatRupiah } from "@/lib/budget/money";
+import { bidValue, scopeNumbers } from "@/lib/budget/rollup";
 import { compareBids } from "@/lib/budget/vendors";
 import { getScope, getScopeHistory } from "@/lib/budget/service";
 import { listDeliverables } from "@/lib/deliverables/service";
@@ -39,6 +40,11 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
   });
   const names = new Map(d.bids.map((b) => [b.id, d.vendors.find((v) => v.id === b.vendorId)?.name ?? "—"]));
   const cmp = compareBids(d.scope.id, { scopes: [{ id: d.scope.id, budget: d.scope.budget }], bids: d.bids, docs: d.docs, versions: d.versions, picks: d.picks, invoices: d.invoices, payments: d.payments }, names);
+  const rows = { scopes: [{ id: d.scope.id, budget: d.scope.budget }], bids: d.bids, docs: d.docs, versions: d.versions, picks: d.picks, invoices: d.invoices, payments: d.payments };
+  const sn = scopeNumbers(d.scope.id, rows);
+  const pbv = pick ? bidValue(pick.bidId, rows, pick.versionId) : null;
+  const pv = pbv?.versionId ? d.versions.find((v) => v.id === pbv.versionId) : null;
+  const STATE = { pinned: "Terpilih", approved: "Disetujui", provisional: "perkiraan", none: "" } as const;
   const taken = new Set(d.bids.map((b) => b.vendorId));
   return (
     <div className="mx-auto max-w-[1100px] space-y-5">
@@ -46,6 +52,7 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
         <p className="page-meta"><Link href={`/admin/p/${slug}/budget`}>Anggaran & vendor</Link></p>
         <h1 className="page-title">{d.scope.name}</h1>
         <p className="page-meta">{categoryLabel(d.scope.category)} · Target <span className="tabular-nums">{formatRupiah(d.scope.budget)}</span> sebelum pajak</p>
+        <p className="page-meta">{pick && pbv ? <>Terpilih: {names.get(pick.bidId)}{pv && ` v${pv.number}`}{STATE[pbv.state] && ` (${STATE[pbv.state]})`} · Dipilih <span className="tabular-nums">{formatRupiah(sn.chosen)}</span> · Ditagih <span className="tabular-nums">{formatRupiah(sn.invoiced)}</span> · Dibayar <span className="tabular-nums">{formatRupiah(sn.paid)}</span> · Sisa budget <span className={`tabular-nums ${sn.variance < 0 ? "text-danger" : ""}`}>{formatRupiah(sn.variance)}</span></> : "Belum ada vendor terpilih."}</p>
         {d.scenarioName && <p className="page-meta"><Link href={`/admin/p/${slug}/budget?tab=rencana`}><span className="tag">Rencana: {d.scenarioName}</span></Link></p>}
         <p className="page-meta">Fase: {d.phases.length ? d.phases.map((p, i) => <span key={p.id}>{i > 0 && ", "}<Link href={`/admin/p/${slug}/timeline?item=${p.id}`} className="underline">{p.name}</Link></span>) : "—"} · Deliverable: {d.deliverables.map((x) => x.name).join(", ") || "—"}</p>
       </div>
