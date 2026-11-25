@@ -13,6 +13,7 @@ const ROW = { changed: "cmp-changed", added: "cmp-added", removed: "cmp-removed"
 const sign = (n: number) => (n === 0 ? "—" : `${n > 0 ? "+" : ""}${formatRupiah(n)}`);
 const tone = (n: number) => (n > 0 ? "text-danger" : "muted");
 const dash = (s?: string) => s ?? "—";
+const inPkg = <span className="muted">termasuk paket</span>;
 
 function Head({ s, label }: { s: Side; label: string }) {
   return (
@@ -49,7 +50,7 @@ export default async function BudgetComparePage({ params, searchParams }: { para
     </optgroup>
   ));
   const count = (k: string) => c?.diff.rows.filter((r) => r.kind === k).length ?? 0;
-  const summary = [[count("changed"), "berubah"], [count("added"), "baru"], [count("removed"), "hilang"]].filter(([n]) => n).map(([n, l]) => `${n} ${l}`).join(", ") || "Tidak ada perbedaan";
+  const summary = [[count("changed"), "berubah"], [count("added"), "baru"], [count("removed"), "hilang"]].filter(([n]) => n).map(([n, l]) => `${n} ${l}`).join(", ") || (c && c.diff.dSubtotal !== 0 ? "Total paket berubah, rincian isi sama" : "Tidak ada perbedaan");
   const net = (x: Side) => x.subtotal + x.ppn - x.pph23;
   const tot = c ? [["Subtotal (sebelum pajak)", c.a.subtotal, c.b.subtotal], ["PPN (perkiraan)", c.a.ppn, c.b.ppn], ["PPh 23 (perkiraan)", c.a.pph23, c.b.pph23], ["Net (perkiraan)", net(c.a), net(c.b)]] as const : [];
   return (
@@ -83,10 +84,10 @@ export default async function BudgetComparePage({ params, searchParams }: { para
                     <td><span className={`tag ${r.kind === "added" ? "tag-ok" : r.kind === "removed" ? "tag-danger" : r.kind === "changed" ? "tag-warn" : ""}`}>{KIND[r.kind]}</span></td>
                     <td className="bg-num">{dash(r.a && `${formatQty(r.a.qtyMilli)} ${r.a.unit}`)}</td>
                     <td className="bg-num">{dash(r.b && `${formatQty(r.b.qtyMilli)} ${r.b.unit}`)}</td>
-                    <td className="bg-num">{dash(r.a && formatRupiah(r.a.unitPrice))}</td>
-                    <td className="bg-num">{dash(r.b && formatRupiah(r.b.unitPrice))}</td>
-                    <td className="bg-num">{dash(r.a && formatRupiah(r.a.amount))}</td>
-                    <td className="bg-num">{dash(r.b && formatRupiah(r.b.amount))}</td>
+                    <td className="bg-num">{r.a && c.a.lump ? inPkg : dash(r.a && formatRupiah(r.a.unitPrice))}</td>
+                    <td className="bg-num">{r.b && c.b.lump ? inPkg : dash(r.b && formatRupiah(r.b.unitPrice))}</td>
+                    <td className="bg-num">{r.a && c.a.lump ? inPkg : dash(r.a && formatRupiah(r.a.amount))}</td>
+                    <td className="bg-num">{r.b && c.b.lump ? inPkg : dash(r.b && formatRupiah(r.b.amount))}</td>
                     <td className={`bg-num ${tone(r.delta)}`}>{sign(r.delta)}</td>
                   </tr>
                 ))}

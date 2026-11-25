@@ -1,15 +1,16 @@
 import { notFound } from "next/navigation";
 import { PrintActions } from "@/components/timeline/PrintActions";
 import { can } from "@/lib/auth/permissions";
-import { categoryLabel, TAX_NOTE } from "@/lib/budget/catalog";
-import { formatRupiah } from "@/lib/budget/money";
+import { categoryLabel, TAX_NOTE, VERSION_STATUSES, type VersionStatusCode } from "@/lib/budget/catalog";
+import { DRIVE_STATUS, MEDIA, PURPOSES } from "@/lib/budget/drives";
+import { formatRupiah, lineAmount } from "@/lib/budget/money";
 import { invoiceState, rollup } from "@/lib/budget/rollup";
 import { buildComparison } from "@/lib/budget/scenarios";
 import { getBudget } from "@/lib/budget/service";
 import { loadProject } from "@/lib/project-context";
 import { fmtDate, today } from "@/lib/schedule/dates";
 
-const VIEWS = { ringkasan: "Ringkasan anggaran", tagihan: "Tagihan", rencana: "Perbandingan rencana" } as const;
+const VIEWS = { ringkasan: "Ringkasan anggaran", tagihan: "Tagihan", rencana: "Perbandingan rencana", drives: "Belanja hard drive", scope: "Penawaran per lingkup" } as const;
 const INV = { planned: "Rencana", received: "Diterima", cancelled: "Dibatalkan" } as const;
 const th = "py-1 pe-3 text-left font-normal";
 const thn = "py-1 ps-3 text-right font-normal";
@@ -17,13 +18,15 @@ const td = "py-1 pe-3 align-top";
 const tdn = "py-1 ps-3 text-right align-top";
 const rp = formatRupiah;
 
-export default async function PrintBudget({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ view?: string }> }) {
+export default async function PrintBudget({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ view?: string; scope?: string }> }) {
   const { slug } = await params;
   const q = await searchParams;
   const { db, project, role, user } = await loadProject(slug);
   if (!can(role, "budget.view")) notFound();
-  const view = (q.view && q.view in VIEWS ? q.view : "ringkasan") as keyof typeof VIEWS;
   const data = await getBudget(db, user.id, project.id);
+  const one = q.view === "scope" ? data.scopes.find((s) => s.id === q.scope) : undefined; // scope must belong to the project
+  if (q.view === "scope" && !one) notFound();
+  const view = (q.view && q.view in VIEWS ? q.view : "ringkasan") as keyof typeof VIEWS;
   const { rows, total } = rollup(data);
   const scope = (id: string) => data.scopes.find((s) => s.id === id);
   const vendor = (id: string) => data.vendors.find((v) => v.id === id)?.name ?? "—";
@@ -34,10 +37,10 @@ export default async function PrintBudget({ params, searchParams }: { params: Pr
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <h1>{project.name}</h1>
-          <p className="text-sm">{VIEWS[view]}{view !== "rencana" && data.scenarioName ? ` · Rencana: ${data.scenarioName}` : ""}</p>
+          <p className="text-sm">{VIEWS[view]}{one ? `: ${one.name}` : ""}{view !== "rencana" && data.scenarioName ? ` · Rencana: ${data.scenarioName}` : ""}</p>
           <p className="muted text-sm">Dicetak {fmtDate(today())}</p>
         </div>
-        <PrintActions backHref={`/admin/p/${slug}/budget`} backLabel="Kembali ke anggaran" />
+        <PrintActions backHref={one ? `/admin/p/${slug}/budget/scope/${one.id}` : `/admin/p/${slug}/budget`} backLabel="Kembali ke anggaran" />
       </div>
       <p className="mt-3 text-sm">Semua angka sebelum pajak (DPP), Rupiah. Dipilih = penawaran + tambahan pekerjaan disetujui.</p>
       <table className="print-sheet mt-3 w-full text-sm tabular-nums">
@@ -61,6 +64,27 @@ export default async function PrintBudget({ params, searchParams }: { params: Pr
               {data.invoices.map((i) => {
                 const st = invoiceState(i, data.payments.filter((p) => p.invoiceId === i.id));
                 return <tr key={i.id}><td className={td}>{scope(i.scopeId)?.name ?? "—"}</td><td className={td}>{vendor(i.vendorId)}</td><td className={td}>{i.termin}</td><td className={td}>{i.ref}</td><td className={`${td} whitespace-nowrap`}>{i.dueDate ? fmtDate(i.dueDate) : "—"}</td><td className={tdn}>{rp(i.subtotal)}</td><td className={tdn}>{rp(i.ppn)}</td><td className={tdn}>{rp(i.pph23)}</td><td className={tdn}>{rp(st.net)}</td><td className={tdn}>{rp(st.cash)}</td><td className={tdn}>{rp(st.remaining)}</td><td className={`${td} ps-3`}>{INV[i.status]}</td></tr>;
+              })}
+            </tbody>
+          </>
+        )}
+        {view === "drives" && (
+          <>
+            <thead className="border-b border-line"><tr className="muted"><th className={th}>Rencana</th><th className={th}>Tujuan</th><th className={th}>Merek</th><th className={th}>Model</th><th className={th}>Tipe</th><th className={thn}>Kapasitas (GB)</th><th className={thn}>Jumlah</th><th className={thn}>Harga satuan</th><th className={thn}>Subtotal</th><th className={th}>Status</th><th className={th}>Dibutuhkan sebelum</th></tr></thead>
+            <tbody className="divide-y divide-line">
+              {data.allDriveLines.map((l) => <tr key={l.id}><td className={td}>{data.scenarios.find((x) => x.id === l.scenarioId)?.name ?? "—"}</td><td className={td}>{PURPOSES[l.purpose]}</td><td className={td}>{l.brand || "—"}</td><td className={td}>{l.model || "—"}</td><td className={td}>{MEDIA[l.media]}</td><td className={tdn}>{l.capacityGb}</td><td className={tdn}>{l.qty}</td><td className={tdn}>{rp(l.unitPrice)}</td><td className={tdn}>{rp(lineAmount(l.qty * 1000, l.unitPrice))}</td><td className={`${td} ps-3`}>{DRIVE_STATUS[l.status]}</td><td className={`${td} whitespace-nowrap`}>{l.neededBy ? fmtDate(l.neededBy) : "—"}</td></tr>)}
+            </tbody>
+          </>
+        )}
+        {view === "scope" && one && (
+          <>
+            <thead className="border-b border-line"><tr className="muted"><th className={th}>Vendor</th><th className={th}>Dokumen</th><th className={th}>Versi</th><th className={th}>Tanggal</th><th className={th}>Status</th><th className={thn}>Subtotal</th><th className={thn}>PPN (perk.)</th><th className={thn}>PPh 23 (perk.)</th><th className={thn}>Net</th></tr></thead>
+            <tbody className="divide-y divide-line">
+              {data.versions.flatMap((v) => {
+                const doc = data.docs.find((d) => d.id === v.docId);
+                const bid = doc && data.bids.find((b) => b.id === doc.bidId);
+                if (!doc || !bid || bid.scopeId !== one.id) return [];
+                return [<tr key={v.id}><td className={td}>{vendor(bid.vendorId)}</td><td className={td}>{doc.kind === "quote" ? "Penawaran" : `Tambahan: ${doc.title}`}</td><td className={td}>v{v.number}</td><td className={`${td} whitespace-nowrap`}>{v.docDate ? fmtDate(v.docDate) : "—"}</td><td className={td}>{VERSION_STATUSES[v.status as VersionStatusCode] ?? v.status}</td><td className={tdn}>{rp(v.subtotal)}</td><td className={tdn}>{rp(v.ppn)}</td><td className={tdn}>{rp(v.pph23)}</td><td className={tdn}>{rp(v.subtotal + v.ppn - v.pph23)}</td></tr>];
               })}
             </tbody>
           </>

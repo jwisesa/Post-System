@@ -1,7 +1,7 @@
 // CSV rows for the budget exports. Amounts are plain integer Rupiah (no separators), all headers say "(Rp)". Pre-tax unless a column says otherwise.
 import type { Db } from "@/db/client";
 import { can } from "../auth/permissions";
-import { getProjectForUser } from "../services";
+import { getProjectForUser, InputError } from "../services";
 import { categoryLabel, VERSION_STATUSES, type VersionStatusCode } from "./catalog";
 import { lineAmount } from "./money";
 import { invoiceState, rollup } from "./rollup";
@@ -9,7 +9,7 @@ import { buildComparison } from "./scenarios";
 import { getBudget } from "./service";
 import { DRIVE_STATUS, MEDIA, PURPOSES } from "./drives";
 
-export const EXPORT_TYPES = ["scopes", "versions", "invoices", "drives", "scenarios"] as const;
+export const EXPORT_TYPES = ["scopes", "versions", "invoices", "drives", "scenarios", "vendors"] as const;
 export type ExportType = (typeof EXPORT_TYPES)[number];
 const INV_STATUS = { planned: "Rencana", received: "Diterima", cancelled: "Dibatalkan" } as const;
 const n = (x: number) => String(x);
@@ -25,8 +25,10 @@ export async function authorizeBudgetExport(db: Db, user: { id: string } | null,
   return { ok: true, projectId: row.project.id, userId: user.id, slug: row.project.slug };
 }
 
-export async function budgetCsvRows(db: Db, userId: string, projectId: string, type: ExportType): Promise<string[][]> {
+/** scopeId (optional) narrows "versions" to one scope; it must belong to the project, else InputError. */
+export async function budgetCsvRows(db: Db, userId: string, projectId: string, type: ExportType, scopeId?: string | null): Promise<string[][]> {
   const data = await getBudget(db, userId, projectId); // requires budget.view
+  if (scopeId && !data.scopes.some((s) => s.id === scopeId)) throw new InputError("Lingkup tidak ditemukan.");
   const scopeName = (id: string) => data.scopes.find((s) => s.id === id)?.name ?? "";
   const vendorName = (id: string) => data.vendors.find((v) => v.id === id)?.name ?? "";
   if (type === "scopes") {
@@ -47,7 +49,7 @@ export async function budgetCsvRows(db: Db, userId: string, projectId: string, t
       ...data.versions.flatMap((v) => {
         const doc = data.docs.find((d) => d.id === v.docId);
         const bid = doc && data.bids.find((b) => b.id === doc.bidId);
-        if (!doc || !bid) return [];
+        if (!doc || !bid || (scopeId && bid.scopeId !== scopeId)) return [];
         return [[csvText(scopeName(bid.scopeId)), csvText(vendorName(bid.vendorId)), doc.kind === "quote" ? "Penawaran" : csvText(`Tambahan: ${doc.title}`), `v${v.number}`, v.docDate ?? "", VERSION_STATUSES[v.status as VersionStatusCode] ?? v.status, n(v.subtotal), n(v.ppn), n(v.pph23), n(v.subtotal + v.ppn - v.pph23), csvText(v.notes)]];
       }),
     ];
@@ -65,6 +67,12 @@ export async function budgetCsvRows(db: Db, userId: string, projectId: string, t
     return [
       ["Rencana", "Tujuan", "Merek", "Model", "Tipe/media", "Kapasitas (GB)", "Jumlah", "Harga satuan (Rp)", "Subtotal (Rp)", "Status", "Dibutuhkan sebelum"],
       ...data.allDriveLines.map((l) => [csvText(data.scenarios.find((s) => s.id === l.scenarioId)?.name ?? ""), PURPOSES[l.purpose], csvText(l.brand), csvText(l.model), MEDIA[l.media], n(l.capacityGb), n(l.qty), n(l.unitPrice), n(lineAmount(l.qty * 1000, l.unitPrice)), DRIVE_STATUS[l.status], l.neededBy ?? ""]),
+    ];
+  }
+  if (type === "vendors") {
+    return [
+      ["Vendor", "Kategori", "Kontak", "Email", "Telepon", "PKP (PPN)", "Dipotong PPh 23", "Status"],
+      ...data.vendors.map((v) => [csvText(v.name), csvText(v.categories.map(categoryLabel).join(", ")), csvText(v.contactName), csvText(v.email), csvText(v.phone), v.chargesPpn ? "Ya" : "Tidak", v.withholdsPph23 ? "Ya" : "Tidak", v.archivedAt ? "Diarsipkan" : "Aktif"]),
     ];
   }
   const cmp = buildComparison(data, data.scenarios.map((s) => s.id));

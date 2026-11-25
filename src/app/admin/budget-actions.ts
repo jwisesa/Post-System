@@ -7,7 +7,7 @@ import * as b from "@/lib/budget/service";
 import { runForClient as run } from "./action-helpers";
 
 export async function saveVendor(slug: string, id: string | null, input: b.VendorInput) {
-  return run(slug, (db, u, p) => (id ? b.updateVendor(db, u, p, id, input).then(() => ({})) : b.createVendor(db, u, p, input).then(() => ({}))));
+  return run(slug, (db, u, p) => (id ? b.updateVendor(db, u, p, id, input).then(() => ({})) : b.createVendor(db, u, p, input)));
 }
 export async function archiveVendor(slug: string, id: string, archived: boolean) {
   return run(slug, (db, u, p) => b.setVendorArchived(db, u, p, id, archived).then(() => ({})));

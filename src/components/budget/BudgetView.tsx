@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { saveScope } from "@/app/admin/budget-actions";
 import { Drawer } from "@/components/ui/controls";
 import { Icon } from "@/components/ui/icons";
+import { ExportMenu, type ExportItem } from "./ExportMenu";
 import { useToast } from "@/components/ui/toast";
 import { categoryLabel, SERVICE_CATEGORIES, TAX_NOTE } from "@/lib/budget/catalog";
 import { fmt, MoneyError, parseRupiah, plainRupiah } from "@/lib/budget/money";
@@ -64,90 +65,101 @@ export function ScopeDrawer({ slug, init, phases, deliverables, onClose }: { slu
   );
 }
 
-export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases, deliverables, vendors, contacts, drive, plans, initialTab }: {
-  plans: { scenarioName: string | null; scenarios: ScenarioInfo[]; cmp: Comparison; scopes: PickScope[]; live: { invoiced: number; paid: number } }; initialTab?: "sum" | "plans" | "drive" | "bills";
+export type BudgetTab = "sum" | "bills" | "vendor" | "drive" | "plans";
+export const TAB_PARAM: Record<BudgetTab, string> = { sum: "ringkasan", bills: "bills", vendor: "vendor", drive: "drive", plans: "rencana" };
+const TAB_LABEL: Record<BudgetTab, string> = { sum: "Ringkasan", bills: "Tagihan", vendor: "Vendor", drive: "Hard drive", plans: "Rencana" };
+
+/** Per-recap exports: each tab exports only its own data. */
+const exportsFor = (slug: string, tab: BudgetTab): ExportItem[] => {
+  const csv = (type: string, label: string): ExportItem => ({ href: `/admin/p/${slug}/budget/export?type=${type}`, label, kind: "csv" });
+  const pdf = (view: string, label: string): ExportItem => ({ href: `/admin/p/${slug}/budget/print?view=${view}`, label, kind: "pdf" });
+  return { sum: [csv("scopes", "CSV lingkup"), pdf("ringkasan", "PDF ringkasan")], bills: [csv("invoices", "CSV tagihan"), pdf("tagihan", "PDF tagihan")], vendor: [csv("vendors", "CSV vendor")], drive: [csv("drives", "CSV belanja drive"), pdf("drives", "PDF belanja drive")], plans: [csv("scenarios", "CSV perbandingan rencana"), pdf("rencana", "PDF rencana")] }[tab];
+};
+
+export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases, deliverables, vendors, contacts, drive, plans, tab }: {
+  plans: { scenarioName: string | null; scenarios: ScenarioInfo[]; cmp: Comparison; scopes: PickScope[]; live: { invoiced: number; paid: number } }; tab: BudgetTab;
   drive: Omit<DriveProps, "slug" | "canEdit">;
   slug: string; canEdit: boolean; rows: ScopeRow[]; total: { budget: number; chosen: number; invoiced: number; paid: number; overpaid: number; provisional: boolean }; today: string; invoices: InvoiceRow[];
   phases: Option[]; deliverables: Option[]; vendors: VendorRow[]; contacts: Option[];
 }) {
-  const [tab, setTab] = useState<"sum" | "bills" | "vendor" | "drive" | "plans">(initialTab ?? "sum");
   const [adding, setAdding] = useState(false);
-  const over = (n: number) => (n < 0 ? "text-danger" : "");
   const dash = <span className="muted">—</span>;
   const money = (n: number) => (n === 0 ? dash : fmt(n));
   const picked = rows.filter((r) => r.state !== "none" || r.drives > 0);
   const totalVar = picked.reduce((n, r) => n + r.variance, 0);
-  const exp = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    const shut = () => exp.current?.removeAttribute("open");
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape" && exp.current?.open) { shut(); exp.current.querySelector("summary")?.focus(); } };
-    const down = (e: PointerEvent) => { if (!exp.current?.contains(e.target as Node)) shut(); };
-    document.addEventListener("keydown", key);
-    document.addEventListener("pointerdown", down);
-    return () => { document.removeEventListener("keydown", key); document.removeEventListener("pointerdown", down); };
-  }, []);
+  const tabHref = (t: BudgetTab) => `?tab=${TAB_PARAM[t]}`;
+  const stage = (r: ScopeRow) => r.state === "approved" ? <span className="tag tag-ok">Disetujui</span> : r.state === "pinned" ? <span className="tag">Masuk budget</span> : r.state === "provisional" ? <><span className="tag tag-warn">Masuk budget · perkiraan</span>{r.cancelled && <span className="tag tag-warn ms-1">persetujuan dibatalkan</span>}</> : null;
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="seg" role="group" aria-label="Tampilan anggaran">
-          <button type="button" aria-pressed={tab === "sum"} onClick={() => setTab("sum")}>Ringkasan</button>
-          <button type="button" aria-pressed={tab === "bills"} onClick={() => setTab("bills")}>Tagihan</button>
-          <button type="button" aria-pressed={tab === "vendor"} onClick={() => setTab("vendor")}>Vendor</button>
-          <button type="button" aria-pressed={tab === "drive"} onClick={() => setTab("drive")}>Hard drive</button>
-          <button type="button" aria-pressed={tab === "plans"} onClick={() => setTab("plans")}>Rencana</button>
+      <header className="page-head">
+        <div>
+          <h1 className="page-title">Anggaran & vendor</h1>
+          <p className="page-meta">Budget per lingkup, penawaran vendor, dan versinya. Angka sebelum pajak.{plans.scenarioName && <> <Link href={tabHref("plans")} replace scroll={false} className="tag" title="Buka tab Rencana">Rencana: {plans.scenarioName}</Link></>}</p>
         </div>
-        {plans.scenarioName && tab !== "plans" && tab !== "drive" && <button type="button" className="tag" title="Buka tab Rencana" onClick={() => setTab("plans")}>Rencana: {plans.scenarioName}</button>}
-        {tab === "sum" && canEdit && rows.length > 0 && <button type="button" className="btn-secondary" onClick={() => setAdding(true)}>Tambah lingkup</button>}
-        <details ref={exp} className="tl-details relative ml-auto">
-          <summary className="btn-secondary cursor-pointer" aria-label="Export"><Icon name="download" /> Export</summary>
-          <div className="tl-pop" role="menu" aria-label="Export">
-            {[
-              ...[["ringkasan", "PDF ringkasan"], ["tagihan", "PDF tagihan"], ["rencana", "PDF rencana"]].map(([v, label]) => ({ href: `/admin/p/${slug}/budget/print?view=${v}`, icon: "print" as const, label, download: false })),
-              ...[["scopes", "CSV lingkup"], ["versions", "CSV versi penawaran"], ["invoices", "CSV tagihan"], ["drives", "CSV belanja drive"], ["scenarios", "CSV perbandingan rencana"]].map(([t, label]) => ({ href: `/admin/p/${slug}/budget/export?type=${t}`, icon: "download" as const, label, download: true })),
-            ].map((l) => (
-              <a key={l.href} role="menuitem" href={l.href} download={l.download || undefined} onClick={(e) => e.currentTarget.closest("details")?.removeAttribute("open")}><Icon name={l.icon} /> {l.label}</a>
-            ))}
-          </div>
-        </details>
-      </div>
+        <div className="page-actions">
+          {tab === "sum" && canEdit && rows.length > 0 && <button type="button" className="btn-secondary" onClick={() => setAdding(true)}>Tambah lingkup</button>}
+          <ExportMenu key={tab} items={exportsFor(slug, tab)} />
+        </div>
+      </header>
+      <nav className="seg bg-tabs" aria-label="Tampilan anggaran">
+        {(Object.keys(TAB_LABEL) as BudgetTab[]).map((t) => (
+          <Link key={t} href={tabHref(t)} replace scroll={false} aria-current={tab === t ? "page" : undefined}>{TAB_LABEL[t]}</Link>
+        ))}
+      </nav>
       {tab === "sum" && (rows.length === 0 ? (
-        <div className="space-y-3">
-          <p className="muted text-sm">Belum ada lingkup. Mulai dengan satu lingkup pekerjaan, misalnya Grading, lalu tambahkan vendor dan penawarannya.</p>
-          {canEdit && <button type="button" className="btn" onClick={() => setAdding(true)}>Tambah lingkup</button>}
+        <div className="space-y-4">
+          <ol className="bg-steps">
+            {[["Lingkup", "Satu jenis pekerjaan beserta budget targetnya, misalnya Grading."], ["Vendor", "Siapa saja yang bisa mengerjakannya. Tambahkan di tab Vendor atau langsung dari lingkup."], ["Penawaran", "Catat tiap versi penawaran vendor, lalu masukkan yang terpilih ke budget."]].map(([h, t], i) => (
+              <li key={h}><span className="bg-step-n" aria-hidden>{i + 1}</span><span><span className="block font-semibold">{h}</span><span className="text-ink-2 text-[13px]">{t}</span></span></li>
+            ))}
+          </ol>
+          {canEdit ? <button type="button" className="btn" onClick={() => setAdding(true)}>Tambah lingkup</button> : <p className="muted text-sm">Belum ada lingkup.</p>}
         </div>
       ) : (
         <>
           <div className="muted text-sm"><p>Semua angka sebelum pajak (DPP). Dipilih = penawaran + tambahan pekerjaan disetujui. Dibayar = bagian sebelum pajak dari tagihan diterima yang sudah dibayar.</p><details><summary className="cursor-pointer underline">Soal pajak</summary><p>Pajak hanya perkiraan: PPN efektif 11% (12% atas DPP nilai lain 11/12) dan PPh 23 2% dari jumlah sebelum PPN, tergantung vendor. {TAX_NOTE} Rinciannya ada di tiap versi penawaran.</p></details></div>
-          <div className="overflow-x-auto">
-            <table className="table w-full text-sm">
-              <thead><tr><th className="text-start">Lingkup</th><th className="bg-num">Budget (Rp)</th><th className="bg-num">Dipilih (Rp)</th><th className="bg-num">Ditagih (Rp)</th><th className="bg-num">Dibayar (Rp)</th><th className="bg-num" title="Budget dikurangi nilai dipilih. Negatif (merah) = melebihi budget.">Sisa budget (Rp)</th><th className="text-start">Vendor di budget</th></tr></thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td><Link href={`/admin/p/${slug}/budget/scope/${r.id}`} className="font-medium underline">{r.name}</Link>{categoryLabel(r.category).toLowerCase() !== r.name.trim().toLowerCase() && <> <span className="muted">{categoryLabel(r.category)}</span></>}</td>
-                    <td className="bg-num">{fmt(r.budget)}</td>
-                    <td className="bg-num">{r.state === "none" && r.drives === 0 ? <span className="muted">Belum dipilih</span> : r.state === "none" ? <>{fmt(r.chosen)} <span className="tag">belanja drive</span></> : <>{fmt(r.chosen)} {r.state === "provisional" ? <><span className="tag tag-warn">perkiraan</span>{r.cancelled && <span className="tag tag-warn">persetujuan dibatalkan</span>}</> : <span className="tag tag-ok">{r.state === "pinned" ? "Masuk budget" : "Disetujui"}</span>}</>}</td>
-                    <td className={`bg-num ${r.overInvoiced > 0 ? "text-danger" : ""}`}>{money(r.invoiced)}</td>
-                    <td className={`bg-num ${r.overpaid > 0 ? "text-danger" : ""}`}>{money(r.paid)}</td>
-                    <td className={`bg-num ${r.state === "none" && r.drives === 0 ? "muted" : r.overpaid > 0 ? "text-danger" : over(r.variance)}`}>{r.state === "none" && r.drives === 0 ? "—" : <>{fmt(r.variance)}{r.budget > 0 && r.chosen > 0 && <span className="bg-meter" aria-hidden="true"><i style={{ inlineSize: `${Math.min(r.chosen / r.budget, 1) * 100}%`, background: r.chosen > r.budget ? "var(--danger)" : "var(--ok)" }} /></span>}{r.chosen > r.budget && <> <span className="tag tag-danger">melebihi</span></>}</>}</td>
-                    <td>{r.vendor ?? <span className="muted">Belum dipilih</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot><tr className="font-medium">
-                <td>Total</td><td className="bg-num">{fmt(total.budget)}</td>
-                <td className="bg-num">{money(total.chosen)} {total.provisional && <span className="tag tag-warn">perkiraan</span>}</td>
-                <td className="bg-num">{money(total.invoiced)}</td><td className={`bg-num ${total.overpaid > 0 ? "text-danger" : ""}`}>{money(total.paid)}</td>
-                <td className={`bg-num ${over(totalVar)}`} title="Hanya lingkup yang sudah dipilih">{total.chosen === 0 ? dash : fmt(totalVar)}</td><td />
-              </tr></tfoot>
-            </table>
+          <div className="bg-sum">
+            <div className="bg-sumrow bg-sumhead" aria-hidden="true"><span>Lingkup</span><span>Budget (Rp)</span><span>Dipilih (Rp)</span><span title="Budget dikurangi nilai dipilih. Negatif (merah) = melebihi budget.">Sisa (Rp)</span><span>Dibayar (Rp)</span><span /></div>
+            {rows.map((r) => {
+              const none = r.state === "none" && r.drives === 0;
+              const showCat = categoryLabel(r.category).toLowerCase() !== r.name.trim().toLowerCase();
+              const sep = <span aria-hidden> · </span>;
+              const parts = [r.vendor ? <span key="v">{r.vendor}</span> : null, none ? <span key="s" className="muted">Belum dipilih</span> : r.state === "none" ? <span key="s" className="tag">belanja drive</span> : <span key="s">{stage(r)}</span>, showCat ? <span key="c">{categoryLabel(r.category)}</span> : null].filter(Boolean);
+              return (
+                <Link key={r.id} href={`/admin/p/${slug}/budget/scope/${r.id}`} className="row-btn bg-sumrow">
+                  <span className="min-w-0">
+                    <span className="block font-semibold">{r.name}</span>
+                    <span className="text-ink-2 block text-[12px]">{parts.map((x, i) => <span key={i}>{i > 0 && sep}{x}</span>)}</span>
+                  </span>
+                  <span className="bg-cell"><span className="bg-lab">Budget</span><span className="bg-num block">{fmt(r.budget)}</span></span>
+                  <span className="bg-cell"><span className="bg-lab">Dipilih</span><span className="bg-num block">{none ? <span className="muted">—</span> : fmt(r.chosen)}</span></span>
+                  <span className="bg-cell"><span className="bg-lab">Sisa</span>
+                    <span className={`bg-num block ${none ? "muted" : r.variance < 0 || r.overpaid > 0 ? "text-danger" : ""}`}>{none ? "—" : fmt(r.variance)}</span>
+                    {!none && r.budget > 0 && r.chosen > 0 && <span className="bg-meter is-block" aria-hidden="true"><i style={{ inlineSize: `${Math.min(r.chosen / r.budget, 1) * 100}%`, background: r.chosen > r.budget ? "var(--danger)" : "var(--ok)" }} /></span>}
+                  </span>
+                  <span className="bg-cell"><span className="bg-lab">Dibayar</span>
+                    <span className={`bg-num block ${r.overpaid > 0 ? "text-danger" : ""}`}>{money(r.paid)}</span>
+                    <span className={`bg-num text-ink-2 block text-[12px] ${r.overInvoiced > 0 ? "text-danger" : ""}`}>{r.invoiced > 0 ? `dari ${fmt(r.invoiced)}` : "belum ditagih"}</span>
+                  </span>
+                  <span className="bg-chev" aria-hidden="true"><Icon name="chevron" /></span>
+                </Link>
+              );
+            })}
+            <div className="bg-sumrow bg-sumtotal font-medium">
+              <span>Total</span>
+              <span className="bg-cell"><span className="bg-lab">Budget</span><span className="bg-num block">{fmt(total.budget)}</span></span>
+              <span className="bg-cell"><span className="bg-lab">Dipilih</span><span className="bg-num block">{money(total.chosen)}{total.provisional && <> <span className="tag tag-warn">perkiraan</span></>}</span></span>
+              <span className="bg-cell"><span className="bg-lab">Sisa</span><span className={`bg-num block ${totalVar < 0 ? "text-danger" : ""}`} title="Hanya lingkup yang sudah dipilih">{total.chosen === 0 ? dash : fmt(totalVar)}</span></span>
+              <span className="bg-cell"><span className="bg-lab">Dibayar</span><span className={`bg-num block ${total.overpaid > 0 ? "text-danger" : ""}`}>{money(total.paid)}</span><span className="bg-num text-ink-2 block text-[12px] font-normal">{total.invoiced > 0 ? `dari ${fmt(total.invoiced)}` : ""}</span></span>
+              <span />
+            </div>
           </div>
         </>
       ))}
       {tab === "bills" && <InvoiceList slug={slug} invoices={invoices} today={today} />}
       {tab === "drive" && <DriveTab key={`${drive.scenarioId}${drive.seeded}${JSON.stringify(drive.calc)}${drive.rates.length}`} slug={slug} canEdit={canEdit} {...drive} />}
       {tab === "plans" && <ScenarioTab slug={slug} canEdit={canEdit} {...plans} />}
-      {tab === "vendor" && <VendorPanel slug={slug} canEdit={canEdit} vendors={vendors} contacts={contacts} />}
+      {tab === "vendor" && <VendorPanel slug={slug} canEdit={canEdit} vendors={vendors} contacts={contacts} scopes={rows.map((r) => ({ id: r.id, name: r.name }))} summaryHref={tabHref("sum")} />}
       {adding && <ScopeDrawer slug={slug} init={{ id: null, name: "", category: "other", budget: 0, phaseIds: [], deliverableIds: [], notes: "" }} phases={phases} deliverables={deliverables} onClose={() => setAdding(false)} />}
     </section>
   );

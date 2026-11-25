@@ -179,7 +179,7 @@ export function InvoiceTable({ slug, canEdit, today, invoices, scopeId, vendorId
   return (
     <section className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-semibold">Tagihan & termin</h3>
+        <h3 className="text-sm font-semibold">{vendor}</h3>
         {canEdit && <button type="button" className="btn-secondary" onClick={() => setEdit("new")}>Tambah termin</button>}
       </div>
       {invoices.length === 0 ? <p className="muted text-sm">Belum ada termin atau tagihan.</p> : (

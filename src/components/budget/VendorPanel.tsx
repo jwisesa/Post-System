@@ -2,19 +2,23 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { archiveVendor, removeVendor, saveVendor } from "@/app/admin/budget-actions";
+import Link from "next/link";
+import { addScopeBid, archiveVendor, removeVendor, saveScope, saveVendor } from "@/app/admin/budget-actions";
 import { ConfirmButton, Drawer } from "@/components/ui/controls";
 import { useToast } from "@/components/ui/toast";
 import { categoryLabel, SERVICE_CATEGORIES } from "@/lib/budget/catalog";
+import { MoneyError, parseRupiah } from "@/lib/budget/money";
 
 export type VendorRow = { id: string; name: string; categories: string[]; contactName: string; email: string; phone: string; teamContactId: string | null; chargesPpn: boolean; withholdsPph23: boolean; notes: string; archived: boolean };
 type Opt = { id: string; name: string };
 
-function VendorDrawer({ slug, v, contacts, used, onClose }: { used: string[]; slug: string; v: VendorRow | null; contacts: Opt[]; onClose: () => void }) {
+function VendorDrawer({ slug, v, contacts, used, scopes, onClose }: { scopes: Opt[]; used: string[]; slug: string; v: VendorRow | null; contacts: Opt[]; onClose: () => void }) {
   const toast = useToast();
   const router = useRouter();
   const [f, setF] = useState({ name: v?.name ?? "", categories: v?.categories ?? [], contactName: v?.contactName ?? "", email: v?.email ?? "", phone: v?.phone ?? "", teamContactId: v?.teamContactId ?? "", chargesPpn: v?.chargesPpn ?? true, withholdsPph23: v?.withholdsPph23 ?? true, notes: v?.notes ?? "" });
   const [busy, setBusy] = useState(false);
+  const [toScope, setToScope] = useState("");
+  const [newBudget, setNewBudget] = useState("");
   const [cat, setCat] = useState("");
   const addCat = () => {
     const t = cat.trim();
@@ -26,16 +30,33 @@ function VendorDrawer({ slug, v, contacts, used, onClose }: { used: string[]; sl
   const [first] = useState(() => JSON.stringify(f));
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    let budget = 0;
+    if (toScope === "new" && newBudget.trim()) { try { budget = parseRupiah(newBudget); } catch (x) { toast({ message: x instanceof MoneyError ? x.message : "Budget tidak valid.", tone: "error" }); return; } }
     setBusy(true);
     const r = await saveVendor(slug, v?.id ?? null, { ...f, teamContactId: f.teamContactId || null });
+    if (!r.ok) { setBusy(false); toast({ message: r.error, tone: "error" }); return; }
+    let note = "Vendor disimpan.";
+    const vendorId = (r as { vendorId?: string }).vendorId;
+    if (!v && toScope && vendorId) {
+      let scopeId = toScope;
+      if (toScope === "new") {
+        const first = f.categories[0];
+        const sc = await saveScope(slug, null, { name: first ? categoryLabel(first) : f.name, category: first && Object.hasOwn(SERVICE_CATEGORIES, first) ? first : "other", budget, phaseIds: [], deliverableIds: [], notes: "" });
+        scopeId = sc.ok ? (sc as { scopeId?: string }).scopeId ?? "" : "";
+        if (!sc.ok) note = `Vendor disimpan, tetapi lingkup gagal dibuat: ${sc.error}`;
+      }
+      if (scopeId) {
+        const a = await addScopeBid(slug, scopeId, vendorId);
+        note = a.ok ? "Vendor disimpan dan ditambahkan ke lingkup." : `Vendor disimpan, tetapi gagal ditambahkan ke lingkup: ${a.error}`;
+      }
+    }
     setBusy(false);
-    if (!r.ok) { toast({ message: r.error, tone: "error" }); return; }
-    toast({ message: "Vendor disimpan." });
+    toast({ message: note });
     onClose();
     router.refresh();
   };
   return (
-    <Drawer title={v ? "Ubah vendor" : "Tambah vendor"} crumb="Anggaran & vendor" dirty={JSON.stringify(f) !== first} onClose={onClose}>
+    <Drawer title={v ? "Ubah vendor" : "Tambah vendor"} crumb="Anggaran & vendor" dirty={JSON.stringify(f) !== first || !!toScope} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4 text-sm">
         <label className="grid gap-1">Nama vendor<input value={f.name} maxLength={120} required onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
         <fieldset className="grid gap-1"><legend className="mb-1">Kategori</legend>
@@ -60,13 +81,21 @@ function VendorDrawer({ slug, v, contacts, used, onClose }: { used: string[]; sl
         <label className="flex items-center gap-2"><input type="checkbox" checked={f.chargesPpn} onChange={(e) => setF({ ...f, chargesPpn: e.target.checked })} />Vendor PKP (menagih PPN)</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={f.withholdsPph23} onChange={(e) => setF({ ...f, withholdsPph23: e.target.checked })} />Dipotong PPh 23</label>
         <label className="grid gap-1">Catatan<textarea rows={3} value={f.notes} maxLength={2000} onChange={(e) => setF({ ...f, notes: e.target.value })} /></label>
+        {!v && (
+          <fieldset className="grid gap-2"><legend className="mb-1">Tambahkan ke lingkup (opsional)</legend>
+            <label className="grid gap-1"><span className="sr-only">Tambahkan ke lingkup</span>
+              <select aria-label="Tambahkan ke lingkup" value={toScope} onChange={(e) => setToScope(e.target.value)}><option value="">Jangan dulu</option>{scopes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}<option value="new">Lingkup baru…</option></select>
+            </label>
+            {toScope === "new" && <label className="grid gap-1">Budget lingkup baru, sebelum pajak (Rp, opsional)<input inputMode="numeric" placeholder="150.000.000" value={newBudget} onChange={(e) => setNewBudget(e.target.value)} /></label>}
+          </fieldset>
+        )}
         <button className="btn" disabled={busy}>{busy ? "Menyimpan…" : "Simpan"}</button>
       </form>
     </Drawer>
   );
 }
 
-export function VendorPanel({ slug, canEdit, vendors, contacts }: { slug: string; canEdit: boolean; vendors: VendorRow[]; contacts: Opt[] }) {
+export function VendorPanel({ slug, canEdit, vendors, contacts, scopes, summaryHref }: { scopes: Opt[]; summaryHref: string; slug: string; canEdit: boolean; vendors: VendorRow[]; contacts: Opt[] }) {
   const toast = useToast();
   const router = useRouter();
   const [open, setOpen] = useState<VendorRow | "new" | null>(null);
@@ -79,7 +108,7 @@ export function VendorPanel({ slug, canEdit, vendors, contacts }: { slug: string
   return (
     <div className="space-y-3">
       {canEdit && <button type="button" className="btn-secondary" onClick={() => setOpen("new")}>Tambah vendor</button>}
-      {vendors.length === 0 && <p className="muted text-sm">Belum ada vendor.</p>}
+      {vendors.length === 0 && <p className="muted text-sm">Belum ada vendor.{scopes.length === 0 && <> <Link href={summaryHref} replace scroll={false} className="underline">Buat lingkup dulu</Link> agar vendor bisa langsung diberi penawaran.</>}</p>}
       <ul className="rows text-sm">
         {vendors.map((v) => (
           <li key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
@@ -98,7 +127,7 @@ export function VendorPanel({ slug, canEdit, vendors, contacts }: { slug: string
           </li>
         ))}
       </ul>
-      {open && <VendorDrawer key={open === "new" ? "new" : open.id} slug={slug} v={open === "new" ? null : open} contacts={contacts} used={[...new Set(vendors.flatMap((x) => x.categories))]} onClose={() => setOpen(null)} />}
+      {open && <VendorDrawer key={open === "new" ? "new" : open.id} slug={slug} v={open === "new" ? null : open} contacts={contacts} scopes={scopes} used={[...new Set(vendors.flatMap((x) => x.categories))]} onClose={() => setOpen(null)} />}
     </div>
   );
 }

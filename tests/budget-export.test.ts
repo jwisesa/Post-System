@@ -49,7 +49,7 @@ describe("budget phase E", () => {
   });
 
   it("CSV amounts are integers and headers have (Rp)", async () => {
-    for (const type of EXPORT_TYPES) {
+    for (const type of EXPORT_TYPES.filter((t) => t !== "vendors")) {
       const rows = await budgetCsvRows(db, sup, pid, type);
       const money = rows[0].map((h, i) => [h, i] as const).filter(([h]) => h.includes("(Rp)"));
       expect(money.length, type).toBeGreaterThan(0);
@@ -60,6 +60,20 @@ describe("budget phase E", () => {
     expect(toCsv(await budgetCsvRows(db, sup, pid, "versions"))).toContain('"catatan, dengan\nbaris baru"');
     const inv = await budgetCsvRows(db, sup, pid, "invoices");
     expect(inv[1].slice(5, 11)).toEqual(["400000", "44000", "8000", "436000", "0", "436000"]);
+  });
+
+  it("versions CSV can be narrowed to one scope; foreign scope refused; vendors CSV guards formulas", async () => {
+    const all = await budgetCsvRows(db, sup, pid, "versions");
+    const one = await budgetCsvRows(db, sup, pid, "versions", scopeId);
+    expect(one.length).toBe(all.length);
+    expect((await budgetCsvRows(db, sup, pid, "versions", otherScope)).length).toBe(1); // header only
+    await expect(budgetCsvRows(db, sup, pid, "versions", "00000000-0000-4000-8000-000000000000")).rejects.toThrow();
+    await expect(budgetCsvRows(db, sup, pid, "versions", "not-a-uuid")).rejects.toThrow();
+    const ven = await budgetCsvRows(db, sup, pid, "vendors");
+    expect(ven[0][0]).toBe("Vendor");
+    expect(ven.some((r) => r[0] === "VENDOR-JATUH-TEMPO")).toBe(true);
+    await b.createVendor(db, sup, pid, { name: "=cmd|calc" });
+    expect((await budgetCsvRows(db, sup, pid, "vendors")).some((r) => r[0] === "'=cmd|calc")).toBe(true);
   });
 
   it("the Hari Ini due-invoice query is admin-only and never part of getToday/getWeeklyReport/getViewerData", async () => {

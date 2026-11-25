@@ -21,13 +21,9 @@ export default async function BudgetPage({ params, searchParams }: { params: Pro
   const plan = await getDrivePlan(db, user.id, project.id, { email: user.email, scenarioId: data.scenarios.some((x) => x.id === scenario) ? scenario : null });
   const [phases, deliverables, team] = await Promise.all([listPhases(db, project.id), listDeliverables(db, project.id, { includeInternal: true }), getTeam(db, project.id, { includeInternal: true })]);
   return (
-    <div className="page space-y-4">
-      <div>
-        <h1 className="page-title">Anggaran & vendor</h1>
-        <p className="page-meta">Budget per lingkup, penawaran vendor, dan versinya. Angka sebelum pajak.</p>
-      </div>
+    <div className="page">
       <BudgetView
-        initialTab={tab === "rencana" ? "plans" : tab === "drive" ? "drive" : tab === "bills" ? "bills" : undefined}
+        tab={tab === "rencana" ? "plans" : tab === "drive" ? "drive" : tab === "bills" ? "bills" : tab === "vendor" ? "vendor" : "sum"}
         plans={{
           scenarioName: data.scenarioName,
           scenarios: data.scenarios.map((s) => ({ id: s.id, name: s.name, notes: s.notes, isActive: s.isActive, pickCount: s.pickCount, driveLineCount: s.driveLineCount })),
