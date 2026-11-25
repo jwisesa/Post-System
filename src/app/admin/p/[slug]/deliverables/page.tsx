@@ -16,11 +16,11 @@ export default async function Deliverables({ params }: { params: Promise<{ slug:
   ]);
   const mode = can(role, "deliverable.edit") ? "edit" : can(role, "deliverable.status") ? "status" : "view";
   return (
-    <div className="mx-auto max-w-[1280px] space-y-10">
-      <div>
+    <div className="page space-y-10" data-w="full">
+      <div className="page-head"><div>
         <h1 className="page-title">Deliverables</h1>
         <p className="page-meta">Semua yang harus dikirim, per platform. Tempel link di tiap item; setiap perubahan link menjadi versi baru.</p>
-      </div>
+      </div></div>
       <DeliverablesBoard deliverables={deliverables} attachments={attachments} tracks={schedule.tracks.map((t) => ({ id: t.id, name: t.name }))} techSpec={techSpec} slug={slug} mode={mode} today={today()} />
     </div>
   );

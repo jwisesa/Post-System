@@ -21,7 +21,7 @@ export default async function BudgetPage({ params, searchParams }: { params: Pro
   const plan = await getDrivePlan(db, user.id, project.id, { email: user.email, scenarioId: data.scenarios.some((x) => x.id === scenario) ? scenario : null });
   const [phases, deliverables, team] = await Promise.all([listPhases(db, project.id), listDeliverables(db, project.id, { includeInternal: true }), getTeam(db, project.id, { includeInternal: true })]);
   return (
-    <div className="mx-auto max-w-[1100px] space-y-4">
+    <div className="page space-y-4">
       <div>
         <h1 className="page-title">Anggaran & vendor</h1>
         <p className="page-meta">Budget per lingkup, penawaran vendor, dan versinya. Angka sebelum pajak.</p>

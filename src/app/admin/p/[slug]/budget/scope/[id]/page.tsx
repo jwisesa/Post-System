@@ -47,7 +47,7 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
   const STATE = { pinned: "Terpilih", approved: "Disetujui", provisional: "perkiraan", none: "" } as const;
   const taken = new Set(d.bids.map((b) => b.vendorId));
   return (
-    <div className="mx-auto max-w-[1100px] space-y-5">
+    <div className="page space-y-5">
       <div>
         <p className="page-meta"><Link href={`/admin/p/${slug}/budget`}>Anggaran & vendor</Link></p>
         <h1 className="page-title">{d.scope.name}</h1>

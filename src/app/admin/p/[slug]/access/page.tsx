@@ -1,3 +1,4 @@
+import { Section } from "@/components/ui/section";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { ConfirmButton, CopyButton, SubmitButton } from "@/components/ui/controls";
@@ -44,14 +45,11 @@ export default async function Access({ params, searchParams }: { params: Promise
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
 
   return (
-    <div className="mx-auto max-w-[1040px] space-y-10">
-      <h1 className="page-title">Akses</h1>
+    <div className="page space-y-10">
+      <div className="page-head"><h1 className="page-title">Akses</h1></div>
       <ErrorBanner message={error} />
-      <section className="card">
-        <div>
-          <h2 className="section-band">Akun admin</h2>
-          <p className="muted mt-1 text-[13px]">Supervisor: akses penuh. Assistant: status jadwal dan direktori tim; tidak bisa mengubah tanggal, Technical Page, atau akses.</p>
-        </div>
+      <Section id="admin" title="Akun admin" digest={`${members.length} aktif`}>
+        <p className="muted mb-3 text-[13px]">Supervisor: akses penuh. Assistant: status jadwal dan direktori tim; tidak bisa mengubah tanggal, Technical Page, atau akses.</p>
         <ul className="rows mt-3">
           {members.map((m) => (
             <li key={m.userId} className="flex flex-wrap items-center gap-3 py-2">
@@ -78,13 +76,10 @@ export default async function Access({ params, searchParams }: { params: Promise
             <button className="btn">Beri akses</button>
           </form>
         </details>
-      </section>
+      </Section>
 
-      <section className="card">
-        <div>
-          <h2 className="section-band">Link view-only</h2>
-          <p className="muted mt-1 text-[13px]">Siapa pun yang memegang link bisa melihat project ini tanpa login dan tanpa bisa mengubah apa pun. Item bertanda internal tidak ditampilkan.</p>
-        </div>
+      <Section id="view" title="Link view-only" digest={`${links.length} aktif`}>
+        <p className="muted mb-3 text-[13px]">Siapa pun yang memegang link bisa melihat project ini tanpa login dan tanpa bisa mengubah apa pun. Item bertanda internal tidak ditampilkan.</p>
         {links.length === 0 && <p className="muted mt-3 text-sm">Belum ada link.</p>}
         <ul className="rows mt-3">
           {links.map((l) => (
@@ -111,12 +106,9 @@ export default async function Access({ params, searchParams }: { params: Promise
           <label className="min-w-48 flex-1"><span>Label link baru (mis. Director, Producer)</span><input name="label" required /></label>
           <button className="btn">Buat link</button>
         </form>
-      </section>
-      <section className="card">
-        <div>
-          <h2 className="section-band">Link reviewer</h2>
-          <p className="muted mt-1 text-[13px]">Satu link per orang, tanpa akun. Orang itu hanya melihat milestone yang Anda pilih: bisa menulis feedback dan menyetujui. Cabut kapan saja.</p>
-        </div>
+      </Section>
+      <Section id="reviewer" title="Link reviewer" digest={`${reviewers.length} aktif`}>
+        <p className="muted mb-3 text-[13px]">Satu link per orang, tanpa akun. Orang itu hanya melihat milestone yang Anda pilih: bisa menulis feedback dan menyetujui. Cabut kapan saja.</p>
         {reviewers.length === 0 && <p className="muted mt-3 text-sm">Belum ada link reviewer.</p>}
         <ul className="rows mt-3">
           {reviewers.map((l) => (
@@ -161,7 +153,7 @@ export default async function Access({ params, searchParams }: { params: Promise
           {picker([])}
           <SubmitButton pendingLabel="Membuat…">Buat link reviewer</SubmitButton>
         </form>
-      </section>
+      </Section>
     </div>
   );
 }

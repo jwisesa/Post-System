@@ -27,10 +27,10 @@ export default async function Report({ params }: { params: Promise<{ slug: strin
     );
 
   return (
-    <div className="mx-auto max-w-[1040px] space-y-10">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="page space-y-10">
+      <div className="page-head">
         <div className="space-y-2"><h1 className="page-title">Laporan mingguan · {project.name}</h1><ProjectSummary project={project} /><p className="page-meta">Per {fmtDate(today)}</p></div>
-        <ReportActions summary={summaryText(project.name, today, t)} />
+        <div className="page-actions"><ReportActions summary={summaryText(project.name, today, t)} /></div>
       </div>
       <section className="card">
         <h2 className="section-band">Ringkasan</h2>

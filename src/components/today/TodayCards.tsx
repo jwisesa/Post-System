@@ -157,7 +157,7 @@ function Stat({ base, query = "", tone, empty, children }: { base?: string; quer
 }
 
 /** The one-screen "Hari Ini". `base` (project admin path) makes the key numbers links; `aside` fills the right column. */
-export function TodayBoard({ data, today, base, aside }: { data: TodayData; today: string; base?: string; aside?: React.ReactNode }) {
+export function TodayBoard({ data, today, base, aside, below }: { data: TodayData; today: string; base?: string; aside?: React.ReactNode; below?: React.ReactNode }) {
   const due = [...data.late, ...data.dueToday, ...data.next7];
   const hard = data.hardDeadlines[0];
   const oldest = data.late[0];
@@ -200,6 +200,7 @@ export function TodayBoard({ data, today, base, aside }: { data: TodayData; toda
             base ? <Link href={`${base}/timeline`} className="mt-1 block px-1 text-[13px] font-semibold underline underline-offset-2">+{due.length - DUE_CAP} lainnya, lihat Timeline</Link>
               : <p className="mt-1 px-1 text-[13px] text-ink-2">+{due.length - DUE_CAP} lainnya</p>
           )}
+          {below && <div className="mt-6">{below}</div>}
         </section>
         <div className="min-w-0 space-y-6">
           {data.feedback.length > 0 && <FeedbackList groups={data.feedback} base={base} />}

@@ -13,20 +13,24 @@ export default async function Team({ params, searchParams }: { params: Promise<{
   const team = await getTeam(db, project.id, { includeInternal: true });
   const canEdit = can(role, "team.edit");
   return (
-    <div className="mx-auto max-w-[1040px] space-y-10">
-      <h1 className="page-title">Tim</h1>
+    <div className="page space-y-10">
+      <div className="page-head">
+        <h1 className="page-title">Tim</h1>
+        {canEdit && (
+          <div className="page-actions">
+            <details className="relative">
+              <summary className="btn-secondary cursor-pointer list-none"><Icon name="plus" />Departemen / vendor baru</summary>
+              <form action={addGroupAction} className="popover absolute end-0 z-30 mt-1 flex w-80 max-w-[85vw] items-end gap-3 p-3">
+                <input type="hidden" name="slug" value={slug} />
+                <label className="flex-1"><span>Nama departemen</span><input name="name" required /></label>
+                <button className="btn">Tambah</button>
+              </form>
+            </details>
+          </div>
+        )}
+      </div>
       <ErrorBanner message={error} />
       <TeamDirectory team={team} slug={canEdit ? slug : undefined} />
-      {canEdit && (
-        <details className="card">
-          <summary className="btn-ghost inline-flex cursor-pointer list-none"><Icon name="plus" />Departemen / vendor baru</summary>
-          <form action={addGroupAction} className="mt-3 flex items-end gap-3">
-            <input type="hidden" name="slug" value={slug} />
-            <label className="flex-1"><span>Nama departemen</span><input name="name" required /></label>
-            <button className="btn">Tambah</button>
-          </form>
-        </details>
-      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { ActivityFilters } from "@/components/activity-filters";
 import { can } from "@/lib/auth/permissions";
 import { loadProject } from "@/lib/project-context";
 import { listActivity } from "@/lib/services";
@@ -39,23 +40,13 @@ export default async function Activity({ params, searchParams }: { params: Promi
   }
 
   return (
-    <div className="mx-auto max-w-[1040px] space-y-10">
-      <h1 className="page-title">Change log</h1>
-      <form className="flex flex-wrap items-center gap-2">
-        <select name="who" defaultValue={who} aria-label="Filter orang" className="max-w-48">
-          <option value="">Semua orang</option>
-          {people.map((p) => <option key={p}>{p}</option>)}
-        </select>
-        <select name="kind" defaultValue={kind} aria-label="Filter jenis" className="max-w-48">
-          <option value="">Semua jenis</option>
-          {kinds.map((k) => <option key={k}>{k}</option>)}
-        </select>
-        <button className="btn-secondary">Terapkan</button>
-      </form>
+    <div className="page space-y-6">
+      <div className="page-head"><h1 className="page-title">Change log</h1></div>
+      <ActivityFilters people={people} kinds={kinds} />
       {log.length === 0 && <p className="empty muted">Tidak ada perubahan yang cocok.</p>}
       {[...groups].map(([date, entries]) => (
         <section key={date}>
-          <h2 className="section-band mb-2">{date}</h2>
+          <h2 className="section-h is-sticky">{date}</h2>
           <ul className="rows">
             {entries.map(({ entry, userName }) => (
               <li key={entry.id} className="flex gap-3 py-2.5 text-sm">

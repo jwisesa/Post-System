@@ -1,3 +1,4 @@
+import { ScriptVersionSelect } from "@/components/script-version-select";
 import Link from "next/link";
 import { ScriptUpload } from "@/components/script/ScriptUpload";
 import { ScriptView } from "@/components/script/ScriptView";
@@ -22,19 +23,17 @@ export default async function ScriptPage({ params, searchParams }: { params: Pro
   const canEdit = can(role, "script.edit");
   const base = `/admin/p/${slug}/script`;
   return (
-    <div className="mx-auto max-w-[1240px] space-y-4 sm:space-y-8">
-      <div>
-        <h1 className="page-title">Naskah</h1>
-        <p className="page-meta max-sm:hidden">Breakdown naskah dari PDF: daftar adegan dengan perkiraan durasi, tokoh, lokasi, dan export CSV.</p>
+    <div className="page space-y-4 sm:space-y-8" data-w="full">
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">Naskah</h1>
+          <p className="page-meta max-sm:hidden">Breakdown naskah dari PDF: daftar adegan dengan perkiraan durasi, tokoh, lokasi, dan export CSV.</p>
+        </div>
+        <div className="page-actions">
+          {list.length > 1 && <ScriptVersionSelect base={base} current={current?.script.id} options={list.map((s) => ({ id: s.id, label: `${s.title}${list.filter((x) => x.title === s.title).length > 1 ? ` · ${fmtDate(s.createdAt.toISOString().slice(0, 10))}` : ""}` }))} />}
+          {canEdit && !wantNew && list.length > 0 && <Link href={`${base}?new`} className="btn-secondary">Unggah naskah baru</Link>}
+        </div>
       </div>
-      {list.length > 0 && (
-        <nav aria-label="Versi naskah" className="flex items-center gap-3 max-sm:overflow-x-auto sm:flex-wrap">
-          {list.map((s) => (
-            <Link key={s.id} href={`${base}?script=${s.id}`} className={current?.script.id === s.id ? "btn-secondary" : "btn-ghost"} aria-current={current?.script.id === s.id ? "page" : undefined}>{s.title}{list.filter((x) => x.title === s.title).length > 1 && ` · ${fmtDate(s.createdAt.toISOString().slice(0, 10))}`}</Link>
-          ))}
-          {canEdit && !wantNew && <Link href={`${base}?new`} className="btn-secondary">Unggah naskah baru</Link>}
-        </nav>
-      )}
       {canEdit && (wantNew || list.length === 0) && <ScriptUpload slug={slug} />}
       {!canEdit && list.length === 0 && <p className="muted text-sm">Belum ada naskah. Supervisor dapat mengunggah PDF naskah.</p>}
       {current && (

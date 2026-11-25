@@ -61,11 +61,17 @@ export function EdlTool({ slug, techFps, canSave }: { slug: string; techFps: str
 
   return (
     <div className="space-y-6">
-      <label className="field max-w-md">
-        <span className="field-label">File EDL (CMX3600), FCP7 XML, atau FCPXML</span>
-        <input type="file" accept=".edl,.xml,.fcpxml,.txt" onChange={(e) => load(e.target.files?.[0])} />
-        <span className="field-hint">File dibaca di browser, tidak diunggah ke server.</span>
-      </label>
+      <div
+        className="flex max-w-xl flex-wrap items-center gap-3 rounded-lg border border-dashed border-line-strong bg-raised p-4"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); load(e.dataTransfer.files?.[0]); }}
+      >
+        <label className="btn-secondary cursor-pointer has-[:focus-visible]:outline-2">
+          <input type="file" className="sr-only" accept=".edl,.xml,.fcpxml,.txt" onChange={(e) => load(e.target.files?.[0])} />
+          Pilih file EDL
+        </label>
+        <span className="text-[13px] text-ink-2">atau seret file ke sini: EDL (CMX3600), FCP7 XML, FCPXML. Dibaca di browser, tidak diunggah.</span>
+      </div>
 
       {error && <p className="tag tag-danger">{error}</p>}
       {edl && edl.events.length === 0 && <p className="tag tag-warn">Tidak ada event video yang terbaca dari file ini.</p>}

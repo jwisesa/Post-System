@@ -14,7 +14,7 @@ export function ShotTracker({ slug, shots, canEdit, canTrack }: { slug: string; 
   const remove = async (s: Shot) => { if (window.confirm(`Hapus shot "${s.name}" dari tracker?`)) fail(await deleteShots(slug, [s.id])); };
   const text = (s: Shot, k: "vendor" | "version", width: string) =>
     canTrack ? (
-      <input key={`${s.id}-${s[k]}`} aria-label={`${k === "vendor" ? "Vendor" : "Versi"} ${s.name}`} className={width} defaultValue={s[k]}
+      <input key={`${s.id}-${s[k]}`} aria-label={`${k === "vendor" ? "Vendor" : "Versi"} ${s.name}`} className={width} placeholder="—" defaultValue={s[k]}
         onBlur={(e) => { if (e.target.value.trim() !== s[k]) patch(s, { [k]: e.target.value }); }}
         onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
     ) : s[k] || "—";

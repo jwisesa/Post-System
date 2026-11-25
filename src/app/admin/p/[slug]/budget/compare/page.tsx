@@ -53,7 +53,7 @@ export default async function BudgetComparePage({ params, searchParams }: { para
   const net = (x: Side) => x.subtotal + x.ppn - x.pph23;
   const tot = c ? [["Subtotal (sebelum pajak)", c.a.subtotal, c.b.subtotal], ["PPN (perkiraan)", c.a.ppn, c.b.ppn], ["PPh 23 (perkiraan)", c.a.pph23, c.b.pph23], ["Net (perkiraan)", net(c.a), net(c.b)]] as const : [];
   return (
-    <div className="mx-auto max-w-[1100px] space-y-4">
+    <div className="page space-y-4">
       <div>
         <p className="page-meta"><Link href={`/admin/p/${slug}/budget`}>Anggaran & vendor</Link></p>
         <h1 className="page-title">Bandingkan penawaran</h1>

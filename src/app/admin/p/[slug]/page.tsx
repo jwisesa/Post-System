@@ -1,13 +1,9 @@
-import { headers } from "next/headers";
 import Link from "next/link";
 import { Icon } from "@/components/ui/icons";
-import { ProjectFields } from "@/components/project-fields";
-import { CalendarCard } from "@/components/today/CalendarCard";
 import { FollowUpList } from "@/components/today/FollowUpList";
 import { DeliverablesMeter, ListHead, TodayBoard } from "@/components/today/TodayCards";
 import { ErrorBanner, ProjectSummary } from "@/components/views";
 import { can } from "@/lib/auth/permissions";
-import { getOrCreateCalendarToken } from "@/lib/calendar/service";
 import { loadProject } from "@/lib/project-context";
 import { today as todayWib } from "@/lib/schedule/dates";
 import { getChecks } from "@/lib/checks/service";
@@ -17,7 +13,6 @@ import { DriveCard } from "@/components/today/DriveCard";
 import { canUseDriveTracker, getDriveSummary, listDriveTrackerProjects } from "@/lib/drive-tracker/service";
 import { getToday } from "@/lib/today/service";
 import { listActivity } from "@/lib/services";
-import { deleteProjectAction, updateProjectAction } from "../../actions";
 
 export default async function Overview({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string }> }) {
   const { slug } = await params;
@@ -26,29 +21,38 @@ export default async function Overview({ params, searchParams }: { params: Promi
   const today = todayWib();
   const edit = can(role, "project.edit");
   const dt = canUseDriveTracker(user.email);
-  const [data, recent, calendarToken, h, findings, drives, dtOptions, dueInvoices] = await Promise.all([
+  const [data, recent, findings, drives, dtOptions, dueInvoices] = await Promise.all([
     getToday(db, project.id, today, { includeInternal: true, feedback: true }),
     listActivity(db, project.id, 6, { hideBudget: true }),
-    getOrCreateCalendarToken(db, user.id, project.id),
-    headers(),
     getChecks(db, project.id, slug, today),
     dt ? getDriveSummary(db, project.driveTrackerProjectId) : Promise.resolve(null),
     edit && dt ? listDriveTrackerProjects(db, user.email) : Promise.resolve([]),
     can(role, "budget.view") ? listDueInvoices(db, user.id, project.id, today) : Promise.resolve([]),
   ]);
-  const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
-
   const base = `/admin/p/${slug}`;
   const followUp = data.followUp.slice(0, 4);
   const review = data.review.slice(0, 3);
   return (
-    <div className="mx-auto max-w-[1120px] space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+    <div className="page space-y-4">
+      <div className="page-head">
         <div><h1 className="page-title">{project.name}</h1><div className="page-meta"><ProjectSummary project={project} /></div></div>
         <DeliverablesMeter data={data} href={`${base}/deliverables`} />
       </div>
       <ErrorBanner message={error} />
       <TodayBoard
+        below={findings.length > 0 ? (
+        <section>
+          <ListHead title="Pemeriksaan" count={findings.length} href={`${base}/checks`} link="Semua temuan" />
+          <p className="text-[13px] text-ink-2">
+            {(["error", "warn", "info"] as const).map((s) => [findings.filter((f) => f.severity === s).length, { error: "error", warn: "peringatan", info: "info" }[s]] as const).filter(([n]) => n).map(([n, l]) => `${n} ${l}`).join(" · ")}
+          </p>
+          <ul>
+            {findings.slice(0, 3).map((f, n) => (
+              <li key={n} className="due-row"><span className="due-date tag tag-danger">Error</span><span className="due-name">{f.title} <span className="due-ctx">· {f.detail}</span></span><Link href={f.fix.href} className="btn-secondary !min-h-7">Perbaiki</Link></li>
+            ))}
+          </ul>
+        </section>
+        ) : undefined}
         data={data}
         today={today}
         base={base}
@@ -79,19 +83,6 @@ export default async function Overview({ params, searchParams }: { params: Promi
           </>
         }
       />
-      {findings.length > 0 && (
-        <section>
-          <ListHead title="Pemeriksaan" count={findings.length} href={`${base}/checks`} link="Semua temuan" />
-          <p className="text-[13px] text-ink-2">
-            {(["error", "warn", "info"] as const).map((s) => [findings.filter((f) => f.severity === s).length, { error: "error", warn: "peringatan", info: "info" }[s]] as const).filter(([n]) => n).map(([n, l]) => `${n} ${l}`).join(" · ")}
-          </p>
-          <ul>
-            {findings.slice(0, 3).map((f, n) => (
-              <li key={n} className="due-row"><span className="due-name">{f.title} <span className="due-ctx">· {f.detail}</span></span><Link href={f.fix.href} className="btn-secondary !min-h-7">Perbaiki</Link></li>
-            ))}
-          </ul>
-        </section>
-      )}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-10 pt-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <section className="card min-w-0">
           <div className="list-head"><h2>Perubahan terbaru</h2><Link href={`${base}/activity`} className="text-[13px] font-semibold underline underline-offset-2">Lihat semua</Link></div>
@@ -103,30 +94,6 @@ export default async function Overview({ params, searchParams }: { params: Promi
             </ul>
           )}
         </section>
-      <CalendarCard slug={slug} origin={origin} initialToken={calendarToken} />
-      {can(role, "project.edit") && (
-        <details className="card min-w-0">
-          <summary className="cursor-pointer text-sm font-medium">Ubah info project</summary>
-          <form action={updateProjectAction} className="mt-4 space-y-3">
-            <input type="hidden" name="slug" value={slug} />
-            <ProjectFields project={project} />
-            <button className="btn">Simpan</button>
-          </form>
-        </details>
-      )}
-      {can(role, "project.delete") && (
-        <details className="card min-w-0">
-          <summary className="cursor-pointer text-sm font-medium text-danger">Hapus project</summary>
-          <form action={deleteProjectAction} className="mt-4 space-y-3">
-            <input type="hidden" name="slug" value={slug} />
-            <p className="muted text-sm">Ini menghapus project beserta timeline, tim, link, deliverables, dan riwayat perubahannya, dan tidak bisa dibatalkan.</p>
-            <label className="block text-sm">Ketik &quot;{project.name}&quot; untuk konfirmasi
-              <input name="confirmName" required autoComplete="off" className="mt-1 block w-full" />
-            </label>
-            <button className="btn-danger">Hapus project selamanya</button>
-          </form>
-        </details>
-      )}
       </div>
     </div>
   );
