@@ -29,8 +29,7 @@ export default async function Technical({ params, searchParams }: { params: Prom
   }
 
   const history: FieldHistory = {};
-  for (const { entry, userName } of await listActivity(db, project.id, 500)) {
-    if (entry.entity !== "tech_spec") continue;
+  for (const { entry, userName } of await listActivity(db, project.id, 500, { entities: ["tech_spec"] })) {
     const before = (entry.before ?? {}) as Record<string, string>;
     for (const [key, to] of Object.entries((entry.after ?? {}) as Record<string, string>)) {
       (history[key] ??= []).push({ who: userName ?? "—", when: fmt.format(entry.createdAt), from: before[key] ?? "", to });

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { addScopeBid, chooseBid, removeBid, removeScope } from "@/app/admin/budget-actions";
 import { ConfirmButton } from "@/components/ui/controls";
 import { useToast } from "@/components/ui/toast";
-import { CANCEL_MARK, VERSION_STATUSES, type VersionStatusCode } from "@/lib/budget/catalog";
+import { CANCEL_MARK, TAX_NOTE, VERSION_STATUSES, type VersionStatusCode } from "@/lib/budget/catalog";
 import { formatRupiah } from "@/lib/budget/money";
 import type { VendorCmp } from "@/lib/budget/vendors";
 import { ScopeDrawer, type Option, type ScopeForm } from "./BudgetView";
@@ -44,6 +44,7 @@ function VersionTable({ slug, canEdit, versions, base }: { slug: string; canEdit
                     ))}
                   </tbody>
                 </table>
+                <p className="muted text-xs">{TAX_NOTE}</p>
               </div>
   );
 }
@@ -149,7 +150,7 @@ export function ScopeView({ slug, canEdit, today, scope, bids, addable, phases, 
               const c = adding.co;
               const series = c && c !== "new" ? c : null;
               const lv = series ? series.versions[series.versions.length - 1] : c ? undefined : latest;
-              return <VersionDrawer key={`${b.id}${series?.docId ?? c ?? ""}`} slug={slug} docId={series ? series.docId : b.docId} co={c === "new" ? { bidId: b.id } : undefined} negative={!!c} vendor={series ? `${b.vendor} · ${series.title}` : b.vendor} prefill={lv?.lines ?? []} ppnBp={lv?.ppnRateBp ?? null} pph23Bp={lv?.pph23RateBp ?? null} first={!lv} onClose={() => setAdding(null)} />;
+              return <VersionDrawer key={`${b.id}${series?.docId ?? c ?? ""}`} slug={slug} docId={series ? series.docId : b.docId} co={c === "new" ? { bidId: b.id } : undefined} negative={!!c} vendor={series ? `${b.vendor} · ${series.title}` : b.vendor} prefill={lv?.lines ?? []} ppnBp={lv ? lv.ppnRateBp : b.ppnBp} pph23Bp={lv ? lv.pph23RateBp : b.pph23Bp} first={!lv} onClose={() => setAdding(null)} />;
             })()}
           </section>
         );

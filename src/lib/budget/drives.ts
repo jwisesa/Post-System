@@ -109,7 +109,7 @@ const LineSchema = z.object({
   neededBy: z.string().refine((s) => s === "" || (/^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s))), "Tanggal tidak valid."),
   status: z.enum(["planned", "ordered", "received", "cancelled"]),
   notes: z.string().max(500).transform((s) => s.trim()),
-});
+}).refine((l) => BigInt(l.qty) * BigInt(l.unitPrice) <= BigInt(MAX_RP), "Jumlah terlalu besar.");
 
 async function checkLine(tx: Pick<Db, "select">, projectId: string, input: DriveLineInput) {
   const p = LineSchema.safeParse(input);
@@ -128,6 +128,7 @@ export async function addDriveLine(db: Db, userId: string, projectId: string, in
   return db.transaction(async (tx) => {
     const d = await checkLine(tx, projectId, input);
     const sid = await pickScenario(tx, projectId, scenarioId);
+    await tx.select({ id: projects.id }).from(projects).where(eq(projects.id, projectId)).for("update"); // serialise the find-or-create of the drives scope
     const [have] = await tx.select({ id: budgetScopes.id }).from(budgetScopes).where(and(eq(budgetScopes.projectId, projectId), eq(budgetScopes.category, "drives"))).orderBy(asc(budgetScopes.sortOrder), asc(budgetScopes.createdAt)).limit(1);
     let scopeId = have?.id;
     if (!scopeId) {

@@ -11,7 +11,7 @@ export const SERVICE_CATEGORIES = {
   other: "Lainnya",
 } as const;
 export type ServiceCategory = keyof typeof SERVICE_CATEGORIES;
-export const categoryLabel = (c: string) => (SERVICE_CATEGORIES as Record<string, string>)[c] ?? c;
+export const categoryLabel = (c: string) => Object.hasOwn(SERVICE_CATEGORIES, c) ? SERVICE_CATEGORIES[c as ServiceCategory] : c;
 
 export const VERSION_STATUSES = {
   draft: "Draft",

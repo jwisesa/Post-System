@@ -25,12 +25,12 @@ export function formatRupiah(n: number): string {
   return `${n < 0 ? "−" : ""}Rp ${Math.abs(n).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`;
 }
 
-/** Quantity in thousandths: "2,5" or "2.5" -> 2500. Up to 3 decimals, greater than 0. */
+/** Quantity in thousandths, Indonesian style: "," is the decimal (max 3), "." only groups thousands ("1.200" = 1200). Any other "." ("2.5") is ambiguous and refused. */
 export function parseQty(input: string): number {
-  const s = clean(input).replace(",", ".");
-  if (!/^\d+(\.\d{1,3})?$/.test(s)) throw new MoneyError(`Jumlah "${input.trim()}" tidak valid (maksimal 3 desimal).`);
-  const [w, f = ""] = s.split(".");
-  const n = Number(w) * 1000 + Number(f.padEnd(3, "0"));
+  const s = clean(input);
+  const m = /^(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,3}))?$/.exec(s);
+  if (!m) throw new MoneyError(s.includes(".") ? "Gunakan koma untuk desimal, mis. 2,5" : `Jumlah "${input.trim()}" tidak valid (maksimal 3 desimal).`);
+  const n = Number(m[1].replace(/\./g, "")) * 1000 + Number((m[2] ?? "").padEnd(3, "0"));
   if (!Number.isSafeInteger(n) || n <= 0 || n > 1e12) throw new MoneyError("Kuantitas harus lebih dari 0.");
   return n;
 }

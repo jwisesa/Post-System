@@ -6,7 +6,7 @@ import { saveChangeOrder, saveVersion } from "@/app/admin/budget-actions";
 import { Drawer } from "@/components/ui/controls";
 import { Icon } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/toast";
-import { DEFAULT_PPH23_BP, DEFAULT_PPN_BP, PPN_LABEL, TAX_NOTE } from "@/lib/budget/catalog";
+import { PPN_LABEL, TAX_NOTE } from "@/lib/budget/catalog";
 import { formatQty, formatRateBp, formatRupiah, lineAmount, MoneyError, parseQty, parseRateBp, parseRupiah, taxOf } from "@/lib/budget/money";
 
 export type PrefillLine = { key: string; item: string; qtyMilli: number; unit: string; unitPrice: number };
@@ -19,8 +19,8 @@ export function VersionDrawer({ slug, docId, vendor, prefill, ppnBp, pph23Bp, fi
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>(prefill.length ? prefill.map((l) => ({ key: l.key, item: l.item, qty: formatQty(l.qtyMilli), unit: l.unit, price: String(l.unitPrice) })) : first ? [blank()] : []);
   const [lump, setLump] = useState("");
-  const [ppn, setPpn] = useState(formatRateBp(first ? DEFAULT_PPN_BP : ppnBp));
-  const [pph, setPph] = useState(formatRateBp(first ? DEFAULT_PPH23_BP : pph23Bp));
+  const [ppn, setPpn] = useState(formatRateBp(ppnBp));
+  const [pph, setPph] = useState(formatRateBp(pph23Bp));
   const [title, setTitle] = useState("");
   const [ref, setRef] = useState("");
   const [date, setDate] = useState("");
@@ -72,7 +72,7 @@ export function VersionDrawer({ slug, docId, vendor, prefill, ppnBp, pph23Bp, fi
             {rows.map((r, i) => (
               <div key={r.key} className="bg-lines pb-2" style={{ borderBottom: "1px solid var(--line)" }}>
                 <input aria-label="Item" placeholder="Item" className="bg-item" value={r.item} maxLength={200} onChange={(e) => set(i, "item", e.target.value)} />
-                <input aria-label="Qty" placeholder="Qty" inputMode="decimal" value={r.qty} onChange={(e) => set(i, "qty", e.target.value)} />
+                <input aria-label="Qty" placeholder="mis. 2,5" inputMode="decimal" value={r.qty} onChange={(e) => set(i, "qty", e.target.value)} />
                 <input aria-label="Satuan" placeholder="Satuan" value={r.unit} maxLength={20} onChange={(e) => set(i, "unit", e.target.value)} />
                 <input aria-label="Harga satuan" inputMode="numeric" placeholder="Harga satuan" value={r.price} onChange={(e) => set(i, "price", e.target.value)} />
                 <span className="bg-amount">{amount(i) == null ? "—" : formatRupiah(amount(i)!)}</span>

@@ -21,6 +21,8 @@ const str = (max: number) => z.string().max(max).transform((s) => s.trim());
 const rp = z.number().int().min(-MAX_RP).max(MAX_RP); // Number.isSafeInteger holds for |x| <= 1e15
 const fail = (r: { error: z.ZodError }): never => { throw new InputError(r.error.issues[0]?.message || "Data tidak valid."); };
 const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+/** Postgres unique violation (also when wrapped by the driver as err.cause). */
+export const isDupKey = (e: unknown) => { const x = e as { code?: string; cause?: { code?: string } } | null; return x?.code === "23505" || x?.cause?.code === "23505"; };
 
 // ---------- scenario ----------
 
@@ -117,7 +119,7 @@ export async function getVersions(db: Db, userId: string, projectId: string, ids
 
 const VendorSchema = z.object({
   name: str(120).refine((s) => s.length > 0, "Nama vendor wajib diisi."),
-  categories: z.array(z.string().refine((c) => c in SERVICE_CATEGORIES, "Kategori tidak dikenal.")).max(8).default([]),
+  categories: z.array(z.string().refine((c) => Object.hasOwn(SERVICE_CATEGORIES, c), "Kategori tidak dikenal.")).max(8).default([]),
   contactName: str(120).default(""),
   email: str(200).refine((s) => s === "" || /^\S+@\S+\.\S+$/.test(s), "Email vendor tidak valid.").default(""),
   phone: str(40).default(""),
@@ -143,16 +145,23 @@ async function checkVendor(tx: Tx | Db, projectId: string, input: VendorInput, s
 
 export async function createVendor(db: Db, userId: string, projectId: string, input: VendorInput) {
   await edit(db, userId, projectId);
-  return db.transaction(async (tx) => {
-    const d = await checkVendor(tx, projectId, input);
-    const [v] = await tx.insert(budgetVendors).values({ ...d, projectId }).returning();
-    await record(tx, { projectId, userId, entity: "budget_vendor", entityId: v.id, action: "create", summary: `Menambah vendor "${v.name}"`, after: v });
-    return { vendorId: v.id };
-  });
+  try {
+    return await db.transaction(async (tx) => {
+      const d = await checkVendor(tx, projectId, input);
+      const [v] = await tx.insert(budgetVendors).values({ ...d, projectId }).returning();
+      await record(tx, { projectId, userId, entity: "budget_vendor", entityId: v.id, action: "create", summary: `Menambah vendor "${v.name}"`, after: v });
+      return { vendorId: v.id };
+    });
+  } catch (e) {
+    if (isDupKey(e)) throw new InputError("Nama vendor sudah dipakai.");
+    throw e;
+  }
 }
 
 export async function updateVendor(db: Db, userId: string, projectId: string, vendorId: string, input: VendorInput) {
   await edit(db, userId, projectId);
+  if (!isUuid(vendorId)) throw new InputError("Vendor tidak ditemukan.");
+  try {
   await db.transaction(async (tx) => {
     const [row] = await tx.select().from(budgetVendors).where(and(eq(budgetVendors.id, vendorId), eq(budgetVendors.projectId, projectId)));
     if (!row) throw new InputError("Vendor tidak ditemukan.");
@@ -162,10 +171,15 @@ export async function updateVendor(db: Db, userId: string, projectId: string, ve
     await tx.update(budgetVendors).set(d).where(eq(budgetVendors.id, vendorId));
     await record(tx, { projectId, userId, entity: "budget_vendor", entityId: vendorId, action: "update", summary: `Vendor "${d.name}": ${keys.join(", ")} diubah`, before: Object.fromEntries(keys.map((k) => [k, row[k]])), after: Object.fromEntries(keys.map((k) => [k, d[k]])) });
   });
+  } catch (e) {
+    if (isDupKey(e)) throw new InputError("Nama vendor sudah dipakai.");
+    throw e;
+  }
 }
 
 export async function setVendorArchived(db: Db, userId: string, projectId: string, vendorId: string, archived: boolean) {
   await edit(db, userId, projectId);
+  if (!isUuid(vendorId)) throw new InputError("Vendor tidak ditemukan.");
   await db.transaction(async (tx) => {
     const [row] = await tx.update(budgetVendors).set({ archivedAt: archived ? new Date() : null }).where(and(eq(budgetVendors.id, vendorId), eq(budgetVendors.projectId, projectId))).returning();
     if (!row) throw new InputError("Vendor tidak ditemukan.");
@@ -175,15 +189,16 @@ export async function setVendorArchived(db: Db, userId: string, projectId: strin
 
 export async function deleteVendor(db: Db, userId: string, projectId: string, vendorId: string) {
   await edit(db, userId, projectId);
+  if (!isUuid(vendorId)) throw new InputError("Vendor tidak ditemukan.");
   await db.transaction(async (tx) => {
     const [row] = await tx.select().from(budgetVendors).where(and(eq(budgetVendors.id, vendorId), eq(budgetVendors.projectId, projectId)));
     if (!row) throw new InputError("Vendor tidak ditemukan.");
     const [inv] = await tx.select({ id: budgetInvoices.id }).from(budgetInvoices).where(eq(budgetInvoices.vendorId, vendorId)).limit(1);
-    if (inv) throw new InputError("Vendor masih dipakai di penawaran/tagihan. Arsipkan saja.");
+    if (inv) throw new InputError("Vendor masih dipakai di tagihan. Arsipkan saja.");
     const [used] = await tx.select({ id: budgetBids.id }).from(budgetBids).where(eq(budgetBids.vendorId, vendorId)).limit(1);
-    if (used) throw new InputError("Vendor masih dipakai di penawaran/tagihan. Arsipkan saja.");
+    if (used) throw new InputError("Vendor masih dipakai di penawaran. Arsipkan saja.");
     const [dl] = await tx.select({ id: budgetDriveLines.id }).from(budgetDriveLines).where(eq(budgetDriveLines.vendorId, vendorId)).limit(1);
-    if (dl) throw new InputError("Vendor masih dipakai di penawaran/tagihan. Arsipkan saja.");
+    if (dl) throw new InputError("Vendor masih dipakai di daftar belanja harddisk. Arsipkan saja.");
     await tx.delete(budgetVendors).where(eq(budgetVendors.id, vendorId));
     await record(tx, { projectId, userId, entity: "budget_vendor", entityId: vendorId, action: "delete", summary: `Menghapus vendor "${row.name}"`, before: row });
   });
@@ -195,7 +210,7 @@ const HAS_INVOICES = "Masih ada tagihan. Hapus tagihan atau batalkan lingkup di 
 
 const ScopeSchema = z.object({
   name: str(120).refine((s) => s.length > 0, "Nama lingkup wajib diisi."),
-  category: z.string().refine((c) => c in SERVICE_CATEGORIES, "Kategori tidak dikenal.").default("other"),
+  category: z.string().refine((c) => Object.hasOwn(SERVICE_CATEGORIES, c), "Kategori tidak dikenal.").default("other"),
   budget: rp.min(0, "Budget tidak boleh negatif.").default(0),
   phaseIds: z.array(z.string()).max(50).default([]),
   deliverableIds: z.array(z.string()).max(100).default([]),
@@ -230,6 +245,7 @@ export async function createScope(db: Db, userId: string, projectId: string, inp
 
 export async function updateScope(db: Db, userId: string, projectId: string, scopeId: string, input: ScopeInput) {
   await edit(db, userId, projectId);
+  if (!isUuid(scopeId)) throw new InputError("Lingkup tidak ditemukan.");
   const d = await checkScope(db, projectId, input);
   await db.transaction(async (tx) => {
     const [row] = await tx.select().from(budgetScopes).where(and(eq(budgetScopes.id, scopeId), eq(budgetScopes.projectId, projectId)));
@@ -244,9 +260,14 @@ export async function updateScope(db: Db, userId: string, projectId: string, sco
 /** Removes the scope with its bids, quotes and versions. The UI asks first. */
 export async function deleteScope(db: Db, userId: string, projectId: string, scopeId: string) {
   await edit(db, userId, projectId);
+  if (!isUuid(scopeId)) throw new InputError("Lingkup tidak ditemukan.");
   await db.transaction(async (tx) => {
-    const [inv] = await tx.select({ id: budgetInvoices.id }).from(budgetInvoices).where(eq(budgetInvoices.scopeId, scopeId)).limit(1);
+    const [have] = await tx.select({ id: budgetScopes.id }).from(budgetScopes).where(and(eq(budgetScopes.id, scopeId), eq(budgetScopes.projectId, projectId)));
+    if (!have) throw new InputError("Lingkup tidak ditemukan.");
+    const [inv] = await tx.select({ id: budgetInvoices.id }).from(budgetInvoices).where(and(eq(budgetInvoices.scopeId, scopeId), eq(budgetInvoices.projectId, projectId))).limit(1);
     if (inv) throw new InputError(HAS_INVOICES);
+    const [dl] = await tx.select({ id: budgetDriveLines.id }).from(budgetDriveLines).where(and(eq(budgetDriveLines.scopeId, scopeId), eq(budgetDriveLines.projectId, projectId))).limit(1);
+    if (dl) throw new InputError("Masih ada daftar belanja harddisk di lingkup ini. Hapus barisnya dulu.");
     const [row] = await tx.delete(budgetScopes).where(and(eq(budgetScopes.id, scopeId), eq(budgetScopes.projectId, projectId))).returning();
     if (!row) throw new InputError("Lingkup tidak ditemukan.");
     await record(tx, { projectId, userId, entity: "budget_scope", entityId: scopeId, action: "delete", summary: `Menghapus lingkup "${row.name}" beserta penawarannya`, before: row });
@@ -257,8 +278,17 @@ export async function deleteScope(db: Db, userId: string, projectId: string, sco
 
 export async function addBid(db: Db, userId: string, projectId: string, scopeId: string, vendorId: string) {
   await edit(db, userId, projectId);
-  return db.transaction(async (tx) => {
-    const [scope] = await tx.select().from(budgetScopes).where(and(eq(budgetScopes.id, scopeId), eq(budgetScopes.projectId, projectId)));
+  try {
+    return await addBidTx(db, userId, projectId, scopeId, vendorId);
+  } catch (e) {
+    if (isDupKey(e)) throw new InputError("Vendor ini sudah ada di lingkup ini.");
+    throw e;
+  }
+}
+
+const addBidTx = (db: Db, userId: string, projectId: string, scopeId: string, vendorId: string) =>
+  db.transaction(async (tx) => {
+    const [scope] = isUuid(scopeId) ? await tx.select().from(budgetScopes).where(and(eq(budgetScopes.id, scopeId), eq(budgetScopes.projectId, projectId))) : [];
     const [vendor] = isUuid(vendorId) ? await tx.select().from(budgetVendors).where(and(eq(budgetVendors.id, vendorId), eq(budgetVendors.projectId, projectId))) : [];
     if (!scope) throw new InputError("Lingkup tidak ditemukan.");
     if (!vendor) throw new InputError("Vendor tidak ditemukan.");
@@ -270,7 +300,6 @@ export async function addBid(db: Db, userId: string, projectId: string, scopeId:
     await record(tx, { projectId, userId, entity: "budget_scope", entityId: scopeId, action: "create", summary: `Menambah vendor "${vendor.name}" ke lingkup "${scope.name}"` });
     return { bidId: bid.id };
   });
-}
 
 /** Removes a bid with its quotes and versions. The UI asks first. */
 export async function deleteBid(db: Db, userId: string, projectId: string, bidId: string) {
@@ -288,7 +317,11 @@ export async function deleteBid(db: Db, userId: string, projectId: string, bidId
 /** A change order series next to the quote (a new document, versioned the same way). */
 export async function addChangeOrder(db: Db, userId: string, projectId: string, bidId: string, title: string) {
   await edit(db, userId, projectId);
-  return db.transaction(async (tx) => {
+  return db.transaction((tx) => changeOrderTx(tx, userId, projectId, bidId, title));
+}
+
+async function changeOrderTx(tx: Tx, userId: string, projectId: string, bidId: string, title: string) {
+  {
     const [b] = isUuid(bidId) ? await tx.select().from(budgetBids).where(and(eq(budgetBids.id, bidId), eq(budgetBids.projectId, projectId))) : [];
     if (!b) throw new InputError("Penawaran tidak ditemukan.");
     const t = title.trim().slice(0, 120);
@@ -296,18 +329,16 @@ export async function addChangeOrder(db: Db, userId: string, projectId: string, 
     const [doc] = await tx.insert(budgetDocs).values({ projectId, bidId, kind: "change_order", title: t }).returning();
     await record(tx, { projectId, userId, entity: "budget_scope", entityId: b.scopeId, action: "create", summary: `Menambah change order "${t}"` });
     return { docId: doc.id };
-  });
+  }
 }
 
 /** New change order series with its first version (a change order total may be negative: "Pengurangan"). */
 export async function createChangeOrder(db: Db, userId: string, projectId: string, bidId: string, title: string, input: VersionInput) {
-  const { docId } = await addChangeOrder(db, userId, projectId, bidId, title);
-  try {
-    return { docId, ...(await addVersion(db, userId, projectId, docId, input)) };
-  } catch (e) {
-    await db.delete(budgetDocs).where(eq(budgetDocs.id, docId)); // no empty orphan series
-    throw e;
-  }
+  await edit(db, userId, projectId);
+  return db.transaction(async (tx) => { // one transaction: a failing first version leaves no doc and no audit row
+    const { docId } = await changeOrderTx(tx, userId, projectId, bidId, title);
+    return { docId, ...(await versionTx(tx, userId, projectId, docId, input)) };
+  });
 }
 
 // ---------- versions ----------
@@ -353,6 +384,10 @@ function checkLinks(links: string[]) {
 /** Saves a new immutable version. The server recomputes every amount and total; client totals are never read. */
 export async function addVersion(db: Db, userId: string, projectId: string, docId: string, input: VersionInput): Promise<{ versionId: string; number: number }> {
   await edit(db, userId, projectId);
+  return db.transaction((tx) => versionTx(tx, userId, projectId, docId, input));
+}
+
+async function versionTx(tx: Tx, userId: string, projectId: string, docId: string, input: VersionInput): Promise<{ versionId: string; number: number }> {
   const p = VersionSchema.safeParse(input);
   if (!p.success) return fail(p);
   const d = p.data;
@@ -371,9 +406,9 @@ export async function addVersion(db: Db, userId: string, projectId: string, docI
     if (d.lumpSum == null) throw new InputError("Isi rincian item atau jumlah lump sum.");
     subtotal = d.lumpSum;
   }
-  if (!Number.isSafeInteger(subtotal) || subtotal > MAX_RP) throw new InputError("Jumlah terlalu besar.");
+  if (lines.some((l) => !Number.isSafeInteger(l.amount) || Math.abs(l.amount) > MAX_RP) || !Number.isSafeInteger(subtotal) || Math.abs(subtotal) > MAX_RP) throw new InputError("Jumlah terlalu besar.");
   const tax = taxOf(subtotal, d.ppnBp, d.pph23Bp);
-  return db.transaction(async (tx) => {
+  {
     const [doc] = isUuid(docId) ? await tx.select().from(budgetDocs).where(and(eq(budgetDocs.id, docId), eq(budgetDocs.projectId, projectId))).for("update") : [];
     if (!doc) throw new InputError("Dokumen tidak ditemukan.");
     if (subtotal < 0 && doc.kind === "quote") throw new InputError("Subtotal penawaran tidak boleh negatif.");
@@ -387,13 +422,13 @@ export async function addVersion(db: Db, userId: string, projectId: string, docI
     const [ctx] = await tx.select({ scopeId: budgetBids.scopeId, vendor: budgetVendors.name }).from(budgetBids).innerJoin(budgetVendors, eq(budgetVendors.id, budgetBids.vendorId)).where(eq(budgetBids.id, doc.bidId));
     await record(tx, { projectId, userId, entity: "budget_scope", entityId: ctx.scopeId, action: "create", summary: `Menambah versi ${number} ${doc.kind === "quote" ? "penawaran" : `change order "${doc.title}"`} dari "${ctx.vendor}"`, after: { number, ref: d.ref, subtotal, ppn: tax.ppn, pph23: tax.pph23 } });
     return { versionId: v.id, number };
-  });
+  }
 }
 
 /** Moves a saved version along NEXT. Approving supersedes the doc's other approved version; approving a quote picks its bid in the active scenario. */
 export async function setVersionStatus(db: Db, userId: string, projectId: string, versionId: string, status: string, note: string): Promise<{ picked: boolean; vendor: string }> {
   await edit(db, userId, projectId);
-  if (!(status in VERSION_STATUSES)) throw new InputError("Status tidak dikenal.");
+  if (!Object.hasOwn(VERSION_STATUSES, status)) throw new InputError("Status tidak dikenal.");
   const to = status as VersionStatusCode;
   const why = note.trim().slice(0, 500);
   return db.transaction(async (tx) => {

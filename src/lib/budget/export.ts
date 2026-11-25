@@ -13,6 +13,8 @@ export const EXPORT_TYPES = ["scopes", "versions", "invoices", "drives", "scenar
 export type ExportType = (typeof EXPORT_TYPES)[number];
 const INV_STATUS = { planned: "Rencana", received: "Diterima", cancelled: "Dibatalkan" } as const;
 const n = (x: number) => String(x);
+/** Text cells only: a leading = + - @ tab or CR would run as a spreadsheet formula, so prefix an apostrophe. Amounts (n) stay untouched. */
+export const csvText = (v: string) => (/^[=+\-@\t\r]/.test(v) ? `'${v}` : v);
 
 /** Route guard: 401 not signed in, 404 not a member, 403 without budget.view. */
 export async function authorizeBudgetExport(db: Db, user: { id: string } | null, slug: string): Promise<{ ok: true; projectId: string; userId: string; slug: string } | { ok: false; status: 401 | 403 | 404; message: string }> {
@@ -34,7 +36,7 @@ export async function budgetCsvRows(db: Db, userId: string, projectId: string, t
       ...rows.map((r) => {
         const s = data.scopes.find((x) => x.id === r.scopeId)!;
         const bid = data.bids.find((b) => b.id === data.picks.find((p) => p.scopeId === s.id)?.bidId);
-        return [s.name, categoryLabel(s.category), bid ? vendorName(bid.vendorId) : "", n(r.budget), n(r.chosen), n(r.invoiced), n(r.paid), n(r.variance)];
+        return [csvText(s.name), categoryLabel(s.category), bid ? csvText(vendorName(bid.vendorId)) : "", n(r.budget), n(r.chosen), n(r.invoiced), n(r.paid), n(r.variance)];
       }),
       ["Total", "", "", n(total.budget), n(total.chosen), n(total.invoiced), n(total.paid), n(total.budget - total.chosen)],
     ];
@@ -46,7 +48,7 @@ export async function budgetCsvRows(db: Db, userId: string, projectId: string, t
         const doc = data.docs.find((d) => d.id === v.docId);
         const bid = doc && data.bids.find((b) => b.id === doc.bidId);
         if (!doc || !bid) return [];
-        return [[scopeName(bid.scopeId), vendorName(bid.vendorId), doc.kind === "quote" ? "Penawaran" : `Tambahan: ${doc.title}`, `v${v.number}`, v.docDate ?? "", VERSION_STATUSES[v.status as VersionStatusCode] ?? v.status, n(v.subtotal), n(v.ppn), n(v.pph23), n(v.subtotal + v.ppn - v.pph23), v.notes]];
+        return [[csvText(scopeName(bid.scopeId)), csvText(vendorName(bid.vendorId)), doc.kind === "quote" ? "Penawaran" : csvText(`Tambahan: ${doc.title}`), `v${v.number}`, v.docDate ?? "", VERSION_STATUSES[v.status as VersionStatusCode] ?? v.status, n(v.subtotal), n(v.ppn), n(v.pph23), n(v.subtotal + v.ppn - v.pph23), csvText(v.notes)]];
       }),
     ];
   }
@@ -55,20 +57,20 @@ export async function budgetCsvRows(db: Db, userId: string, projectId: string, t
       ["Lingkup", "Vendor", "Termin", "No.", "Jatuh tempo", "Subtotal (Rp)", "PPN perkiraan (Rp)", "PPh 23 perkiraan (Rp)", "Net perkiraan (Rp)", "Dibayar (Rp)", "Sisa (Rp)", "Status"],
       ...data.invoices.map((i) => {
         const st = invoiceState(i, data.payments.filter((p) => p.invoiceId === i.id));
-        return [scopeName(i.scopeId), vendorName(i.vendorId), i.termin, i.ref, i.dueDate ?? "", n(i.subtotal), n(i.ppn), n(i.pph23), n(st.net), n(st.cash), n(st.remaining), INV_STATUS[i.status]];
+        return [csvText(scopeName(i.scopeId)), csvText(vendorName(i.vendorId)), csvText(i.termin), csvText(i.ref), i.dueDate ?? "", n(i.subtotal), n(i.ppn), n(i.pph23), n(st.net), n(st.cash), n(st.remaining), INV_STATUS[i.status]];
       }),
     ];
   }
   if (type === "drives") {
     return [
       ["Rencana", "Tujuan", "Media", "Kapasitas (GB)", "Jumlah", "Harga satuan (Rp)", "Subtotal (Rp)", "Status", "Dibutuhkan sebelum"],
-      ...data.allDriveLines.map((l) => [data.scenarios.find((s) => s.id === l.scenarioId)?.name ?? "", PURPOSES[l.purpose], MEDIA[l.media], n(l.capacityGb), n(l.qty), n(l.unitPrice), n(lineAmount(l.qty * 1000, l.unitPrice)), DRIVE_STATUS[l.status], l.neededBy ?? ""]),
+      ...data.allDriveLines.map((l) => [csvText(data.scenarios.find((s) => s.id === l.scenarioId)?.name ?? ""), PURPOSES[l.purpose], MEDIA[l.media], n(l.capacityGb), n(l.qty), n(l.unitPrice), n(lineAmount(l.qty * 1000, l.unitPrice)), DRIVE_STATUS[l.status], l.neededBy ?? ""]),
     ];
   }
   const cmp = buildComparison(data, data.scenarios.map((s) => s.id));
   return [
-    ["Lingkup", "Budget (Rp)", ...cmp.scenarios.flatMap((s) => [`${s.name}: vendor`, `${s.name}: dipilih (Rp)`])],
-    ...cmp.scopes.map((s) => [s.name, n(s.budget), ...cmp.scenarios.flatMap((v) => [v.cells[s.id]?.vendor ?? "", n(v.cells[s.id]?.amount ?? 0)])]),
+    ["Lingkup", "Budget (Rp)", ...cmp.scenarios.flatMap((s) => [csvText(`${s.name}: vendor`), csvText(`${s.name}: dipilih (Rp)`)])],
+    ...cmp.scopes.map((s) => [csvText(s.name), n(s.budget), ...cmp.scenarios.flatMap((v) => [csvText(v.cells[s.id]?.vendor ?? ""), n(v.cells[s.id]?.amount ?? 0)])]),
     ["Hard drive", "", ...cmp.scenarios.flatMap((v) => ["", n(v.drives)])],
     ["Total", n(cmp.scenarios[0]?.total.budget ?? 0), ...cmp.scenarios.flatMap((v) => ["", n(v.total.chosen)])],
   ];

@@ -1,3 +1,4 @@
+import { can } from "@/lib/auth/permissions";
 import { loadProject } from "@/lib/project-context";
 import { listActivity } from "@/lib/services";
 import { TECH_FIELDS } from "@/lib/tech-spec/schema";
@@ -8,6 +9,7 @@ const show = (v: unknown) => (v === "" || v == null ? "—" : Array.isArray(v) ?
 const label = (key: string) => TECH_FIELDS.find((f) => f.key === key)?.label ?? key;
 
 const KINDS: Record<string, string> = {
+  budget_vendor: "Anggaran", budget_scope: "Anggaran", budget_scenario: "Anggaran",
   schedule: "Jadwal", schedule_item: "Jadwal", track: "Jadwal", dependency: "Jadwal",
   deliverable: "Deliverables", attachment: "Aset", comment: "Komentar", tech_spec: "Technical Page", team_contact: "Tim", team_group: "Tim", member: "Akses", share_link: "Akses", project: "Project",
 };
@@ -23,11 +25,13 @@ function diff(before: unknown, after: unknown): string[] {
 export default async function Activity({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ who?: string; kind?: string }> }) {
   const { slug } = await params;
   const { who = "", kind = "" } = await searchParams;
-  const { db, project } = await loadProject(slug);
-  const all = await listActivity(db, project.id, 500);
+  const { db, project, role } = await loadProject(slug);
+  const budget = can(role, "budget.view");
+  const kinds = [...new Set(Object.values(KINDS))].filter((k) => budget || k !== "Anggaran");
+  const picked = kinds.includes(kind) ? kind : "";
+  const all = await listActivity(db, project.id, 500, { hideBudget: !budget, ...(picked && { entities: Object.keys(KINDS).filter((e) => KINDS[e] === picked) }) }); // kind filtered in SQL: a busy kind must not push another out of the window
   const people = [...new Set(all.map((l) => l.userName).filter(Boolean))] as string[];
-  const kinds = [...new Set(Object.values(KINDS))];
-  const log = all.filter((l) => (!who || l.userName === who) && (!kind || KINDS[l.entry.entity] === kind));
+  const log = all.filter((l) => !who || l.userName === who);
   const groups = new Map<string, typeof log>();
   for (const l of log) {
     const key = day.format(l.entry.createdAt);

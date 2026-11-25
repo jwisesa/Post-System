@@ -28,8 +28,11 @@ describe("money", () => {
     expect(formatRupiah(1250000)).toBe("Rp 1.250.000");
     expect(formatRupiah(-50000)).toBe("−Rp 50.000");
     expect(parseQty("2,5")).toBe(2500);
-    expect(parseQty("0.5")).toBe(500);
-    expect(() => parseQty("0")).toThrow();
+    expect(parseQty("1.200")).toBe(1200000);
+    expect(parseQty("1.200,5")).toBe(1200500);
+    expect(parseQty("0,001")).toBe(1);
+    for (const bad of ["2.5", "0.5", "1.20", "1200.500", "0", "-1", "1,2345", ""]) expect(() => parseQty(bad), bad).toThrow();
+    expect(() => parseQty("2.5")).toThrow(/koma untuk desimal/);
     expect(parseRateBp("11")).toBe(1100);
     expect(parseRateBp("1,5")).toBe(150);
     expect(parseRateBp("")).toBeNull();
