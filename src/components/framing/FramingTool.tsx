@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
+import { Popover } from "@/components/ui/popover";
 import { Section } from "@/components/ui/section";
 import { CAMERAS, FILM } from "@/lib/framing/cameras";
-import { ASPECTS, buildSpec, DEFAULTS, filmStats, FPS, LAYERS, parseState, SCANS, serialize, SQUEEZES, type State } from "@/lib/framing/frame";
+import { ASPECTS, buildSpec, DEFAULTS, filmStats, FPS, LAYERS, parseState, PRESETS, SCANS, serialize, SQUEEZES, type State } from "@/lib/framing/frame";
 import { FramingChart } from "./FramingChart";
 import { chartFonts } from "./fonts";
 
@@ -22,9 +23,9 @@ async function fontCss(): Promise<string> {
       const fam = r.style.getPropertyValue("font-family").replace(/['"]/g, "").trim();
       if (!fams.includes(fam)) continue;
       const range = r.style.getPropertyValue("unicode-range");
-      if (range && !range.includes("U+0000")) continue;
+      if (range && !/U\+0(-|,|$)/i.test(range.replace(/\s/g, ""))) continue; // latin subset starts at U+0 (browsers print "U+0-FF")
       const url = /url\(["']?([^"')]+)["']?\)/.exec(r.style.getPropertyValue("src"))?.[1]; if (!url) continue;
-      const buf = new Uint8Array(await (await fetch(url)).arrayBuffer());
+      const buf = new Uint8Array(await (await fetch(new URL(url, sheet.href ?? location.href))).arrayBuffer());
       let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
       css += `@font-face{font-family:'${fam}';font-weight:${r.style.getPropertyValue("font-weight") || 400};src:url(data:font/woff2;base64,${btoa(bin)}) format('woff2');}`;
     }
@@ -54,7 +55,8 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
   const st = filmStats(fmt, gate, +s.scan, spec.fps);
   const squeezes = s.kind === "film" ? [1, 2] : cam.squeeze ?? [1];
   const toggle = (k: string) => set({ layers: s.layers.includes(k) ? s.layers.replace(k, "") : s.layers + k });
-  const toggleG = (id: string) => { const g = s.guides ? s.guides.split(",") : []; set({ guides: (g.includes(id) ? g.filter((x) => x !== id) : [...g, id]).join(",") }); };
+  const toggleG = (id: string) => { const g = s.guides ? s.guides.split(",") : []; set({ guides: (g.includes(id) ? g.filter((x) => x !== id) : [...g, id]).join(","), layers: s.layers.includes("g") ? s.layers : s.layers + "g" }); };
+  const mode = cam.modes.find((m) => m.id === (s.mode || cam.modes[0].id)) ?? cam.modes[0];
   const name = `framing-${spec.camera}-${spec.W}x${spec.H}`.replace(/\W+/g, "-").toLowerCase();
 
   async function png() {
@@ -93,7 +95,14 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
                 <select className={fld} value={s.mode || cam.modes[0].id} onChange={(e) => set({ mode: e.target.value })}>
                   {cam.modes.map((m) => <option key={m.id} value={m.id}>{m.label} · {m.px[0]}×{m.px[1]}</option>)}
                 </select></label>
-              <p className="muted text-xs">Sensor {spec.mm[0]} × {spec.mm[1]} mm{spec.codec ? ` · ${spec.codec}` : ""}. Sumber: <a className="text-accent" href={(cam.modes.find((m) => m.id === (s.mode || cam.modes[0].id)) ?? cam.modes[0]).source.url} target="_blank" rel="noreferrer">{cam.brand}</a></p>
+              <p className="muted text-xs">Sensor {spec.mm[0]} × {spec.mm[1]} mm{spec.codec ? ` · ${spec.codec}` : ""}.{" "}
+                <Popover label="Sumber data" className="text-accent underline" trigger="Sumber">{() => (
+                  <div className="space-y-1 p-3 text-xs" style={{ width: "min(18rem, 70vw)" }}>
+                    <p className="font-semibold">{cam.brand} {cam.name} · {mode.label}</p>
+                    <p><a className="text-accent underline [overflow-wrap:anywhere]" href={mode.source.url} target="_blank" rel="noreferrer">{mode.source.title}</a></p>
+                    <p className="muted">Diakses {mode.source.accessed}.{mode.derived ? " Ukuran mm dihitung dari sensor penuh (pitch piksel sama); resolusi dari halaman sumber." : ""}</p>
+                    {cam.source.url !== mode.source.url && <p><a className="text-accent underline [overflow-wrap:anywhere]" href={cam.source.url} target="_blank" rel="noreferrer">{cam.source.title}</a></p>}
+                  </div>)}</Popover></p>
             </>) : (<>
               <label className={lbl}><span className="muted">Format film</span>
                 <select className={fld} value={fmt.id} onChange={(e) => set({ film: e.target.value, gate: "" })}>{FILM.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}</select></label>
@@ -109,7 +118,9 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
                 <dt className="muted">Rol 400 ft</dt><dd>{st.r400.min.toFixed(1)} mnt · {st.r400.gb.toFixed(0)} GB</dd>
                 <dt className="muted">Rol 1000 ft</dt><dd>{st.r1000.min.toFixed(1)} mnt · {st.r1000.gb.toFixed(0)} GB</dd>
               </dl>
-              {!fmt.verified && <p className="muted text-xs">Dimensi gate dari rujukan sekunder (SMPTE/Kodak); cek lagi sebelum dipakai untuk scan.</p>}
+              <p className="muted text-xs">
+                Sumber gate: <a className="text-accent underline" href={gate.source.url} target="_blank" rel="noreferrer">{gate.source.title}</a>.
+                {gate.note ? ` ${gate.note}` : ""}{!gate.verified ? " Belum terverifikasi dari sumber utama; cek lagi sebelum dipakai untuk scan." : ""}</p>
             </>)}
           </div>
         </Section>
@@ -136,14 +147,17 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
             {text("director", "Sutradara")}{text("production", "Produksi")}{text("unit", "Unit / huruf kamera", "A")}{text("notes", "Catatan")}
           </div>
         </Section>
-        <Section id="tampilan" title="Tampilan" defaultOpen={false}>
+        <Section id="tampilan" title="Tampilan" digest={Object.values(PRESETS).find((p) => p.layers === s.layers)?.label ?? "Kustom"}>
           <div className="grid grid-cols-2 gap-2 p-3">
+            <div role="group" aria-label="Preset" className="col-span-2 flex gap-2">
+              {Object.entries(PRESETS).map(([k, v]) => <button key={k} type="button" className={s.layers === v.layers ? "btn" : "btn-secondary"} aria-pressed={s.layers === v.layers} onClick={() => set({ layers: v.layers })}>{v.label}</button>)}
+            </div>
             {Object.entries(LAYERS).map(([k, v]) => <label key={k} className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={s.layers.includes(k)} onChange={() => toggle(k)} />{v}</label>)}
             <p className="muted col-span-2 text-xs">Font chart: Barlow dan JetBrains Mono.</p>
           </div>
         </Section>
       </div>
-      <div className="min-w-0 space-y-3">
+      <div className="order-first min-w-0 space-y-3 lg:order-none">
         <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 py-2" style={{ background: "var(--bg)" }}>
           <button type="button" className="btn" disabled={busy} onClick={png}>{busy ? "Membuat PNG…" : `Unduh PNG ${spec.W}×${spec.H}`}</button>
           <Link className="btn-secondary" href={`/admin/p/${slug}/framing/print${q ? `?${q}` : ""}`} target="_blank">Cetak PDF</Link>

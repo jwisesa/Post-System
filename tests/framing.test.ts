@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CAMERAS, FILM } from "@/lib/framing/cameras";
-import { buildSpec, DEFAULTS, filmStats, framing, parseState, safety, serialize } from "@/lib/framing/frame";
+import { buildSpec, DEFAULTS, filmStats, fitBlock, framing, parseState, placeGuideLabels, safety, serialize, textW, wrapText } from "@/lib/framing/frame";
 
 describe("framing math", () => {
   it("16:9 in a 3:2 sensor crops height", () => {
@@ -44,5 +44,48 @@ describe("data and state", () => {
     const back = parseState(Object.fromEntries(new URLSearchParams(serialize(s))));
     expect(back).toEqual(s);
     const spec = buildSpec(s); expect(spec.W).toBe(3840); expect(spec.squeeze).toBe(2);
+  });
+});
+
+describe("more framing cases", () => {
+  it("1:1 on 3:2 sensor is height-limited and even", () => {
+    const r = framing(4608, 3164, 1); expect(r).toEqual({ x: 722, y: 0, w: 3164, h: 3164 });
+  });
+  it("1.3x squeeze on 3:2 for 2.39 is width-limited", () => {
+    const r = framing(4608, 3164, 2.39, 1.3); // desqueezed 5990x3164 = 1.89 < 2.39
+    expect(r.w).toBe(4608); expect(r.h).toBe(Math.round((4608 * 1.3) / 2.39 / 2) * 2);
+  });
+  it("odd sensor sizes give integer, centred, in-bounds rects", () => {
+    const r = framing(2743, 3086, 16 / 9, 2);
+    expect(r.w).toBeLessThanOrEqual(2743); expect(r.h).toBeLessThanOrEqual(3086);
+    expect(Number.isInteger(r.w) && Number.isInteger(r.h)).toBe(true);
+    expect(r.x * 2 + r.w).toBe(2743);
+  });
+  it("non-matching aspect (4:3 target on 2.39 sensor) keeps full height", () => {
+    const r = framing(4448, 1856, 4 / 3); expect(r.h).toBe(1856); expect(r.w).toBe(2474); expect(r.x).toBe(987);
+  });
+});
+describe("text fitting", () => {
+  const long = "ARRIRAW / Apple ProRes 4444 XQ / Blackmagic RAW Q0 / REDCODE RAW HQ extra";
+  it("shrinks stepwise and never exceeds max width", () => {
+    const f = fitBlock([`Sensor mode: 4.6K 3:2 Open Gate · ${long}`], 50, 1500);
+    expect(f.size).toBeLessThan(50); expect(f.size).toBeGreaterThanOrEqual(50 * 0.55 - 1e-9);
+    for (const l of f.lines.flat()) expect(textW(l, f.size)).toBeLessThanOrEqual(1500);
+  });
+  it("leaves short text alone", () => { expect(fitBlock(["DoP: A"], 50, 1500).size).toBe(50); });
+  it("hard-splits unbreakable tokens", () => { for (const l of wrapText("X".repeat(100), 30)) expect(l.length).toBeLessThanOrEqual(30); });
+});
+describe("guide labels", () => {
+  it("staggers close guides across sides and caps at 4", () => {
+    const l = placeGuideLabels([100, 104, 108, 112, 116, 500], 40);
+    expect(l).toHaveLength(4);
+    expect(new Set(l.map((x) => x.side)).size).toBe(2);
+    for (const side of [0, 1]) { const ys = l.filter((x) => x.side === side).map((x) => x.y).sort((a, b) => a - b); for (let i = 1; i < ys.length; i++) expect(ys[i] - ys[i - 1]).toBeGreaterThanOrEqual(40); }
+  });
+});
+describe("film verification", () => {
+  it("every gate declares source and verified flag; unverified are explained", () => {
+    for (const f of FILM) for (const g of f.gates) { expect(g.source.accessed).toBe("2026-11-26"); expect(typeof g.verified).toBe("boolean"); }
+    expect(FILM[1].gates[0].mm).toEqual([24.9, 13.9]);
   });
 });

@@ -7,6 +7,7 @@ export const ASPECTS: { id: string; label: string; ar: number }[] = [
 ];
 export const SQUEEZES = [1, 1.3, 1.5, 1.8, 2];
 export const FPS = [23.976, 24, 25, 29.97, 30, 48, 50, 60];
+export const PRESETS = { netflix: { label: "Netflix-style", layers: "smlcx" }, minimal: { label: "Minimal", layers: "mcx" } } as const;
 export const LAYERS = { g: "Panduan rasio", t: "Rule of thirds", s: "Siemens star", m: "Penanda tepi", l: "Label sudut", c: "Silang tengah", f: "Safety", x: "Blok teks" } as const;
 export type Rect = { x: number; y: number; w: number; h: number };
 
@@ -19,6 +20,34 @@ export function framing(W: number, H: number, ar: number, s = 1): Rect {
   if ((W * s) / H > ar) { h = H; w = (H * ar) / s; } else { w = W; h = (W * s) / ar; }
   w = Math.min(W, even(w)); h = Math.min(H, even(h));
   return { x: (W - w) / 2, y: (H - h) / 2, w, h };
+}
+/** Conservative average glyph advance in em for Barlow 600 (real is ~0.5; over-estimating guarantees no clipping). */
+export const CHAR_EM = 0.52;
+export const textW = (t: string, size: number, em = CHAR_EM) => t.length * em * size;
+/** Break at spaces into lines of at most `per` chars; tokens longer than `per` are hard-split. */
+export function wrapText(t: string, per: number): string[] {
+  per = Math.max(4, Math.floor(per));
+  const out: string[] = []; let cur = "";
+  for (let w of t.split(/\s+/).filter(Boolean)) {
+    while (w.length > per) { if (cur) { out.push(cur); cur = ""; } out.push(w.slice(0, per)); w = w.slice(per); }
+    if (!cur) cur = w; else if (cur.length + 1 + w.length <= per) cur += " " + w; else { out.push(cur); cur = w; }
+  }
+  if (cur) out.push(cur);
+  return out.length ? out : [""];
+}
+/** One shared font size (shrunk in 8% steps, never below base*min) so every line fits maxW; lines still too wide at the floor are wrapped. */
+export function fitBlock(texts: string[], base: number, maxW: number, min = 0.55, em = CHAR_EM): { size: number; lines: string[][] } {
+  let size = base;
+  while (size * 0.92 >= base * min && texts.some((t) => textW(t, size, em) > maxW)) size *= 0.92;
+  return { size, lines: texts.map((t) => (textW(t, size, em) > maxW ? wrapText(t, maxW / (em * size)) : [t])) };
+}
+/** Stagger guide labels: alternate sides of centre, at most `cap` labelled; same-side labels are pushed down by `lh` and flagged for a leader tick. */
+export function placeGuideLabels(tops: number[], lh: number, cap = 4) {
+  const last = [-Infinity, -Infinity];
+  return tops.map((top, i) => ({ top, i })).sort((a, b) => a.top - b.top || a.i - b.i).slice(0, cap).map(({ top, i }, n) => {
+    const side = n % 2, y = Math.max(top, last[side] + lh * 1.15); last[side] = y;
+    return { i, side, y, tick: y > top + 0.5 };
+  });
 }
 export function safety(r: Rect, pct: number): Rect {
   const k = pct / 100, w = r.w * k, h = r.h * k;
@@ -35,7 +64,7 @@ export function filmStats(f: FilmFormat, g: Gate, scanW: number, fps: number) {
 }
 
 export type State = Record<"kind" | "cam" | "mode" | "film" | "gate" | "scan" | "ar" | "guides" | "sq" | "safety" | "fps" | "project" | "title" | "dop" | "director" | "production" | "notes" | "unit" | "layers", string>;
-export const DEFAULTS: State = { kind: "digital", cam: CAMERAS[0].id, mode: "", film: FILM[0].id, gate: "", scan: "4096", ar: "178", guides: "239,185", sq: "1", safety: "90", fps: "24", project: "", title: "", dop: "", director: "", production: "", notes: "", unit: "", layers: "gsmlcfx" };
+export const DEFAULTS: State = { kind: "digital", cam: CAMERAS[0].id, mode: "", film: FILM[0].id, gate: "", scan: "4096", ar: "178", guides: "239,185", sq: "1", safety: "90", fps: "24", project: "", title: "", dop: "", director: "", production: "", notes: "", unit: "", layers: PRESETS.netflix.layers };
 export const SCANS = [{ id: "2048", label: "2K" }, { id: "4096", label: "4K" }, { id: "6144", label: "6K" }];
 
 export function parseState(q: Record<string, string | string[] | undefined>, project = ""): State {
