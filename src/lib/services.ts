@@ -362,3 +362,14 @@ export async function listActivity(db: Db, projectId: string, limit = 200, opts:
     .orderBy(desc(auditLog.createdAt))
     .limit(limit);
 }
+
+/** Audit rows of one entity (newest first), with the actor's name. The caller must have checked the reader's permission. */
+export async function listEntityActivity(db: Db, projectId: string, entity: string, entityId: string, limit = 100) {
+  return db
+    .select({ entry: auditLog, userName: users.name })
+    .from(auditLog)
+    .leftJoin(users, eq(users.id, auditLog.userId))
+    .where(and(eq(auditLog.projectId, projectId), eq(auditLog.entity, entity), eq(auditLog.entityId, entityId)))
+    .orderBy(desc(auditLog.createdAt))
+    .limit(limit);
+}

@@ -6,10 +6,12 @@ import { categoryLabel, DEFAULT_PPH23_BP, DEFAULT_PPN_BP } from "@/lib/budget/ca
 import { invoiceRow, jakartaToday } from "@/lib/budget/invoice-view";
 import { formatRupiah } from "@/lib/budget/money";
 import { compareBids } from "@/lib/budget/vendors";
-import { getScope } from "@/lib/budget/service";
+import { getScope, getScopeHistory } from "@/lib/budget/service";
 import { listDeliverables } from "@/lib/deliverables/service";
 import { loadProject } from "@/lib/project-context";
 import { listPhases } from "@/lib/script/service";
+
+const stamp = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" });
 
 export default async function ScopePage({ params }: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await params;
@@ -17,6 +19,7 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
   if (!can(role, "budget.view")) notFound();
   const d = await getScope(db, user.id, project.id, id);
   if (!d) notFound();
+  const history = await getScopeHistory(db, user.id, project.id, id);
   const [phases, deliverables] = await Promise.all([listPhases(db, project.id), listDeliverables(db, project.id, { includeInternal: true })]);
   const pick = d.picks[0];
   const today = jakartaToday();
@@ -57,6 +60,25 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
         phases={phases.map((p) => ({ id: p.id, name: `${p.name} (${p.track})` }))}
         deliverables={deliverables.map((x) => ({ id: x.id, name: x.name }))}
       />
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold">Riwayat</h2>
+        {history.length === 0 ? <p className="muted text-sm">Belum ada riwayat.</p> : (
+          <ul className="rows">
+            {history.map(({ entry, userName }) => (
+              <li key={entry.id} className="min-w-0 break-words py-2 text-[13px]">
+                <span className="font-semibold">{userName ?? "—"}</span> <span className="text-ink-2">· {stamp.format(entry.createdAt)} ·</span> {entry.summary}
+                {(entry.before != null || entry.after != null) && (
+                  <details className="bg-hist-detail mt-1">
+                    <summary className="muted cursor-pointer">Detail</summary>
+                    {entry.before != null && <><p className="muted">Sebelum</p><pre>{JSON.stringify(entry.before, null, 2)}</pre></>}
+                    {entry.after != null && <><p className="muted">Sesudah</p><pre>{JSON.stringify(entry.after, null, 2)}</pre></>}
+                  </details>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

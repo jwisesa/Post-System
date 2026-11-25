@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { saveScope } from "@/app/admin/budget-actions";
 import { Drawer } from "@/components/ui/controls";
+import { Icon } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/toast";
 import { categoryLabel, SERVICE_CATEGORIES, TAX_NOTE } from "@/lib/budget/catalog";
 import { formatRupiah, MoneyError, parseRupiah } from "@/lib/budget/money";
@@ -63,7 +64,7 @@ export function ScopeDrawer({ slug, init, phases, deliverables, onClose }: { slu
 }
 
 export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases, deliverables, vendors, contacts, drive, plans, initialTab }: {
-  plans: { scenarioName: string | null; scenarios: ScenarioInfo[]; cmp: Comparison; scopes: PickScope[]; live: { invoiced: number; paid: number } }; initialTab?: "sum" | "plans";
+  plans: { scenarioName: string | null; scenarios: ScenarioInfo[]; cmp: Comparison; scopes: PickScope[]; live: { invoiced: number; paid: number } }; initialTab?: "sum" | "plans" | "drive" | "bills";
   drive: Omit<DriveProps, "slug" | "canEdit">;
   slug: string; canEdit: boolean; rows: ScopeRow[]; total: { budget: number; chosen: number; invoiced: number; paid: number; overpaid: number; provisional: boolean }; today: string; invoices: InvoiceRow[];
   phases: Option[]; deliverables: Option[]; vendors: VendorRow[]; contacts: Option[];
@@ -81,8 +82,19 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
           <button type="button" aria-pressed={tab === "drive"} onClick={() => setTab("drive")}>Hard drive</button>
           <button type="button" aria-pressed={tab === "plans"} onClick={() => setTab("plans")}>Rencana</button>
         </div>
-        {plans.scenarioName && tab !== "plans" && <span className="muted text-sm"><span className="tag">Rencana: {plans.scenarioName}</span> <button type="button" className="underline" onClick={() => setTab("plans")}>Ganti rencana</button></span>}
+        {plans.scenarioName && tab !== "plans" && tab !== "drive" && <span className="muted text-sm"><span className="tag">Rencana: {plans.scenarioName}</span> <button type="button" className="underline" onClick={() => setTab("plans")}>Ganti rencana</button></span>}
         {tab === "sum" && canEdit && rows.length > 0 && <button type="button" className="btn-secondary" onClick={() => setAdding(true)}>Tambah lingkup</button>}
+        <details className="tl-details relative ml-auto">
+          <summary className="btn-secondary cursor-pointer" aria-label="Export"><Icon name="download" /> Export</summary>
+          <div className="tl-pop" role="menu" aria-label="Export">
+            {[
+              ...[["ringkasan", "PDF ringkasan"], ["tagihan", "PDF tagihan"], ["rencana", "PDF rencana"]].map(([v, label]) => ({ href: `/admin/p/${slug}/budget/print?view=${v}`, icon: "print" as const, label, download: false })),
+              ...[["scopes", "CSV lingkup"], ["versions", "CSV versi penawaran"], ["invoices", "CSV tagihan"], ["drives", "CSV belanja drive"], ["scenarios", "CSV perbandingan rencana"]].map(([t, label]) => ({ href: `/admin/p/${slug}/budget/export?type=${t}`, icon: "download" as const, label, download: true })),
+            ].map((l) => (
+              <a key={l.href} role="menuitem" href={l.href} download={l.download || undefined} onClick={(e) => e.currentTarget.closest("details")?.removeAttribute("open")}><Icon name={l.icon} /> {l.label}</a>
+            ))}
+          </div>
+        </details>
       </div>
       {tab === "sum" && (rows.length === 0 ? (
         <div className="space-y-3">
@@ -119,7 +131,7 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
         </>
       ))}
       {tab === "bills" && <InvoiceList slug={slug} invoices={invoices} today={today} />}
-      {tab === "drive" && <DriveTab key={`${drive.seeded}${JSON.stringify(drive.calc)}${drive.rates.length}`} slug={slug} canEdit={canEdit} {...drive} />}
+      {tab === "drive" && <DriveTab key={`${drive.scenarioId}${drive.seeded}${JSON.stringify(drive.calc)}${drive.rates.length}`} slug={slug} canEdit={canEdit} {...drive} />}
       {tab === "plans" && <ScenarioTab slug={slug} canEdit={canEdit} {...plans} />}
       {tab === "vendor" && <VendorPanel slug={slug} canEdit={canEdit} vendors={vendors} contacts={contacts} />}
       {adding && <ScopeDrawer slug={slug} init={{ id: null, name: "", category: "other", budget: 0, phaseIds: [], deliverableIds: [], notes: "" }} phases={phases} deliverables={deliverables} onClose={() => setAdding(false)} />}

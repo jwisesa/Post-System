@@ -11,14 +11,14 @@ import { loadProject } from "@/lib/project-context";
 import { listPhases } from "@/lib/script/service";
 import { getTeam } from "@/lib/services";
 
-export default async function BudgetPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ tab?: string }> }) {
+export default async function BudgetPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ tab?: string; scenario?: string }> }) {
   const { slug } = await params;
-  const { tab } = await searchParams;
+  const { tab, scenario } = await searchParams;
   const { db, project, role, user } = await loadProject(slug);
   if (!can(role, "budget.view")) notFound();
   const data = await getBudget(db, user.id, project.id);
   const { rows, total } = rollup(data);
-  const plan = await getDrivePlan(db, user.id, project.id, { email: user.email });
+  const plan = await getDrivePlan(db, user.id, project.id, { email: user.email, scenarioId: data.scenarios.some((x) => x.id === scenario) ? scenario : null });
   const [phases, deliverables, team] = await Promise.all([listPhases(db, project.id), listDeliverables(db, project.id, { includeInternal: true }), getTeam(db, project.id, { includeInternal: true })]);
   return (
     <div className="mx-auto max-w-[1100px] space-y-4">
@@ -27,7 +27,7 @@ export default async function BudgetPage({ params, searchParams }: { params: Pro
         <p className="page-meta">Budget per lingkup, penawaran vendor, dan versinya. Angka sebelum pajak.</p>
       </div>
       <BudgetView
-        initialTab={tab === "rencana" ? "plans" : undefined}
+        initialTab={tab === "rencana" ? "plans" : tab === "drive" ? "drive" : tab === "bills" ? "bills" : undefined}
         plans={{
           scenarioName: data.scenarioName,
           scenarios: data.scenarios.map((s) => ({ id: s.id, name: s.name, notes: s.notes, isActive: s.isActive, pickCount: s.pickCount, driveLineCount: s.driveLineCount })),
@@ -36,6 +36,7 @@ export default async function BudgetPage({ params, searchParams }: { params: Pro
           live: { invoiced: total.invoiced, paid: total.paid },
         }}
         drive={{
+          scenarioId: plan.scenarioId, scenarioName: plan.scenarioName, isActive: plan.isActive, scenarios: data.scenarios.map((x) => ({ id: x.id, name: x.name, isActive: x.isActive })),
           calc: plan.calc, seeded: plan.seeded, rates: plan.rates, projectRateIds: plan.projectRateIds, tech: plan.tech, tracker: plan.tracker,
           vendors: data.vendors.filter((v) => !v.archivedAt).map((v) => ({ id: v.id, name: v.name })),
           lines: plan.lines.map((l) => ({ id: l.id, purpose: l.purpose, media: l.media, capacityGb: l.capacityGb, qty: l.qty, unitPrice: l.unitPrice, ppnRateBp: l.ppnRateBp, vendorId: l.vendorId, vendor: l.vendor, neededBy: l.neededBy, status: l.status, notes: l.notes })),

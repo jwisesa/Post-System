@@ -1150,3 +1150,7 @@ details.tl-details > summary::-webkit-details-marker { display: none; }
 .sc-cmp th:first-child, .sc-cmp td:first-child { min-width: 8rem; }
 .sc-cell { display: grid; gap: 0.125rem; justify-items: start; }
 .sc-cell .bg-num { text-align: start; }
+
+/* ---------- budget E ---------- */
+.bg-hist-detail pre { max-width: 100%; overflow-x: auto; margin-top: 0.25rem; padding: 0.5rem; background: var(--raised); font-size: 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bg-due-late { color: var(--danger); }

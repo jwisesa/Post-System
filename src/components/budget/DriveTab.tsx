@@ -12,7 +12,7 @@ import { DEFAULT_PPN_BP, TAX_NOTE } from "@/lib/budget/catalog";
 import { formatRateBp, formatRupiah, lineAmount, MoneyError, parseRateBp, parseRupiah } from "@/lib/budget/money";
 
 export type DriveLineRow = { id: string; purpose: string; media: string; capacityGb: number; qty: number; unitPrice: number; ppnRateBp: number | null; vendorId: string | null; vendor: string | null; neededBy: string | null; status: string; notes: string };
-export type DriveProps = { slug: string; canEdit: boolean; calc: DriveCalc; seeded: boolean; rates: RateRow[]; projectRateIds: string[]; tech: Record<string, string>; lines: DriveLineRow[]; vendors: { id: string; name: string }[]; tracker: DriveSummary | null };
+export type DriveProps = { scenarioId: string | null; scenarioName: string | null; isActive: boolean; scenarios: { id: string; name: string; isActive: boolean }[]; slug: string; canEdit: boolean; calc: DriveCalc; seeded: boolean; rates: RateRow[]; projectRateIds: string[]; tech: Record<string, string>; lines: DriveLineRow[]; vendors: { id: string; name: string }[]; tracker: DriveSummary | null };
 
 const PURPOSES: Record<string, string> = { ocf: "OCF", proxy: "Proxy", grade: "Grading", vfx: "VFX", master: "Master", archive: "Arsip", other: "Lainnya" };
 const MEDIA: Record<string, string> = { ssd: "SSD", hdd: "HDD", raid: "RAID", lto: "LTO", other: "Lainnya" };
@@ -69,11 +69,23 @@ export function DriveTab(p: DriveProps) {
 
   return (
     <div className="space-y-8">
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <label className="flex items-center gap-2">Rencana
+            <select aria-label="Rencana yang diedit" value={p.scenarioId ?? ""} onChange={(e) => router.push(`/admin/p/${slug}/budget?tab=drive${e.target.value ? `&scenario=${e.target.value}` : ""}`)}>
+              {p.scenarios.map((s) => <option key={s.id} value={s.id}>{s.name}{s.isActive ? " (aktif)" : ""}</option>)}
+            </select>
+          </label>
+          {p.scenarioName && <span className="tag">Rencana: {p.scenarioName}</span>}
+          <span className="muted">Total belanja rencana ini <span className="tabular-nums">{formatRupiah(total)}</span>, sebelum pajak.</span>
+        </div>
+        {!p.isActive && p.scenarioName && <p className="text-sm font-medium" role="status">Anda {canEdit ? "mengedit" : "melihat"} {p.scenarioName} (belum aktif). Ringkasan anggaran tetap memakai rencana aktif.</p>}
+      </div>
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-base font-semibold">Kalkulator kapasitas</h2>
           <button type="button" className="btn-secondary" onClick={() => setRatesOpen(true)}>Tabel data rate</button>
-          {canEdit && <ConfirmButton type="button" className="btn-secondary" message="Muat ulang kamera dan codec dari Technical Page? Isian kalkulator saat ini diganti." onClick={() => run(() => reseedCalc(slug), "Dimuat dari Technical Page.").then(() => router.refresh())}>Muat ulang dari Technical Page</ConfirmButton>}
+          {canEdit && <ConfirmButton type="button" className="btn-secondary" message="Muat ulang kamera dan codec dari Technical Page? Isian kalkulator saat ini diganti." onClick={() => run(() => reseedCalc(slug, p.scenarioId ?? undefined), "Dimuat dari Technical Page.").then(() => router.refresh())}>Muat ulang dari Technical Page</ConfirmButton>}
         </div>
         <p className="muted text-sm">Perkiraan, bukan angka pasti. Kamera dan codec diambil dari Technical Page{p.seeded ? " (belum disimpan)" : ""}. Data rate di-skala linear terhadap fps (estimasi linear). Satuan TB desimal (1 TB = 10^12 byte), ≈ TiB sebagai pembanding.</p>
         <fieldset disabled={ro} className="min-w-0 space-y-3 border-0 p-0">
@@ -142,7 +154,7 @@ export function DriveTab(p: DriveProps) {
             </table>
           </div>
         </fieldset>
-        {canEdit && <button type="button" className="btn" disabled={busy || !dirty && !p.seeded} onClick={() => run(() => saveCalc(slug, calc), "Kalkulator disimpan.")}>{busy ? "Menyimpan…" : "Simpan kalkulator"}</button>}
+        {canEdit && <button type="button" className="btn" disabled={busy || !dirty && !p.seeded} onClick={() => run(() => saveCalc(slug, calc, p.scenarioId ?? undefined), "Kalkulator disimpan.")}>{busy ? "Menyimpan…" : "Simpan kalkulator"}</button>}
       </section>
 
       <section className="space-y-3">
@@ -197,13 +209,13 @@ export function DriveTab(p: DriveProps) {
         )}
       </section>
 
-      {line && <LineDrawer slug={p.slug} init={line === "new" ? null : line} vendors={p.vendors} onClose={() => setLine(null)} />}
+      {line && <LineDrawer slug={p.slug} scenarioId={p.scenarioId} init={line === "new" ? null : line} vendors={p.vendors} onClose={() => setLine(null)} />}
       {ratesOpen && <RatesDrawer slug={slug} canEdit={canEdit} rates={p.rates} projectIds={p.projectRateIds} onClose={() => setRatesOpen(false)} />}
     </div>
   );
 }
 
-function LineDrawer({ slug, init, vendors, onClose }: { slug: string; init: DriveLineRow | null; vendors: { id: string; name: string }[]; onClose: () => void }) {
+function LineDrawer({ slug, scenarioId, init, vendors, onClose }: { slug: string; scenarioId: string | null; init: DriveLineRow | null; vendors: { id: string; name: string }[]; onClose: () => void }) {
   const toast = useToast();
   const router = useRouter();
   const [f, setF] = useState({ purpose: init?.purpose ?? "ocf", media: init?.media ?? "ssd", cap: init ? String(init.capacityGb / 1000).replace(".", ",") : "", qty: String(init?.qty ?? 1), price: init ? String(init.unitPrice) : "", ppn: init?.ppnRateBp != null ? formatRateBp(init.ppnRateBp) : "", vendorId: init?.vendorId ?? "", neededBy: init?.neededBy ?? "", status: init?.status ?? "planned", notes: init?.notes ?? "" });
@@ -216,7 +228,7 @@ function LineDrawer({ slug, init, vendors, onClose }: { slug: string; init: Driv
     try { unitPrice = f.price.trim() ? parseRupiah(f.price) : 0; ppnBp = parseRateBp(f.ppn); } catch (x) { toast({ message: x instanceof MoneyError ? x.message : "Data tidak valid.", tone: "error" }); return; }
     const capTb = Number(f.cap.replace(",", "."));
     setBusy(true);
-    const r = await saveDrive(slug, init?.id ?? null, { purpose: f.purpose, media: f.media, capacityGb: Math.round(capTb * 1000), qty: Number(f.qty), unitPrice, ppnBp, vendorId: f.vendorId || null, neededBy: f.neededBy, status: f.status, notes: f.notes });
+    const r = await saveDrive(slug, init?.id ?? null, { purpose: f.purpose, media: f.media, capacityGb: Math.round(capTb * 1000), qty: Number(f.qty), unitPrice, ppnBp, vendorId: f.vendorId || null, neededBy: f.neededBy, status: f.status, notes: f.notes }, scenarioId ?? undefined);
     setBusy(false);
     if (!r.ok) { toast({ message: r.error, tone: "error" }); return; }
     toast({ message: "Drive disimpan." }); onClose(); router.refresh();

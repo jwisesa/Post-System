@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Db } from "@/db/client";
 import { budgetDriveLines, budgetScenarios, budgetScopes, budgetSettings, budgetVendors, projects } from "@/db/schema";
 import { canUseDriveTracker, getDriveSummary } from "../drive-tracker/service";
-import { getTechSpec, InputError, record, requireRole } from "../services";
+import { getTechSpec, InputError, record, requireRole, type Tx } from "../services";
 import { calcSchema, compareTracker, computeNeed, seedCalc, type DriveCalc } from "./capacity";
 import { mergeRates, RATES, type RateRow } from "./datarates";
 import { MAX_RP } from "./money";
@@ -30,10 +30,18 @@ async function projectRates(db: Db, projectId: string): Promise<RateRow[]> {
   return p.success ? (p.data as RateRow[]) : [];
 }
 
-export async function getDrivePlan(db: Db, userId: string, projectId: string, opts: { email?: string } = {}) {
-  const user = await requireRole(db, userId, projectId, "budget.view");
-  void user;
-  const [scenario] = await db.select().from(budgetScenarios).where(and(eq(budgetScenarios.projectId, projectId), eq(budgetScenarios.isActive, true)));
+/** The scenario to work on: the given one (must belong to the project) or the active one (created on first use). */
+async function pickScenario(tx: Tx, projectId: string, scenarioId?: string | null): Promise<string> {
+  if (!scenarioId) return ensureActiveScenario(tx, projectId);
+  const [s] = isUuid(scenarioId) ? await tx.select({ id: budgetScenarios.id }).from(budgetScenarios).where(and(eq(budgetScenarios.id, scenarioId), eq(budgetScenarios.projectId, projectId))) : [];
+  if (!s) throw new InputError("Rencana tidak ditemukan.");
+  return s.id;
+}
+
+export async function getDrivePlan(db: Db, userId: string, projectId: string, opts: { email?: string; scenarioId?: string | null } = {}) {
+  await requireRole(db, userId, projectId, "budget.view");
+  const [scenario] = await db.select().from(budgetScenarios).where(opts.scenarioId && isUuid(opts.scenarioId) ? and(eq(budgetScenarios.projectId, projectId), eq(budgetScenarios.id, opts.scenarioId)) : and(eq(budgetScenarios.projectId, projectId), eq(budgetScenarios.isActive, true)));
+  if (opts.scenarioId && !scenario) throw new InputError("Rencana tidak ditemukan.");
   const [own, tech, scopes] = [await projectRates(db, projectId), await getTechSpec(db, projectId), await db.select().from(budgetScopes).where(eq(budgetScopes.projectId, projectId)).orderBy(asc(budgetScopes.sortOrder), asc(budgetScopes.createdAt))];
   const rates = mergeRates(RATES, own);
   const saved = scenario?.driveCalc ? calcSchema.safeParse(scenario.driveCalc) : null;
@@ -46,29 +54,29 @@ export async function getDrivePlan(db: Db, userId: string, projectId: string, op
     if (p?.id) { tracker = await getDriveSummary(db, p.id); compare = compareTracker(need, lines.map((x) => x.l), tracker); }
   }
   return {
-    scenarioId: scenario?.id ?? null, seeded: !saved?.success, calc, tech: tech as Record<string, string>, rates, projectRateIds: own.map((r) => r.id), need, tracker, compare,
+    scenarioId: scenario?.id ?? null, scenarioName: scenario?.name ?? null, isActive: scenario?.isActive ?? true, seeded: !saved?.success, calc, tech: tech as Record<string, string>, rates, projectRateIds: own.map((r) => r.id), need, tracker, compare,
     scopeId: scopes.find((s) => s.category === "drives")?.id ?? null,
     lines: lines.map((x) => ({ ...x.l, vendor: x.vendor })),
   };
 }
 export type DrivePlan = Awaited<ReturnType<typeof getDrivePlan>>;
 
-export async function saveDriveCalc(db: Db, userId: string, projectId: string, input: unknown) {
+export async function saveDriveCalc(db: Db, userId: string, projectId: string, input: unknown, scenarioId?: string | null) {
   await requireRole(db, userId, projectId, "budget.edit");
   const p = calcSchema.safeParse(input);
   if (!p.success) return fail(p);
   await db.transaction(async (tx) => {
-    const scenarioId = await ensureActiveScenario(tx, projectId);
-    await tx.update(budgetScenarios).set({ driveCalc: p.data }).where(eq(budgetScenarios.id, scenarioId));
-    await record(tx, { projectId, userId, entity: "budget_scenario", entityId: scenarioId, action: "update", summary: "Menyimpan kalkulator hard drive" });
+    const sid = await pickScenario(tx, projectId, scenarioId);
+    await tx.update(budgetScenarios).set({ driveCalc: p.data }).where(eq(budgetScenarios.id, sid));
+    await record(tx, { projectId, userId, entity: "budget_scenario", entityId: sid, action: "update", summary: "Menyimpan kalkulator hard drive" });
   });
 }
 
 /** Replaces the saved calculation with a fresh one read from the Technical Page. */
-export async function reseedDriveCalc(db: Db, userId: string, projectId: string) {
+export async function reseedDriveCalc(db: Db, userId: string, projectId: string, scenarioId?: string | null) {
   await requireRole(db, userId, projectId, "budget.edit");
   const calc = seedCalc((await getTechSpec(db, projectId)) as Record<string, string>, mergeRates(RATES, await projectRates(db, projectId)));
-  await saveDriveCalc(db, userId, projectId, calc);
+  await saveDriveCalc(db, userId, projectId, calc, scenarioId);
 }
 
 export async function saveRates(db: Db, userId: string, projectId: string, rows: unknown) {
@@ -115,11 +123,11 @@ async function checkLine(tx: Pick<Db, "select">, projectId: string, input: Drive
   return { ...rest, ppnRateBp: ppnBp, neededBy: d.neededBy || null };
 }
 
-export async function addDriveLine(db: Db, userId: string, projectId: string, input: DriveLineInput) {
+export async function addDriveLine(db: Db, userId: string, projectId: string, input: DriveLineInput, scenarioId?: string | null) {
   await requireRole(db, userId, projectId, "budget.edit");
   return db.transaction(async (tx) => {
     const d = await checkLine(tx, projectId, input);
-    const scenarioId = await ensureActiveScenario(tx, projectId);
+    const sid = await pickScenario(tx, projectId, scenarioId);
     const [have] = await tx.select({ id: budgetScopes.id }).from(budgetScopes).where(and(eq(budgetScopes.projectId, projectId), eq(budgetScopes.category, "drives"))).orderBy(asc(budgetScopes.sortOrder), asc(budgetScopes.createdAt)).limit(1);
     let scopeId = have?.id;
     if (!scopeId) {
@@ -128,7 +136,7 @@ export async function addDriveLine(db: Db, userId: string, projectId: string, in
       scopeId = s.id;
       await record(tx, { projectId, userId, entity: "budget_scope", entityId: s.id, action: "create", summary: `Menambah lingkup "${s.name}" (otomatis dari belanja drive)` });
     }
-    const [row] = await tx.insert(budgetDriveLines).values({ ...d, projectId, scenarioId, scopeId }).returning();
+    const [row] = await tx.insert(budgetDriveLines).values({ ...d, projectId, scenarioId: sid, scopeId }).returning();
     await record(tx, { projectId, userId, entity: "budget_scope", entityId: scopeId, action: "create", summary: `Menambah belanja drive (${PURPOSES[d.purpose]})`, after: row });
     return { lineId: row.id };
   });

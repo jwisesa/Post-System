@@ -11,6 +11,8 @@ import { getOrCreateCalendarToken } from "@/lib/calendar/service";
 import { loadProject } from "@/lib/project-context";
 import { today as todayWib } from "@/lib/schedule/dates";
 import { getChecks } from "@/lib/checks/service";
+import { DueInvoicesCard } from "@/components/today/DueInvoicesCard";
+import { listDueInvoices } from "@/lib/budget/service";
 import { DriveCard } from "@/components/today/DriveCard";
 import { canUseDriveTracker, getDriveSummary, listDriveTrackerProjects } from "@/lib/drive-tracker/service";
 import { getToday } from "@/lib/today/service";
@@ -24,7 +26,7 @@ export default async function Overview({ params, searchParams }: { params: Promi
   const today = todayWib();
   const edit = can(role, "project.edit");
   const dt = canUseDriveTracker(user.email);
-  const [data, recent, calendarToken, h, findings, drives, dtOptions] = await Promise.all([
+  const [data, recent, calendarToken, h, findings, drives, dtOptions, dueInvoices] = await Promise.all([
     getToday(db, project.id, today, { includeInternal: true, feedback: true }),
     listActivity(db, project.id, 6, { hideBudget: true }),
     getOrCreateCalendarToken(db, user.id, project.id),
@@ -32,6 +34,7 @@ export default async function Overview({ params, searchParams }: { params: Promi
     getChecks(db, project.id, slug, today),
     dt ? getDriveSummary(db, project.driveTrackerProjectId) : Promise.resolve(null),
     edit && dt ? listDriveTrackerProjects(db, user.email) : Promise.resolve([]),
+    can(role, "budget.view") ? listDueInvoices(db, user.id, project.id, today) : Promise.resolve([]),
   ]);
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
 
@@ -56,6 +59,7 @@ export default async function Overview({ params, searchParams }: { params: Promi
               {can(role, "schedule.status") ? <FollowUpList rows={followUp} slug={slug} /> : <p className="py-2 text-[13px] text-ink-2">Anda tidak punya akses untuk mencatat follow-up.</p>}
               {data.followUp.length > followUp.length && <p className="mt-1 px-1 text-[13px] text-ink-2">+{data.followUp.length - followUp.length} lainnya</p>}
             </section>
+            <DueInvoicesCard rows={dueInvoices} slug={slug} />
             {drives && <DriveCard summary={drives} slug={slug} options={dtOptions} linkedId={project.driveTrackerProjectId} canEdit={edit} />}
             <section>
               <ListHead title="Perlu dicek" count={data.review.length} href={`${base}/assets`} link="Semua aset" />

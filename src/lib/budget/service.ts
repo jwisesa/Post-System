@@ -4,15 +4,16 @@
 // Saved version content is immutable: no function here updates it (and a DB trigger enforces it); only setVersionStatus
 // touches a saved version, and only its status columns.
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, max, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, lte, max, ne } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
 import { budgetBids, budgetDocs, budgetDriveLines, budgetInvoices, budgetPayments, budgetPicks, budgetScenarios, budgetScopes, budgetVendors, budgetVersions, teamContacts, users, type BudgetLine, type BudgetVersionStatus } from "@/db/schema";
 import { listDeliverables } from "../deliverables/service";
 import { listPhases } from "../script/service";
-import { InputError, record, requireRole, type Tx } from "../services";
+import { InputError, listEntityActivity, record, requireRole, type Tx } from "../services";
 import { CANCEL_MARK, DEFAULT_PPH23_BP, DEFAULT_PPN_BP, NEXT, SERVICE_CATEGORIES, VERSION_STATUSES, type VersionStatusCode } from "./catalog";
 import { lineAmount, MAX_RP, taxOf } from "./money";
+import { invoiceState } from "./rollup";
 
 const view = (db: Db, u: string, p: string) => requireRole(db, u, p, "budget.view");
 const edit = (db: Db, u: string, p: string) => requireRole(db, u, p, "budget.edit");
@@ -81,6 +82,29 @@ export async function getScope(db: Db, userId: string, projectId: string, scopeI
     invoices: all.invoices.filter((i) => i.scopeId === scopeId),
     payments: all.payments.filter((p) => all.invoices.some((i) => i.id === p.invoiceId && i.scopeId === scopeId)),
   };
+}
+
+/** Hari Ini card: planned or received-but-unpaid invoices due within 7 days or overdue, earliest first. Own query on purpose: never part of getToday. No amounts. */
+export async function listDueInvoices(db: Db, userId: string, projectId: string, today: string, limit = 5) {
+  await view(db, userId, projectId);
+  const horizon = new Date(Date.parse(`${today}T00:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
+  const [rows, pays] = await Promise.all([
+    db.select({ i: budgetInvoices, vendor: budgetVendors.name, scope: budgetScopes.name }).from(budgetInvoices)
+      .innerJoin(budgetVendors, eq(budgetVendors.id, budgetInvoices.vendorId)).innerJoin(budgetScopes, eq(budgetScopes.id, budgetInvoices.scopeId))
+      .where(and(eq(budgetInvoices.projectId, projectId), inArray(budgetInvoices.status, ["planned", "received"]), lte(budgetInvoices.dueDate, horizon))).orderBy(asc(budgetInvoices.dueDate), asc(budgetInvoices.createdAt)),
+    db.select().from(budgetPayments).where(eq(budgetPayments.projectId, projectId)),
+  ]);
+  return rows
+    .filter(({ i }) => i.dueDate && (i.status === "planned" || !invoiceState(i, pays.filter((p) => p.invoiceId === i.id)).lunas))
+    .slice(0, limit)
+    .map(({ i, vendor, scope }) => ({ id: i.id, scopeId: i.scopeId, scope, vendor, termin: i.termin, dueDate: i.dueDate!, late: i.dueDate! < today }));
+}
+
+/** Audit rows for one scope, newest first. Summaries carry no amounts; before/after may, so only budget readers get them. */
+export async function getScopeHistory(db: Db, userId: string, projectId: string, scopeId: string, limit = 100) {
+  await view(db, userId, projectId);
+  if (!isUuid(scopeId)) return [];
+  return listEntityActivity(db, projectId, "budget_scope", scopeId, limit);
 }
 
 export async function getVersions(db: Db, userId: string, projectId: string, ids: [string, string]) {
