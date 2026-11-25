@@ -27,14 +27,14 @@ export function StatusSelect({ slug, versionId, status, number, vendor }: { slug
   };
   return (
     <>
-      <select aria-label="Ubah status" className="ms-2 min-w-[9.5rem]" value="" onChange={(e) => { const v = e.target.value; if (!v) return; if (status === "approved") setUndo(v); else if (v === "approved" && !window.confirm(`Setujui v${number}? ${vendor} akan dipilih untuk lingkup ini.`)) return; else change(v); }}>
+      <select aria-label="Ubah status" className="!w-auto ms-2 min-w-[9.5rem] max-w-full" value="" onChange={(e) => { const v = e.target.value; if (!v) return; if (status === "approved") setUndo(v); else if (v === "approved" && !window.confirm(`Setujui v${number}? ${vendor} akan dipilih untuk lingkup ini.`)) return; else change(v); }}>
         <option value="">Ubah</option>
         {options.map((o) => <option key={o} value={o}>{status === "approved" ? "Batal setujui" : VERSION_STATUSES[o]}</option>)}
       </select>
       {undo && (
         <Drawer title="Batal setujui" crumb="Anggaran & vendor" dirty={!!note.trim()} onClose={() => { setUndo(null); setNote(""); }}>
           <form className="space-y-4 text-sm" onSubmit={(e) => { e.preventDefault(); if (note.trim()) change(undo, note); }}>
-            <p className="muted">Vendor tetap terpilih, tetapi nilainya kembali menjadi perkiraan sampai ada versi yang disetujui. Alasan dicatat di riwayat.</p>
+            <p className="muted">Vendor tetap masuk budget, tetapi nilainya kembali menjadi perkiraan sampai ada versi yang disetujui. Alasan dicatat di riwayat.</p>
             <label className="grid gap-1">Alasan (wajib)<textarea rows={3} required maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} /></label>
             <button className="btn" disabled={busy || !note.trim()}>{busy ? "Menyimpan…" : "Batal setujui"}</button>
           </form>

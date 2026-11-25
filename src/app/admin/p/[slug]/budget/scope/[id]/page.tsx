@@ -24,7 +24,7 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
   const [phases, deliverables] = await Promise.all([listPhases(db, project.id), listDeliverables(db, project.id, { includeInternal: true })]);
   const pick = d.picks[0];
   const today = jakartaToday();
-  const vrows = (docId: string) => d.versions.filter((v) => v.docId === docId).map((v) => ({ id: v.id, number: v.number, ref: v.ref, docDate: v.docDate, status: v.status, subtotal: v.subtotal, ppn: v.ppn, pph23: v.pph23, ppnRateBp: v.ppnRateBp, pph23RateBp: v.pph23RateBp, notes: v.notes, statusNote: v.statusNote, links: v.links, authorName: v.authorName, lines: v.lines.map((l) => ({ key: l.key, item: l.item, qtyMilli: l.qtyMilli, unit: l.unit, unitPrice: l.unitPrice })) }));
+  const vrows = (docId: string) => d.versions.filter((v) => v.docId === docId).map((v) => ({ id: v.id, number: v.number, ref: v.ref, docDate: v.docDate, status: v.status, subtotal: v.subtotal, ppn: v.ppn, pph23: v.pph23, ppnRateBp: v.ppnRateBp, pph23RateBp: v.pph23RateBp, notes: v.notes, statusNote: v.statusNote, links: v.links, authorName: v.authorName, pricing: v.pricing, corrected: !!v.correctsVersionId, lines: v.lines.map((l) => ({ key: l.key, item: l.item, qtyMilli: l.qtyMilli, unit: l.unit, unitPrice: l.unitPrice })) }));
   const bids = d.bids.map((b) => {
     const doc = d.docs.find((x) => x.bidId === b.id && x.kind === "quote")!;
     const vendor = d.vendors.find((v) => v.id === b.vendorId);
@@ -44,7 +44,7 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
   const sn = scopeNumbers(d.scope.id, rows);
   const pbv = pick ? bidValue(pick.bidId, rows, pick.versionId) : null;
   const pv = pbv?.versionId ? d.versions.find((v) => v.id === pbv.versionId) : null;
-  const STATE = { pinned: "Terpilih", approved: "Disetujui", provisional: "perkiraan", none: "" } as const;
+  const STATE = { pinned: "masuk budget", approved: "Disetujui", provisional: "perkiraan", none: "" } as const;
   const taken = new Set(d.bids.map((b) => b.vendorId));
   return (
     <div className="page space-y-5">
@@ -52,7 +52,7 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
         <p className="page-meta"><Link href={`/admin/p/${slug}/budget`}>Anggaran & vendor</Link></p>
         <h1 className="page-title">{d.scope.name}</h1>
         <p className="page-meta">{categoryLabel(d.scope.category)} · Target <span className="tabular-nums">{formatRupiah(d.scope.budget)}</span> sebelum pajak</p>
-        <p className="page-meta">{pick && pbv ? <>Terpilih: {names.get(pick.bidId)}{pv && ` v${pv.number}`}{STATE[pbv.state] && ` (${STATE[pbv.state]})`} · Dipilih <span className="tabular-nums">{formatRupiah(sn.chosen)}</span> · Ditagih <span className="tabular-nums">{formatRupiah(sn.invoiced)}</span> · Dibayar <span className="tabular-nums">{formatRupiah(sn.paid)}</span> · Sisa budget <span className={`tabular-nums ${sn.variance < 0 ? "text-danger" : ""}`}>{formatRupiah(sn.variance)}</span></> : "Belum ada vendor terpilih."}</p>
+        <p className="page-meta">{pick && pbv ? <>Masuk budget: {names.get(pick.bidId)}{pv && ` v${pv.number}`}{STATE[pbv.state] && ` (${STATE[pbv.state]})`} · Dipilih <span className="tabular-nums">{formatRupiah(sn.chosen)}</span> · Ditagih <span className="tabular-nums">{formatRupiah(sn.invoiced)}</span> · Dibayar <span className="tabular-nums">{formatRupiah(sn.paid)}</span> · Sisa budget <span className={`tabular-nums ${sn.variance < 0 ? "text-danger" : ""}`}>{formatRupiah(sn.variance)}</span></> : "Belum ada vendor di budget."}</p>
         {d.scenarioName && <p className="page-meta"><Link href={`/admin/p/${slug}/budget?tab=rencana`}><span className="tag">Rencana: {d.scenarioName}</span></Link></p>}
         <p className="page-meta">Fase: {d.phases.length ? d.phases.map((p, i) => <span key={p.id}>{i > 0 && ", "}<Link href={`/admin/p/${slug}/timeline?item=${p.id}`} className="underline">{p.name}</Link></span>) : "—"} · Deliverable: {d.deliverables.map((x) => x.name).join(", ") || "—"}</p>
       </div>
@@ -66,6 +66,7 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
         addable={d.vendors.filter((v) => !v.archivedAt && !taken.has(v.id)).map((v) => ({ id: v.id, name: v.name }))}
         phases={phases.map((p) => ({ id: p.id, name: `${p.name} (${p.track})` }))}
         deliverables={deliverables.map((x) => ({ id: x.id, name: x.name }))}
+        seeds={d.deliverables.map((x) => ({ id: x.id, name: x.name }))}
       />
       <section className="space-y-2">
         <h2 className="text-sm font-semibold">Riwayat</h2>

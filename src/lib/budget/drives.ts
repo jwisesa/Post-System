@@ -97,8 +97,10 @@ export async function saveRates(db: Db, userId: string, projectId: string, rows:
   });
 }
 
-export type DriveLineInput = { purpose: string; media: string; capacityGb: number; qty: number; unitPrice: number; ppnBp: number | null; vendorId: string | null; neededBy: string; status: string; notes: string };
+export type DriveLineInput = { brand?: string; model?: string; purpose: string; media: string; capacityGb: number; qty: number; unitPrice: number; ppnBp: number | null; vendorId: string | null; neededBy: string; status: string; notes: string };
 const LineSchema = z.object({
+  brand: z.string().max(60).transform((s) => s.trim()).default(""),
+  model: z.string().max(80).transform((s) => s.trim()).default(""),
   purpose: z.enum(["ocf", "proxy", "grade", "vfx", "master", "archive", "other"]),
   media: z.enum(["ssd", "hdd", "raid", "lto", "other"]),
   capacityGb: z.number({ message: "Kapasitas wajib diisi." }).int().min(1, "Kapasitas wajib diisi.").max(10_000_000),

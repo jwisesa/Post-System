@@ -10,11 +10,19 @@ import { categoryLabel, SERVICE_CATEGORIES } from "@/lib/budget/catalog";
 export type VendorRow = { id: string; name: string; categories: string[]; contactName: string; email: string; phone: string; teamContactId: string | null; chargesPpn: boolean; withholdsPph23: boolean; notes: string; archived: boolean };
 type Opt = { id: string; name: string };
 
-function VendorDrawer({ slug, v, contacts, onClose }: { slug: string; v: VendorRow | null; contacts: Opt[]; onClose: () => void }) {
+function VendorDrawer({ slug, v, contacts, used, onClose }: { used: string[]; slug: string; v: VendorRow | null; contacts: Opt[]; onClose: () => void }) {
   const toast = useToast();
   const router = useRouter();
   const [f, setF] = useState({ name: v?.name ?? "", categories: v?.categories ?? [], contactName: v?.contactName ?? "", email: v?.email ?? "", phone: v?.phone ?? "", teamContactId: v?.teamContactId ?? "", chargesPpn: v?.chargesPpn ?? true, withholdsPph23: v?.withholdsPph23 ?? true, notes: v?.notes ?? "" });
   const [busy, setBusy] = useState(false);
+  const [cat, setCat] = useState("");
+  const addCat = () => {
+    const t = cat.trim();
+    if (!t) return;
+    const code = Object.entries(SERVICE_CATEGORIES).find(([k, l]) => k === t || l.toLowerCase() === t.toLowerCase())?.[0] ?? t; // built-in label maps back to its code
+    if (!f.categories.some((c) => c.toLowerCase() === code.toLowerCase())) setF({ ...f, categories: [...f.categories, code] });
+    setCat("");
+  };
   const [first] = useState(() => JSON.stringify(f));
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,9 +39,17 @@ function VendorDrawer({ slug, v, contacts, onClose }: { slug: string; v: VendorR
       <form onSubmit={submit} className="space-y-4 text-sm">
         <label className="grid gap-1">Nama vendor<input value={f.name} maxLength={120} required onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
         <fieldset className="grid gap-1"><legend className="mb-1">Kategori</legend>
-          {Object.entries(SERVICE_CATEGORIES).map(([k, l]) => (
+          {Object.entries(SERVICE_CATEGORIES).filter(([k]) => k !== "other").map(([k, l]) => (
             <label key={k} className="flex items-center gap-2"><input type="checkbox" checked={f.categories.includes(k)} onChange={() => setF({ ...f, categories: f.categories.includes(k) ? f.categories.filter((c) => c !== k) : [...f.categories, k] })} />{l}</label>
           ))}
+          {f.categories.filter((c) => !Object.hasOwn(SERVICE_CATEGORIES, c) || c === "other").map((c) => (
+            <span key={c} className="flex items-center gap-2">{categoryLabel(c)}<button type="button" className="btn-ghost" aria-label={`Hapus kategori ${categoryLabel(c)}`} onClick={() => setF({ ...f, categories: f.categories.filter((x) => x !== c) })}>Hapus</button></span>
+          ))}
+          <div className="flex gap-2">
+            <input list="vendor-cats" aria-label="Kategori lain" placeholder="Kategori lain, mis. Color science" maxLength={40} value={cat} onChange={(e) => setCat(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); addCat(); } }} />
+            <button type="button" className="btn-secondary" onClick={addCat}>Tambah</button>
+          </div>
+          <datalist id="vendor-cats">{[...new Set([...Object.values(SERVICE_CATEGORIES).filter((l) => l !== "Lainnya"), ...used.map(categoryLabel)])].map((l) => <option key={l} value={l} />)}</datalist>
         </fieldset>
         <label className="grid gap-1">Nama kontak<input value={f.contactName} maxLength={120} onChange={(e) => setF({ ...f, contactName: e.target.value })} /></label>
         <label className="grid gap-1">Email<input type="email" value={f.email} maxLength={200} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
@@ -82,7 +98,7 @@ export function VendorPanel({ slug, canEdit, vendors, contacts }: { slug: string
           </li>
         ))}
       </ul>
-      {open && <VendorDrawer key={open === "new" ? "new" : open.id} slug={slug} v={open === "new" ? null : open} contacts={contacts} onClose={() => setOpen(null)} />}
+      {open && <VendorDrawer key={open === "new" ? "new" : open.id} slug={slug} v={open === "new" ? null : open} contacts={contacts} used={[...new Set(vendors.flatMap((x) => x.categories))]} onClose={() => setOpen(null)} />}
     </div>
   );
 }

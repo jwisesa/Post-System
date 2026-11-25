@@ -39,7 +39,7 @@ export default async function BudgetPage({ params, searchParams }: { params: Pro
           scenarioId: plan.scenarioId, scenarioName: plan.scenarioName, isActive: plan.isActive, scenarios: data.scenarios.map((x) => ({ id: x.id, name: x.name, isActive: x.isActive })),
           calc: plan.calc, seeded: plan.seeded, rates: plan.rates, projectRateIds: plan.projectRateIds, tech: plan.tech, tracker: plan.tracker,
           vendors: data.vendors.filter((v) => !v.archivedAt).map((v) => ({ id: v.id, name: v.name })),
-          lines: plan.lines.map((l) => ({ id: l.id, purpose: l.purpose, media: l.media, capacityGb: l.capacityGb, qty: l.qty, unitPrice: l.unitPrice, ppnRateBp: l.ppnRateBp, vendorId: l.vendorId, vendor: l.vendor, neededBy: l.neededBy, status: l.status, notes: l.notes })),
+          lines: plan.lines.map((l) => ({ id: l.id, brand: l.brand, model: l.model, purpose: l.purpose, media: l.media, capacityGb: l.capacityGb, qty: l.qty, unitPrice: l.unitPrice, ppnRateBp: l.ppnRateBp, vendorId: l.vendorId, vendor: l.vendor, neededBy: l.neededBy, status: l.status, notes: l.notes })),
         }}
         slug={slug}
         canEdit={can(role, "budget.edit")}

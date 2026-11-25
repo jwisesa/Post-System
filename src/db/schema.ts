@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   date,
@@ -562,6 +563,10 @@ export const budgetVersions = ps.table(
     ref: text("ref").notNull().default(""),
     docDate: date("doc_date", { mode: "string" }),
     lines: jsonb("lines").$type<BudgetLine[]>().notNull().default([]),
+    /** "items" = subtotal is the sum of priced lines; "lump" = subtotal is one package price and lines are unpriced sub-points. Set at INSERT only (frozen). */
+    pricing: text("pricing").$type<"items" | "lump">().notNull().default("items"),
+    /** Set when this version corrects an earlier one (set at INSERT only). */
+    correctsVersionId: uuid("corrects_version_id").references((): AnyPgColumn => budgetVersions.id),
     subtotal: money("subtotal").notNull(),
     ppnRateBp: integer("ppn_rate_bp"),
     ppn: money("ppn").notNull().default(0),
@@ -668,6 +673,8 @@ export const budgetDriveLines = ps.table(
     scopeId: uuid("scope_id").notNull().references(() => budgetScopes.id, { onDelete: "cascade" }),
     vendorId: uuid("vendor_id").references(() => budgetVendors.id),
     purpose: text("purpose").$type<"ocf" | "proxy" | "grade" | "vfx" | "master" | "archive" | "other">().notNull(),
+    brand: text("brand").notNull().default(""),
+    model: text("model").notNull().default(""),
     media: text("media").$type<"ssd" | "hdd" | "raid" | "lto" | "other">().notNull().default("ssd"),
     capacityGb: integer("capacity_gb").notNull(),
     qty: integer("qty").notNull().default(1),

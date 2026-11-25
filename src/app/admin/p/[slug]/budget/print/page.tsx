@@ -43,7 +43,7 @@ export default async function PrintBudget({ params, searchParams }: { params: Pr
       <table className="print-sheet mt-3 w-full text-sm tabular-nums">
         {view === "ringkasan" && (
           <>
-            <thead className="border-b border-line"><tr className="muted"><th className={th}>Lingkup</th><th className={th}>Vendor terpilih</th><th className={thn}>Budget</th><th className={thn}>Dipilih</th><th className={thn}>Ditagih</th><th className={thn}>Dibayar</th><th className={thn}>Selisih</th></tr></thead>
+            <thead className="border-b border-line"><tr className="muted"><th className={th}>Lingkup</th><th className={th}>Vendor di budget</th><th className={thn}>Budget</th><th className={thn}>Dipilih</th><th className={thn}>Ditagih</th><th className={thn}>Dibayar</th><th className={thn}>Selisih</th></tr></thead>
             <tbody className="divide-y divide-line">
               {rows.map((r) => {
                 const s = scope(r.scopeId)!;

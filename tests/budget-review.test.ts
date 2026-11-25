@@ -50,7 +50,7 @@ describe("budget review fixes", () => {
 
   it("L2: prototype keys are not categories or statuses", async () => {
     await expect(b.createScope(db, u, pid, { name: "X", category: "toString" })).rejects.toThrow(/Kategori/);
-    await expect(b.createVendor(db, u, pid, { name: "Y", categories: ["constructor"] })).rejects.toThrow(/Kategori/);
+    await b.createVendor(db, u, pid, { name: "Y", categories: ["constructor"] }); // vendor categories are free text now; categoryLabel uses hasOwn so it stays a plain string
     const vid = (await b.getBudget(db, u, pid)).versions[0].id;
     await expect(b.setVersionStatus(db, u, pid, vid, "toString", "")).rejects.toThrow(/Status tidak dikenal/);
   });

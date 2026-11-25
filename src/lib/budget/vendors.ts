@@ -4,7 +4,7 @@ import { bidValue, type BudgetRows, type BidValue } from "./rollup";
 export type VendorRowIn = { bidId: string; vendor: string };
 export type VendorCmp = {
   bidId: string; vendor: string; value: number; state: BidValue["state"]; cancelled: boolean; chosen: boolean;
-  vsBudget: number | null; vsCheapest: number | null; cheapest: boolean; versions: number; lastStatus: string | null; latestVersionId: string | null;
+  vsBudget: number | null; vsCheapest: number | null; cheapest: boolean; stage: "disetujui" | "masuk" | null; versions: number; lastStatus: string | null; latestVersionId: string | null;
 };
 
 /** vsBudget = budget - value (negative = over). vsCheapest = value - cheapest (0 for the cheapest). Bids without any quote have null. */
@@ -24,6 +24,7 @@ export function compareBids(scopeId: string, d: BudgetRows, names: Map<string, s
     vsBudget: bv.state === "none" ? null : budget - value,
     vsCheapest: bv.state === "none" || min == null ? null : value - min,
     cheapest: bv.state !== "none" && value === min,
+    stage: pick?.bidId !== b.id ? null : (vs.find((v) => v.id === bv.versionId)?.status === "approved" ? "disetujui" : "masuk"),
     versions: vs.length, lastStatus: vs.at(-1)?.status ?? null, latestVersionId: vs.at(-1)?.id ?? null,
   }));
 }

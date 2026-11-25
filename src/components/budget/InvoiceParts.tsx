@@ -34,7 +34,7 @@ export function InvoiceTags({ inv, today }: { inv: InvoiceRow; today: string }) 
       {st.lunas && inv.status === "received" && <span className="tag tag-ok">Lunas</span>}
       {st.overpaid > 0 && <span className="tag tag-warn">kelebihan bayar</span>}
       {st.overdue && <span className="tag tag-danger">Jatuh tempo</span>}
-      {inv.offChosen && inv.status !== "cancelled" && <span className="tag tag-warn">bukan vendor terpilih</span>}
+      {inv.offChosen && inv.status !== "cancelled" && <span className="tag tag-warn">bukan vendor di budget</span>}
     </>
   );
 }

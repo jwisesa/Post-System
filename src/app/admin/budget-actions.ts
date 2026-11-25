@@ -30,6 +30,9 @@ export async function removeBid(slug: string, bidId: string) {
 export async function saveVersion(slug: string, docId: string, input: b.VersionInput) {
   return run(slug, (db, u, p) => b.addVersion(db, u, p, docId, input));
 }
+export async function saveCorrection(slug: string, versionId: string, input: b.VersionInput, reason: string) {
+  return run(slug, (db, u, p) => b.correctVersion(db, u, p, versionId, input, reason));
+}
 export async function changeVersionStatus(slug: string, versionId: string, status: string, note: string) {
   return run(slug, (db, u, p) => b.setVersionStatus(db, u, p, versionId, status, note));
 }

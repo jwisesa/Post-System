@@ -15,6 +15,7 @@ import { CANCEL_MARK, DEFAULT_PPH23_BP, DEFAULT_PPN_BP, NEXT, SERVICE_CATEGORIES
 import { lineAmount, MAX_RP, taxOf } from "./money";
 import { invoiceState } from "./rollup";
 
+type BudgetVersionRow = typeof budgetVersions.$inferSelect;
 const view = (db: Db, u: string, p: string) => requireRole(db, u, p, "budget.view");
 const edit = (db: Db, u: string, p: string) => requireRole(db, u, p, "budget.edit");
 const str = (max: number) => z.string().max(max).transform((s) => s.trim());
@@ -117,9 +118,12 @@ export async function getVersions(db: Db, userId: string, projectId: string, ids
 
 // ---------- vendors ----------
 
+/** "grading" / "Grading" / "hard drive & storage" -> built-in code; anything else stays as typed (custom category). */
+const builtInCode = (c: string) => Object.entries(SERVICE_CATEGORIES).find(([k, l]) => k === c || l.toLowerCase() === c.toLowerCase())?.[0] ?? c;
+
 const VendorSchema = z.object({
   name: str(120).refine((s) => s.length > 0, "Nama vendor wajib diisi."),
-  categories: z.array(z.string().refine((c) => Object.hasOwn(SERVICE_CATEGORIES, c), "Kategori tidak dikenal.")).max(8).default([]),
+  categories: z.array(z.string().trim().min(1).max(40).transform(builtInCode)).max(8).default([]).transform((a) => [...new Set(a)]), // free text allowed; a built-in label maps back to its code
   contactName: str(120).default(""),
   email: str(200).refine((s) => s === "" || /^\S+@\S+\.\S+$/.test(s), "Email vendor tidak valid.").default(""),
   phone: str(40).default(""),
@@ -348,6 +352,8 @@ export type VersionInput = {
   docDate: string;
   lines: { key?: string; item: string; qtyMilli: number; unit: string; unitPrice: number; note?: string }[];
   lumpSum?: number;
+  /** "lump": subtotal = lumpSum and lines are unpriced sub-points of the package. Default "items". */
+  pricing?: "items" | "lump";
   ppnBp: number | null;
   pph23Bp: number | null;
   notes: string;
@@ -366,6 +372,7 @@ const VersionSchema = z.object({
     unitPrice: rp, // may be negative: a "Diskon" line
     note: str(200).optional(),
   })).max(300),
+  pricing: z.enum(["items", "lump"]).default("items"),
   lumpSum: rp.optional(), // may be negative for a change order ("Pengurangan"); quotes are checked against the doc kind below
   ppnBp: bp,
   pph23Bp: bp,
@@ -387,14 +394,24 @@ export async function addVersion(db: Db, userId: string, projectId: string, docI
   return db.transaction((tx) => versionTx(tx, userId, projectId, docId, input));
 }
 
-async function versionTx(tx: Tx, userId: string, projectId: string, docId: string, input: VersionInput): Promise<{ versionId: string; number: number }> {
+async function versionTx(tx: Tx, userId: string, projectId: string, docId: string, input: VersionInput, corr?: { old: BudgetVersionRow; reason: string }): Promise<{ versionId: string; number: number }> {
   const p = VersionSchema.safeParse(input);
   if (!p.success) return fail(p);
   const d = p.data;
   checkLinks(d.links);
   let lines: BudgetLine[] = [];
   let subtotal: number;
-  if (d.lines.length) {
+  const lumpMode = d.pricing === "lump";
+  if (lumpMode) {
+    if (d.lumpSum == null) throw new InputError("Isi total paket lump sum.");
+    const keys = new Set<string>();
+    lines = d.lines.map((l) => {
+      const key = l.key && !keys.has(l.key) ? l.key : randomUUID();
+      keys.add(key);
+      return { key, item: l.item, qtyMilli: l.qtyMilli, unit: l.unit, unitPrice: 0, amount: 0, ...(l.note ? { note: l.note } : {}) };
+    });
+    subtotal = d.lumpSum;
+  } else if (d.lines.length) {
     const keys = new Set<string>();
     lines = d.lines.map((l) => {
       const key = l.key && !keys.has(l.key) ? l.key : randomUUID();
@@ -414,15 +431,34 @@ async function versionTx(tx: Tx, userId: string, projectId: string, docId: strin
     if (subtotal < 0 && doc.kind === "quote") throw new InputError("Subtotal penawaran tidak boleh negatif.");
     const [m] = await tx.select({ n: max(budgetVersions.number) }).from(budgetVersions).where(eq(budgetVersions.docId, docId));
     const number = (m?.n ?? 0) + 1;
+    if (corr && (corr.old.docId !== docId || corr.old.number !== (m?.n ?? 0))) throw new InputError("Hanya versi terbaru yang bisa dikoreksi.");
+    if (corr?.old.status === "approved") await tx.update(budgetVersions).set({ status: "superseded", statusNote: `Dikoreksi oleh versi ${number}`, statusBy: userId, statusAt: new Date() }).where(eq(budgetVersions.id, corr.old.id)); // first: one approved per doc
     if (number > 1 && !d.notes) throw new InputError("Catatan perubahan wajib diisi untuk versi baru.");
     const [v] = await tx.insert(budgetVersions).values({
-      projectId, docId, number, ref: d.ref, docDate: d.docDate || null, lines, subtotal, ppnRateBp: d.ppnBp, ppn: tax.ppn, pph23RateBp: d.pph23Bp, pph23: tax.pph23, notes: d.notes, links: d.links, createdBy: userId,
+      projectId, docId, number, ref: d.ref, docDate: d.docDate || null, lines, pricing: d.pricing, correctsVersionId: corr?.old.id ?? null, subtotal, ppnRateBp: d.ppnBp, ppn: tax.ppn, pph23RateBp: d.pph23Bp, pph23: tax.pph23, notes: d.notes, links: d.links, createdBy: userId,
+      ...(corr ? { status: corr.old.status === "superseded" ? "draft" : corr.old.status, statusNote: corr.old.status === "approved" ? corr.old.statusNote : "" } : {}),
     }).returning();
+    if (corr) {
+      if (corr.old.status !== "approved" && corr.old.status !== "superseded") await tx.update(budgetVersions).set({ status: "superseded", statusNote: `Dikoreksi oleh versi ${number}`, statusBy: userId, statusAt: new Date() }).where(eq(budgetVersions.id, corr.old.id));
+      if (corr.old.status === "approved" && doc.kind === "quote") await tx.update(budgetPicks).set({ versionId: v.id }).where(eq(budgetPicks.versionId, corr.old.id));
+    }
     await tx.update(budgetVersions).set({ status: "superseded", statusNote: `Digantikan oleh versi ${number}`, statusBy: userId, statusAt: new Date() }).where(and(eq(budgetVersions.docId, docId), ne(budgetVersions.id, v.id), inArray(budgetVersions.status, ["draft", "sent", "negotiating"])));
     const [ctx] = await tx.select({ scopeId: budgetBids.scopeId, vendor: budgetVendors.name }).from(budgetBids).innerJoin(budgetVendors, eq(budgetVendors.id, budgetBids.vendorId)).where(eq(budgetBids.id, doc.bidId));
-    await record(tx, { projectId, userId, entity: "budget_scope", entityId: ctx.scopeId, action: "create", summary: `Menambah versi ${number} ${doc.kind === "quote" ? "penawaran" : `change order "${doc.title}"`} dari "${ctx.vendor}"`, after: { number, ref: d.ref, subtotal, ppn: tax.ppn, pph23: tax.pph23 } });
+    await record(tx, { projectId, userId, entity: "budget_scope", entityId: ctx.scopeId, action: "create", summary: corr ? `Koreksi versi ${corr.old.number} → versi ${number} dari "${ctx.vendor}"` : `Menambah versi ${number} ${doc.kind === "quote" ? "penawaran" : `change order "${doc.title}"`} dari "${ctx.vendor}"`, after: { number, ref: d.ref, subtotal, ppn: tax.ppn, pph23: tax.pph23 }, ...(corr ? { reason: corr.reason } : {}) });
     return { versionId: v.id, number };
   }
+}
+
+/** Correction of a mistyped latest version: a NEW version that inherits the old status (an approved one moves its approval and pick). Reason required. */
+export async function correctVersion(db: Db, userId: string, projectId: string, versionId: string, input: VersionInput, reason: string): Promise<{ versionId: string; number: number }> {
+  await edit(db, userId, projectId);
+  const why = reason.trim().slice(0, 500);
+  if (!why) throw new InputError("Isi alasan koreksi.");
+  return db.transaction(async (tx) => {
+    const [old] = isUuid(versionId) ? await tx.select().from(budgetVersions).where(and(eq(budgetVersions.id, versionId), eq(budgetVersions.projectId, projectId))) : [];
+    if (!old) throw new InputError("Versi tidak ditemukan.");
+    return versionTx(tx, userId, projectId, old.docId, { ...input, notes: `Koreksi: ${why}${input.notes?.trim() ? ` · ${input.notes.trim()}` : ""}` }, { old, reason: why });
+  });
 }
 
 /** Moves a saved version along NEXT. Approving supersedes the doc's other approved version; approving a quote picks its bid in the active scenario. */

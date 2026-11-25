@@ -11,7 +11,7 @@ import type { DriveSummary } from "@/lib/drive-tracker/service";
 import { DEFAULT_PPN_BP, TAX_NOTE } from "@/lib/budget/catalog";
 import { formatRateBp, formatRupiah, lineAmount, MoneyError, parseRateBp, parseRupiah, plainRupiah } from "@/lib/budget/money";
 
-export type DriveLineRow = { id: string; purpose: string; media: string; capacityGb: number; qty: number; unitPrice: number; ppnRateBp: number | null; vendorId: string | null; vendor: string | null; neededBy: string | null; status: string; notes: string };
+export type DriveLineRow = { id: string; brand: string; model: string; purpose: string; media: string; capacityGb: number; qty: number; unitPrice: number; ppnRateBp: number | null; vendorId: string | null; vendor: string | null; neededBy: string | null; status: string; notes: string };
 export type DriveProps = { scenarioId: string | null; scenarioName: string | null; isActive: boolean; scenarios: { id: string; name: string; isActive: boolean }[]; slug: string; canEdit: boolean; calc: DriveCalc; seeded: boolean; rates: RateRow[]; projectRateIds: string[]; tech: Record<string, string>; lines: DriveLineRow[]; vendors: { id: string; name: string }[]; tracker: DriveSummary | null };
 
 const PURPOSES: Record<string, string> = { ocf: "OCF", proxy: "Proxy", grade: "Grading", vfx: "VFX", master: "Master", archive: "Arsip", other: "Lainnya" };
@@ -167,11 +167,11 @@ export function DriveTab(p: DriveProps) {
         {lines.length === 0 ? <p className="muted text-sm">Belum ada drive yang direncanakan. Biaya masuk ke lingkup &quot;Hard drive &amp; storage&quot; di Ringkasan, sebelum pajak.</p> : (
           <div className="overflow-x-auto">
             <table className="table w-full text-sm">
-              <thead><tr><th className="text-start">Tujuan</th><th className="text-start">Media</th><th className="bg-num">Kapasitas</th><th className="bg-num">Jumlah</th><th className="bg-num">Harga satuan</th><th className="bg-num">Subtotal</th><th className="text-start">Dibutuhkan sebelum</th><th className="text-start">Status</th><th /></tr></thead>
+              <thead><tr><th className="text-start">Tujuan</th><th className="text-start">Merek / model</th><th className="text-start">Tipe/media</th><th className="bg-num">Kapasitas</th><th className="bg-num">Jumlah</th><th className="bg-num">Harga satuan</th><th className="bg-num">Subtotal</th><th className="text-start">Dibutuhkan sebelum</th><th className="text-start">Status</th><th /></tr></thead>
               <tbody>
                 {lines.map((l) => (
                   <tr key={l.id} className={l.status === "cancelled" ? "muted" : ""}>
-                    <td>{PURPOSES[l.purpose]}{l.vendor && <span className="muted"> {l.vendor}</span>}</td><td>{MEDIA[l.media]}</td>
+                    <td>{PURPOSES[l.purpose]}{l.vendor && <span className="muted"> {l.vendor}</span>}</td><td>{[l.brand, l.model].filter(Boolean).join(" ") || "—"}</td><td>{MEDIA[l.media]}</td>
                     <td className="bg-num">{(l.capacityGb / 1000).toLocaleString("id-ID")} TB</td><td className="bg-num">{l.qty}</td>
                     <td className="bg-num">{formatRupiah(l.unitPrice)}</td><td className="bg-num">{formatRupiah(lineAmount(l.qty * 1000, l.unitPrice))}</td>
                     <td className="tabular-nums">{l.neededBy ?? "—"}</td><td><span className="tag">{STATUS[l.status]}</span></td>
@@ -211,16 +211,16 @@ export function DriveTab(p: DriveProps) {
         )}
       </section>
 
-      {line && <LineDrawer slug={p.slug} scenarioId={p.scenarioId} init={line === "new" ? null : line} vendors={p.vendors} onClose={() => setLine(null)} />}
+      {line && <LineDrawer slug={p.slug} scenarioId={p.scenarioId} init={line === "new" ? null : line} vendors={p.vendors} brands={[...new Set(lines.map((l) => l.brand).filter(Boolean))]} models={[...new Set(lines.map((l) => l.model).filter(Boolean))]} onClose={() => setLine(null)} />}
       {ratesOpen && <RatesDrawer slug={slug} canEdit={canEdit} rates={p.rates} projectIds={p.projectRateIds} onClose={() => setRatesOpen(false)} />}
     </div>
   );
 }
 
-function LineDrawer({ slug, scenarioId, init, vendors, onClose }: { slug: string; scenarioId: string | null; init: DriveLineRow | null; vendors: { id: string; name: string }[]; onClose: () => void }) {
+function LineDrawer({ slug, scenarioId, init, vendors, brands, models, onClose }: { brands: string[]; models: string[]; slug: string; scenarioId: string | null; init: DriveLineRow | null; vendors: { id: string; name: string }[]; onClose: () => void }) {
   const toast = useToast();
   const router = useRouter();
-  const [f, setF] = useState({ purpose: init?.purpose ?? "ocf", media: init?.media ?? "ssd", cap: init ? String(init.capacityGb / 1000).replace(".", ",") : "", qty: String(init?.qty ?? 1), price: init ? plainRupiah(init.unitPrice) : "", ppn: init?.ppnRateBp != null ? formatRateBp(init.ppnRateBp) : "", vendorId: init?.vendorId ?? "", neededBy: init?.neededBy ?? "", status: init?.status ?? "planned", notes: init?.notes ?? "" });
+  const [f, setF] = useState({ brand: init?.brand ?? "", model: init?.model ?? "", purpose: init?.purpose ?? "ocf", media: init?.media ?? "ssd", cap: init ? String(init.capacityGb / 1000).replace(".", ",") : "", qty: String(init?.qty ?? 1), price: init ? plainRupiah(init.unitPrice) : "", ppn: init?.ppnRateBp != null ? formatRateBp(init.ppnRateBp) : "", vendorId: init?.vendorId ?? "", neededBy: init?.neededBy ?? "", status: init?.status ?? "planned", notes: init?.notes ?? "" });
   const [busy, setBusy] = useState(false);
   const [first] = useState(() => JSON.stringify(f));
   let sub: number | null = null;
@@ -231,7 +231,7 @@ function LineDrawer({ slug, scenarioId, init, vendors, onClose }: { slug: string
     try { unitPrice = f.price.trim() ? parseRupiah(f.price) : 0; ppnBp = parseRateBp(f.ppn); } catch (x) { toast({ message: x instanceof MoneyError ? x.message : "Data tidak valid.", tone: "error" }); return; }
     const capTb = Number(f.cap.replace(",", "."));
     setBusy(true);
-    const r = await saveDrive(slug, init?.id ?? null, { purpose: f.purpose, media: f.media, capacityGb: Math.round(capTb * 1000), qty: Number(f.qty), unitPrice, ppnBp, vendorId: f.vendorId || null, neededBy: f.neededBy, status: f.status, notes: f.notes }, scenarioId ?? undefined);
+    const r = await saveDrive(slug, init?.id ?? null, { brand: f.brand, model: f.model, purpose: f.purpose, media: f.media, capacityGb: Math.round(capTb * 1000), qty: Number(f.qty), unitPrice, ppnBp, vendorId: f.vendorId || null, neededBy: f.neededBy, status: f.status, notes: f.notes }, scenarioId ?? undefined);
     setBusy(false);
     if (!r.ok) { toast({ message: r.error, tone: "error" }); return; }
     toast({ message: "Drive disimpan." }); onClose(); router.refresh();
@@ -240,7 +240,11 @@ function LineDrawer({ slug, scenarioId, init, vendors, onClose }: { slug: string
   return (
     <Drawer title={init ? "Ubah drive" : "Tambah drive"} crumb="Hard drive" dirty={JSON.stringify(f) !== first} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4 text-sm">
-        {sel("purpose", PURPOSES, "Tujuan")}{sel("media", MEDIA, "Media")}
+        {sel("purpose", PURPOSES, "Tujuan")}
+        <label className="grid gap-1">Merek<input list="drv-brands" maxLength={60} placeholder="mis. SanDisk" value={f.brand} onChange={(e) => setF({ ...f, brand: e.target.value })} /></label>
+        <label className="grid gap-1">Model / tipe<input list="drv-models" maxLength={80} placeholder="mis. Extreme Pro V2" value={f.model} onChange={(e) => setF({ ...f, model: e.target.value })} /></label>
+        <datalist id="drv-brands">{brands.map((b) => <option key={b} value={b} />)}</datalist><datalist id="drv-models">{models.map((b) => <option key={b} value={b} />)}</datalist>
+        {sel("media", MEDIA, "Tipe/media")}
         <label className="grid gap-1">Kapasitas per drive (TB desimal)<input inputMode="decimal" required placeholder="8" value={f.cap} onChange={(e) => setF({ ...f, cap: e.target.value })} /></label>
         <label className="grid gap-1">Jumlah<input inputMode="numeric" required value={f.qty} onChange={(e) => setF({ ...f, qty: e.target.value })} /></label>
         <label className="grid gap-1">Harga satuan, sebelum pajak (Rp)<input inputMode="numeric" placeholder="3.500.000" value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} /></label>

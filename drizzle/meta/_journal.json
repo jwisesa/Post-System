@@ -120,6 +120,13 @@
       "when": 1795569215467,
       "tag": "0016_flippant_shen",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795643518758,
+      "tag": "0017_normal_tusk",
+      "breakpoints": true
     }
   ]
 }

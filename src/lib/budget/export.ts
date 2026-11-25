@@ -32,7 +32,7 @@ export async function budgetCsvRows(db: Db, userId: string, projectId: string, t
   if (type === "scopes") {
     const { rows, total } = rollup(data);
     return [
-      ["Lingkup", "Kategori", "Vendor terpilih", "Budget (Rp)", "Dipilih (Rp)", "Ditagih (Rp)", "Dibayar (Rp)", "Selisih (Rp)"],
+      ["Lingkup", "Kategori", "Vendor di budget", "Budget (Rp)", "Dipilih (Rp)", "Ditagih (Rp)", "Dibayar (Rp)", "Selisih (Rp)"],
       ...rows.map((r) => {
         const s = data.scopes.find((x) => x.id === r.scopeId)!;
         const bid = data.bids.find((b) => b.id === data.picks.find((p) => p.scopeId === s.id)?.bidId);
@@ -63,8 +63,8 @@ export async function budgetCsvRows(db: Db, userId: string, projectId: string, t
   }
   if (type === "drives") {
     return [
-      ["Rencana", "Tujuan", "Media", "Kapasitas (GB)", "Jumlah", "Harga satuan (Rp)", "Subtotal (Rp)", "Status", "Dibutuhkan sebelum"],
-      ...data.allDriveLines.map((l) => [csvText(data.scenarios.find((s) => s.id === l.scenarioId)?.name ?? ""), PURPOSES[l.purpose], MEDIA[l.media], n(l.capacityGb), n(l.qty), n(l.unitPrice), n(lineAmount(l.qty * 1000, l.unitPrice)), DRIVE_STATUS[l.status], l.neededBy ?? ""]),
+      ["Rencana", "Tujuan", "Merek", "Model", "Tipe/media", "Kapasitas (GB)", "Jumlah", "Harga satuan (Rp)", "Subtotal (Rp)", "Status", "Dibutuhkan sebelum"],
+      ...data.allDriveLines.map((l) => [csvText(data.scenarios.find((s) => s.id === l.scenarioId)?.name ?? ""), PURPOSES[l.purpose], csvText(l.brand), csvText(l.model), MEDIA[l.media], n(l.capacityGb), n(l.qty), n(l.unitPrice), n(lineAmount(l.qty * 1000, l.unitPrice)), DRIVE_STATUS[l.status], l.neededBy ?? ""]),
     ];
   }
   const cmp = buildComparison(data, data.scenarios.map((s) => s.id));
