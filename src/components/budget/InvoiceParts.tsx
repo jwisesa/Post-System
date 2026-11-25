@@ -8,7 +8,7 @@ import { ConfirmButton, Drawer } from "@/components/ui/controls";
 import { Icon } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/toast";
 import { PPN_LABEL, TAX_NOTE } from "@/lib/budget/catalog";
-import { formatRateBp, formatRupiah, MoneyError, parseRateBp, parseRupiah, taxOf } from "@/lib/budget/money";
+import { formatRateBp, formatRupiah, MoneyError, parseRateBp, parseRupiah, plainRupiah, taxOf } from "@/lib/budget/money";
 import { invoiceState } from "@/lib/budget/rollup";
 
 export type PayRow = { id: string; paidOn: string; amount: number; note: string; link: string };
@@ -44,10 +44,12 @@ export function InvoiceDrawer({ slug, scopeId, vendorId, vendor, ppnBp, pph23Bp,
   const toast = useToast();
   const router = useRouter();
   const [f, setF] = useState({ termin: init?.termin ?? "", ref: init?.ref ?? "", status: init?.status ?? "planned", issueDate: init?.issueDate ?? "", dueDate: init?.dueDate ?? "", docId: init?.docId ?? "", notes: init?.notes ?? "", links: (init?.links ?? []).join("\n") });
-  const [subtotal, setSubtotal] = useState(init ? String(init.subtotal) : "");
+  const [subtotal, setSubtotal] = useState(init ? plainRupiah(init.subtotal) : "");
   const [ppn, setPpn] = useState(formatRateBp(init ? init.ppnRateBp : ppnBp));
   const [pph, setPph] = useState(formatRateBp(init ? init.pph23RateBp : pph23Bp));
   const [busy, setBusy] = useState(false);
+  const [first] = useState(() => JSON.stringify([f, subtotal, ppn, pph]));
+  const dirty = JSON.stringify([f, subtotal, ppn, pph]) !== first;
   let tax = taxOf(0, null, null);
   try { tax = taxOf(subtotal.trim() ? parseRupiah(subtotal) : 0, parseRateBp(ppn), parseRateBp(pph)); } catch { /* shown on save */ }
   const submit = async (e: React.FormEvent) => {
@@ -64,7 +66,7 @@ export function InvoiceDrawer({ slug, scopeId, vendorId, vendor, ppnBp, pph23Bp,
     } catch (x) { setBusy(false); toast({ message: msg(x), tone: "error" }); }
   };
   return (
-    <Drawer title={init ? "Ubah tagihan" : "Tagihan baru"} crumb={vendor} onClose={onClose}>
+    <Drawer title={init ? "Ubah tagihan" : "Tagihan baru"} crumb={vendor} dirty={dirty} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4 text-sm">
         <div className="grid grid-cols-2 gap-2">
           <label className="grid gap-1">Termin<input value={f.termin} maxLength={80} required placeholder="DP 50%" onChange={(e) => setF({ ...f, termin: e.target.value })} /></label>
@@ -105,7 +107,7 @@ export function PaymentDrawer({ slug, inv, canEdit, today, onClose }: { slug: st
   const router = useRouter();
   const st = invoiceState(inv, inv.payments);
   const [paidOn, setPaidOn] = useState(today);
-  const [amount, setAmount] = useState(st.remaining ? String(st.remaining) : "");
+  const [amount, setAmount] = useState(st.remaining ? plainRupiah(st.remaining) : "");
   const [note, setNote] = useState("");
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
@@ -200,7 +202,7 @@ export function InvoiceTable({ slug, canEdit, today, invoices, scopeId, vendorId
                     <td className="whitespace-nowrap">
                       <button type="button" className="btn-ghost" onClick={() => setPay(i.id)}>{canEdit && i.status === "received" ? "Bayar" : "Pembayaran"}</button>
                       {canEdit && <button type="button" className="btn-ghost" onClick={() => setEdit(i)}>Ubah</button>}
-                      {canEdit && <form className="inline" action={async () => { const r = await removeInvoice(slug, i.id); toast(r.ok ? { message: "Tagihan dihapus." } : { message: r.error, tone: "error" }); if (r.ok) router.refresh(); }}><ConfirmButton className="btn-ghost" message={`Hapus tagihan "${i.termin}"?`}>Hapus</ConfirmButton></form>}
+                      {canEdit && <form className="inline" action={async () => { const r = await removeInvoice(slug, i.id); toast(r.ok ? { message: "Tagihan dihapus." } : { message: r.error, tone: "error" }); if (r.ok) router.refresh(); }}><ConfirmButton className="btn-ghost" pendingLabel="Menyimpan…" message={`Hapus tagihan "${i.termin}"?`}>Hapus</ConfirmButton></form>}
                     </td>
                   </tr>
                 );

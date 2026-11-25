@@ -15,7 +15,7 @@ export function DueInvoicesCard({ rows, slug }: { rows: DueInvoice[]; slug: stri
           <li key={r.id} className="due-row" data-late={r.late ? "" : undefined}>
             <span className={`due-date ${r.late ? "text-danger" : ""}`}>{fmtDate(r.dueDate).replace(/ \d{4}$/, "")}</span>
             <span className="due-name">{r.vendor} <span className="due-ctx">· {r.termin || "tagihan"} · {r.scope}{r.late ? " · lewat tempo" : ""}</span></span>
-            <Link href={`/admin/p/${slug}/budget/scope/${r.scopeId}`} className="btn-secondary !min-h-7">Buka</Link>
+            <Link href={`/admin/p/${slug}/budget/scope/${r.scopeId}`} className="btn-secondary">Buka</Link>
           </li>
         ))}
       </ul>

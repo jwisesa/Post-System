@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { saveScope } from "@/app/admin/budget-actions";
 import { Drawer } from "@/components/ui/controls";
 import { Icon } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/toast";
 import { categoryLabel, SERVICE_CATEGORIES, TAX_NOTE } from "@/lib/budget/catalog";
-import { formatRupiah, MoneyError, parseRupiah } from "@/lib/budget/money";
+import { formatRupiah, MoneyError, parseRupiah, plainRupiah } from "@/lib/budget/money";
 import { ScenarioTab, type ScenarioInfo, type PickScope } from "./ScenarioTab";
 import type { Comparison } from "@/lib/budget/scenarios";
 import { DriveTab, type DriveProps } from "./DriveTab";
@@ -25,8 +25,9 @@ export function ScopeDrawer({ slug, init, phases, deliverables, onClose }: { slu
   const toast = useToast();
   const router = useRouter();
   const [f, setF] = useState(init);
-  const [budget, setBudget] = useState(init.budget ? String(init.budget) : "");
+  const [budget, setBudget] = useState(init.budget ? plainRupiah(init.budget) : "");
   const [busy, setBusy] = useState(false);
+  const dirty = JSON.stringify(f) !== JSON.stringify(init) || budget !== (init.budget ? plainRupiah(init.budget) : "");
   const toggle = (k: "phaseIds" | "deliverableIds", id: string) => setF((x) => ({ ...x, [k]: x[k].includes(id) ? x[k].filter((i) => i !== id) : [...x[k], id] }));
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +42,7 @@ export function ScopeDrawer({ slug, init, phases, deliverables, onClose }: { slu
     router.refresh();
   };
   return (
-    <Drawer title={f.id ? "Ubah lingkup" : "Tambah lingkup"} crumb="Anggaran & vendor" onClose={onClose}>
+    <Drawer title={f.id ? "Ubah lingkup" : "Tambah lingkup"} crumb="Anggaran & vendor" dirty={dirty} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4 text-sm">
         <label className="grid gap-1">Nama lingkup<input value={f.name} maxLength={120} required onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
         <label className="grid gap-1">Kategori
@@ -50,11 +51,11 @@ export function ScopeDrawer({ slug, init, phases, deliverables, onClose }: { slu
         <label className="grid gap-1">Budget target, sebelum pajak (Rp)<input inputMode="numeric" placeholder="150.000.000" value={budget} onChange={(e) => setBudget(e.target.value)} /></label>
         <fieldset className="grid gap-1"><legend className="mb-1">Fase terkait</legend>
           {phases.length === 0 && <p className="muted">Belum ada fase di timeline.</p>}
-          {phases.map((p) => <label key={p.id} className="flex items-center gap-2"><input type="checkbox" checked={f.phaseIds.includes(p.id)} onChange={() => toggle("phaseIds", p.id)} />{p.name}</label>)}
+          <div className="grid max-h-56 gap-1 overflow-y-auto">{phases.map((p) => <label key={p.id} className="flex items-center gap-2"><input type="checkbox" checked={f.phaseIds.includes(p.id)} onChange={() => toggle("phaseIds", p.id)} />{p.name}</label>)}</div>
         </fieldset>
         <fieldset className="grid gap-1"><legend className="mb-1">Deliverable terkait</legend>
           {deliverables.length === 0 && <p className="muted">Belum ada deliverable.</p>}
-          {deliverables.map((p) => <label key={p.id} className="flex items-center gap-2"><input type="checkbox" checked={f.deliverableIds.includes(p.id)} onChange={() => toggle("deliverableIds", p.id)} />{p.name}</label>)}
+          <div className="grid max-h-56 gap-1 overflow-y-auto">{deliverables.map((p) => <label key={p.id} className="flex items-center gap-2"><input type="checkbox" checked={f.deliverableIds.includes(p.id)} onChange={() => toggle("deliverableIds", p.id)} />{p.name}</label>)}</div>
         </fieldset>
         <label className="grid gap-1">Catatan<textarea rows={3} value={f.notes} maxLength={2000} onChange={(e) => setF({ ...f, notes: e.target.value })} /></label>
         <button className="btn" disabled={busy}>{busy ? "Menyimpan…" : "Simpan"}</button>
@@ -72,6 +73,19 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
   const [tab, setTab] = useState<"sum" | "bills" | "vendor" | "drive" | "plans">(initialTab ?? "sum");
   const [adding, setAdding] = useState(false);
   const over = (n: number) => (n < 0 ? "text-danger" : "");
+  const dash = <span className="muted">—</span>;
+  const money = (n: number) => (n === 0 ? dash : formatRupiah(n));
+  const picked = rows.filter((r) => r.state !== "none" || r.drives > 0);
+  const totalVar = picked.reduce((n, r) => n + r.variance, 0);
+  const exp = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const shut = () => exp.current?.removeAttribute("open");
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape" && exp.current?.open) { shut(); exp.current.querySelector("summary")?.focus(); } };
+    const down = (e: PointerEvent) => { if (!exp.current?.contains(e.target as Node)) shut(); };
+    document.addEventListener("keydown", key);
+    document.addEventListener("pointerdown", down);
+    return () => { document.removeEventListener("keydown", key); document.removeEventListener("pointerdown", down); };
+  }, []);
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -84,7 +98,7 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
         </div>
         {plans.scenarioName && tab !== "plans" && tab !== "drive" && <span className="muted text-sm"><span className="tag">Rencana: {plans.scenarioName}</span> <button type="button" className="underline" onClick={() => setTab("plans")}>Ganti rencana</button></span>}
         {tab === "sum" && canEdit && rows.length > 0 && <button type="button" className="btn-secondary" onClick={() => setAdding(true)}>Tambah lingkup</button>}
-        <details className="tl-details relative ml-auto">
+        <details ref={exp} className="tl-details relative ml-auto">
           <summary className="btn-secondary cursor-pointer" aria-label="Export"><Icon name="download" /> Export</summary>
           <div className="tl-pop" role="menu" aria-label="Export">
             {[
@@ -106,15 +120,15 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
           <div className="muted text-sm"><p>Semua angka sebelum pajak (DPP). Dipilih = penawaran + tambahan pekerjaan disetujui. Dibayar = bagian sebelum pajak dari tagihan diterima yang sudah dibayar.</p><details><summary className="cursor-pointer underline">Soal pajak</summary><p>Pajak hanya perkiraan: PPN efektif 11% (12% atas DPP nilai lain 11/12) dan PPh 23 2% dari jumlah sebelum PPN, tergantung vendor. {TAX_NOTE} Rinciannya ada di tiap versi penawaran.</p></details></div>
           <div className="overflow-x-auto">
             <table className="table w-full text-sm">
-              <thead><tr><th className="text-start">Lingkup</th><th className="bg-num">Budget</th><th className="bg-num">Dipilih</th><th className="bg-num">Ditagih</th><th className="bg-num">Dibayar</th><th className="bg-num">Selisih</th><th className="text-start">Vendor terpilih</th></tr></thead>
+              <thead><tr><th className="text-start">Lingkup</th><th className="bg-num">Budget</th><th className="bg-num">Dipilih</th><th className="bg-num">Ditagih</th><th className="bg-num">Dibayar</th><th className="bg-num" title="Budget dikurangi nilai dipilih. Negatif (merah) = melebihi budget.">Sisa budget</th><th className="text-start">Vendor terpilih</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
-                    <td><Link href={`/admin/p/${slug}/budget/scope/${r.id}`} className="font-medium underline">{r.name}</Link> <span className="muted">{categoryLabel(r.category)}</span></td>
+                    <td><Link href={`/admin/p/${slug}/budget/scope/${r.id}`} className="font-medium underline">{r.name}</Link>{categoryLabel(r.category).toLowerCase() !== r.name.trim().toLowerCase() && <> <span className="muted">{categoryLabel(r.category)}</span></>}</td>
                     <td className="bg-num">{formatRupiah(r.budget)}</td>
                     <td className="bg-num">{r.state === "none" && r.drives === 0 ? <span className="muted">Belum dipilih</span> : r.state === "none" ? <>{formatRupiah(r.chosen)} <span className="tag">belanja drive</span></> : <>{formatRupiah(r.chosen)} {r.state === "provisional" ? <><span className="tag tag-warn">perkiraan</span>{r.cancelled && <span className="tag tag-warn">persetujuan dibatalkan</span>}</> : <span className="tag tag-ok">{r.state === "pinned" ? "Terpilih" : "Disetujui"}</span>}</>}</td>
-                    <td className={`bg-num ${r.overInvoiced > 0 ? "text-danger" : ""}`}>{formatRupiah(r.invoiced)}</td>
-                    <td className={`bg-num ${r.overpaid > 0 ? "text-danger" : ""}`}>{formatRupiah(r.paid)}</td>
+                    <td className={`bg-num ${r.overInvoiced > 0 ? "text-danger" : ""}`}>{money(r.invoiced)}</td>
+                    <td className={`bg-num ${r.overpaid > 0 ? "text-danger" : ""}`}>{money(r.paid)}</td>
                     <td className={`bg-num ${r.state === "none" && r.drives === 0 ? "muted" : r.overpaid > 0 ? "text-danger" : over(r.variance)}`}>{r.state === "none" && r.drives === 0 ? "—" : formatRupiah(r.variance)}</td>
                     <td>{r.vendor ?? <span className="muted">Belum dipilih</span>}</td>
                   </tr>
@@ -122,9 +136,9 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
               </tbody>
               <tfoot><tr className="font-medium">
                 <td>Total</td><td className="bg-num">{formatRupiah(total.budget)}</td>
-                <td className="bg-num">{formatRupiah(total.chosen)} {total.provisional && <span className="tag tag-warn">perkiraan</span>}</td>
-                <td className="bg-num">{formatRupiah(total.invoiced)}</td><td className={`bg-num ${total.overpaid > 0 ? "text-danger" : ""}`}>{formatRupiah(total.paid)}</td>
-                <td className={`bg-num ${over(total.budget - total.chosen)}`}>{formatRupiah(total.budget - total.chosen)}</td><td />
+                <td className="bg-num">{money(total.chosen)} {total.provisional && <span className="tag tag-warn">perkiraan</span>}</td>
+                <td className="bg-num">{money(total.invoiced)}</td><td className={`bg-num ${total.overpaid > 0 ? "text-danger" : ""}`}>{money(total.paid)}</td>
+                <td className={`bg-num ${over(totalVar)}`} title="Hanya lingkup yang sudah dipilih">{total.chosen === 0 ? dash : formatRupiah(totalVar)}</td><td />
               </tr></tfoot>
             </table>
           </div>

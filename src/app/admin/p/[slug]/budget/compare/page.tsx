@@ -74,7 +74,7 @@ export default async function BudgetComparePage({ params, searchParams }: { para
           </div>
           <div className="overflow-x-auto">
             <table className="table w-full text-sm">
-              <thead><tr><th className="text-start">Item</th><th className="text-start">Status</th><th className="bg-num">Jumlah lama</th><th className="bg-num">Jumlah baru</th><th className="bg-num">Harga lama</th><th className="bg-num">Harga baru</th><th className="bg-num">Jumlah Rp lama</th><th className="bg-num">Jumlah Rp baru</th><th className="bg-num">Selisih</th></tr></thead>
+              <thead><tr><th className="text-start">Item</th><th className="text-start">Status</th><th className="bg-num">Qty lama</th><th className="bg-num">Qty baru</th><th className="bg-num">Harga lama</th><th className="bg-num">Harga baru</th><th className="bg-num">Jumlah Rp lama</th><th className="bg-num">Jumlah Rp baru</th><th className="bg-num">Selisih</th></tr></thead>
               <tbody>
                 {c.diff.rows.length === 0 && <tr><td colSpan={9} className="muted">Kedua versi tidak punya item (lump sum).</td></tr>}
                 {c.diff.rows.map((r, i) => (

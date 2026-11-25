@@ -838,6 +838,7 @@
     select.status-select { height: auto; width: 7.5rem; }
     .btn, .btn-secondary, .btn-ghost, .btn-danger { min-height: 2.75rem !important; min-width: 2.75rem; }
     .btn-icon { width: 2.75rem; }
+    .table td a, .table td select { min-height: 2.75rem; display: inline-flex; align-items: center; }
     .nav-link, .project-switch { display: flex; align-items: center; min-height: 2.75rem; }
     .brand { display: inline-flex; align-items: center; min-height: 2.75rem; }
     .row-btn, .index-link, .check, .seg > button, .toast button { min-height: 2.75rem; }

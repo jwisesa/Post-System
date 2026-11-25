@@ -184,18 +184,20 @@ export function Combobox({ name, options, defaultValue = "", placeholder, onValu
 }
 
 /** Right-hand side panel. Closes on Esc (not while typing in a field) or the close button. Optional crumb, pinned head and tabs sit above the scrolling body; bodyKey remounts only the body. */
-export function Drawer({ title, onClose, ph, crumb, head, tabs, bodyKey, children }: { title: React.ReactNode; onClose: () => void; ph?: number; crumb?: React.ReactNode; head?: React.ReactNode; tabs?: React.ReactNode; bodyKey?: string; children: React.ReactNode }) {
+export function Drawer({ title, onClose, ph, crumb, head, tabs, bodyKey, dirty, children }: { dirty?: boolean; title: React.ReactNode; onClose: () => void; ph?: number; crumb?: React.ReactNode; head?: React.ReactNode; tabs?: React.ReactNode; bodyKey?: string; children: React.ReactNode }) {
   const hid = useId();
   const h2 = useRef<HTMLHeadingElement>(null);
   const aside = useRef<HTMLElement>(null);
   const latest = useRef(onClose);
+  const isDirty = useRef(dirty);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => { latest.current = onClose; });
+  useEffect(() => { latest.current = onClose; isDirty.current = dirty; });
   useEffect(() => () => clearTimeout(timer.current), []);
   /** Slides out (data-closing), then unmounts via onClose; a switch to another panel unmounts at once and never comes through here. */
   const close = useCallback(() => {
     const el = aside.current;
     if (!el || el.hasAttribute("data-closing")) return;
+    if (isDirty.current && !window.confirm("Buang perubahan yang belum disimpan?")) return;
     el.setAttribute("data-closing", "");
     const fin = () => { clearTimeout(timer.current); latest.current(); };
     el.addEventListener("transitionend", (e) => { if (e.target === el) fin(); });

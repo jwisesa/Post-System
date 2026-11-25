@@ -15,6 +15,7 @@ function VendorDrawer({ slug, v, contacts, onClose }: { slug: string; v: VendorR
   const router = useRouter();
   const [f, setF] = useState({ name: v?.name ?? "", categories: v?.categories ?? [], contactName: v?.contactName ?? "", email: v?.email ?? "", phone: v?.phone ?? "", teamContactId: v?.teamContactId ?? "", chargesPpn: v?.chargesPpn ?? true, withholdsPph23: v?.withholdsPph23 ?? true, notes: v?.notes ?? "" });
   const [busy, setBusy] = useState(false);
+  const [first] = useState(() => JSON.stringify(f));
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -26,7 +27,7 @@ function VendorDrawer({ slug, v, contacts, onClose }: { slug: string; v: VendorR
     router.refresh();
   };
   return (
-    <Drawer title={v ? "Ubah vendor" : "Tambah vendor"} crumb="Anggaran & vendor" onClose={onClose}>
+    <Drawer title={v ? "Ubah vendor" : "Tambah vendor"} crumb="Anggaran & vendor" dirty={JSON.stringify(f) !== first} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4 text-sm">
         <label className="grid gap-1">Nama vendor<input value={f.name} maxLength={120} required onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
         <fieldset className="grid gap-1"><legend className="mb-1">Kategori</legend>
@@ -53,6 +54,7 @@ export function VendorPanel({ slug, canEdit, vendors, contacts }: { slug: string
   const toast = useToast();
   const router = useRouter();
   const [open, setOpen] = useState<VendorRow | "new" | null>(null);
+  const [pend, setPend] = useState<string | null>(null);
   const act = async (p: Promise<{ ok: boolean; error?: string }>, done: string) => {
     const r = await p;
     toast(r.ok ? { message: done } : { message: r.error ?? "Gagal.", tone: "error" });
@@ -73,8 +75,8 @@ export function VendorPanel({ slug, canEdit, vendors, contacts }: { slug: string
             {canEdit && (
               <>
                 <button type="button" className="btn-ghost" onClick={() => setOpen(v)}>Ubah</button>
-                <button type="button" className="btn-ghost" onClick={() => act(archiveVendor(slug, v.id, !v.archived), v.archived ? "Vendor dipulihkan." : "Vendor diarsipkan.")}>{v.archived ? "Pulihkan" : "Arsipkan"}</button>
-                <form action={async () => act(removeVendor(slug, v.id), "Vendor dihapus.")}><ConfirmButton className="btn-ghost" message={`Hapus vendor "${v.name}"?`}>Hapus</ConfirmButton></form>
+                <button type="button" className="btn-ghost" disabled={!!pend} onClick={async () => { setPend(v.id); await act(archiveVendor(slug, v.id, !v.archived), v.archived ? "Vendor dipulihkan." : "Vendor diarsipkan."); setPend(null); }}>{pend === v.id ? "Menyimpan…" : v.archived ? "Pulihkan" : "Arsipkan"}</button>
+                <form action={async () => act(removeVendor(slug, v.id), "Vendor dihapus.")}><ConfirmButton className="btn-ghost" pendingLabel="Menyimpan…" message={`Hapus vendor "${v.name}"?`}>Hapus</ConfirmButton></form>
               </>
             )}
           </li>

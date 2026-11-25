@@ -9,7 +9,7 @@ import { compareTracker, computeNeed, fmtTb, fmtTib, STAGE_LABEL, STAGES, type C
 import { matchRates, norm, type RateRow } from "@/lib/budget/datarates";
 import type { DriveSummary } from "@/lib/drive-tracker/service";
 import { DEFAULT_PPN_BP, TAX_NOTE } from "@/lib/budget/catalog";
-import { formatRateBp, formatRupiah, lineAmount, MoneyError, parseRateBp, parseRupiah } from "@/lib/budget/money";
+import { formatRateBp, formatRupiah, lineAmount, MoneyError, parseRateBp, parseRupiah, plainRupiah } from "@/lib/budget/money";
 
 export type DriveLineRow = { id: string; purpose: string; media: string; capacityGb: number; qty: number; unitPrice: number; ppnRateBp: number | null; vendorId: string | null; vendor: string | null; neededBy: string | null; status: string; notes: string };
 export type DriveProps = { scenarioId: string | null; scenarioName: string | null; isActive: boolean; scenarios: { id: string; name: string; isActive: boolean }[]; slug: string; canEdit: boolean; calc: DriveCalc; seeded: boolean; rates: RateRow[]; projectRateIds: string[]; tech: Record<string, string>; lines: DriveLineRow[]; vendors: { id: string; name: string }[]; tracker: DriveSummary | null };
@@ -20,7 +20,9 @@ const STATUS: Record<string, string> = { planned: "Rencana", ordered: "Dipesan",
 const GB = 1e9;
 
 function Num({ value, onChange, step = "any", min = 0, label, hint, disabled, w }: { value: number | undefined; onChange: (n: number) => void; step?: string; min?: number; label: string; hint?: string; disabled?: boolean; w?: string }) {
-  return <input type="number" inputMode="decimal" aria-label={label} placeholder={hint} min={min} step={step} disabled={disabled} className={w} value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))} />;
+  const [raw, setRaw] = useState<string | null>(null);
+  // raw text while typing; the number (and the caller's clamp/default) is applied on blur
+  return <input type="number" inputMode="decimal" aria-label={label} placeholder={hint} min={min} step={step} disabled={disabled} className={w} value={raw ?? value ?? ""} onChange={(e) => setRaw(e.target.value)} onBlur={() => { if (raw !== null) { onChange(raw === "" || !Number.isFinite(Number(raw)) ? 0 : Number(raw)); setRaw(null); } }} />;
 }
 
 function SourceLink({ r }: { r?: RateRow }) {
@@ -56,7 +58,7 @@ export function DriveTab(p: DriveProps) {
     const r = await fn();
     setBusy(false);
     if (!r.ok) { toast({ message: r.error ?? "Gagal.", tone: "error" }); return false; }
-    toast({ message: ok }); setDirty(false); router.refresh(); return true;
+    toast({ message: ok }); router.refresh(); return true;
   };
   const camCands = (c: CamInput) => (c.slot ? matchRates(p.rates, { model: p.tech[`cam${c.slot}_model`], format: p.tech[c.slot === 1 ? "sourceFormat" : `cam${c.slot}_format`], res: p.tech[`cam${c.slot}_res`] }).map((m) => m.row) : []);
   const stageCands = (format: string, res: string) => matchRates(p.rates, { format: p.tech[format], res: p.tech[res] }).map((m) => m.row);
@@ -85,7 +87,7 @@ export function DriveTab(p: DriveProps) {
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-base font-semibold">Kalkulator kapasitas</h2>
           <button type="button" className="btn-secondary" onClick={() => setRatesOpen(true)}>Tabel data rate</button>
-          {canEdit && <ConfirmButton type="button" className="btn-secondary" message="Muat ulang kamera dan codec dari Technical Page? Isian kalkulator saat ini diganti." onClick={() => run(() => reseedCalc(slug, p.scenarioId ?? undefined), "Dimuat dari Technical Page.").then(() => router.refresh())}>Muat ulang dari Technical Page</ConfirmButton>}
+          {canEdit && <ConfirmButton type="button" className="btn-secondary" message="Muat ulang kamera dan codec dari Technical Page? Isian kalkulator saat ini diganti." onClick={() => run(() => reseedCalc(slug, p.scenarioId ?? undefined), "Dimuat dari Technical Page.")}>Muat ulang dari Technical Page</ConfirmButton>}
         </div>
         <p className="muted text-sm">Perkiraan, bukan angka pasti. Kamera dan codec diambil dari Technical Page{p.seeded ? " (belum disimpan)" : ""}. Data rate di-skala linear terhadap fps (estimasi linear). Satuan TB desimal (1 TB = 10^12 byte), ≈ TiB sebagai pembanding.</p>
         <fieldset disabled={ro} className="min-w-0 space-y-3 border-0 p-0">
@@ -154,7 +156,7 @@ export function DriveTab(p: DriveProps) {
             </table>
           </div>
         </fieldset>
-        {canEdit && <button type="button" className="btn" disabled={busy || !dirty && !p.seeded} onClick={() => run(() => saveCalc(slug, calc, p.scenarioId ?? undefined), "Kalkulator disimpan.")}>{busy ? "Menyimpan…" : "Simpan kalkulator"}</button>}
+        {canEdit && <button type="button" className="btn" disabled={busy || !dirty && !p.seeded} onClick={() => run(() => saveCalc(slug, calc, p.scenarioId ?? undefined), "Kalkulator disimpan.").then((ok) => { if (ok) setDirty(false); })}>{busy ? "Menyimpan…" : "Simpan kalkulator"}</button>}
       </section>
 
       <section className="space-y-3">
@@ -218,8 +220,9 @@ export function DriveTab(p: DriveProps) {
 function LineDrawer({ slug, scenarioId, init, vendors, onClose }: { slug: string; scenarioId: string | null; init: DriveLineRow | null; vendors: { id: string; name: string }[]; onClose: () => void }) {
   const toast = useToast();
   const router = useRouter();
-  const [f, setF] = useState({ purpose: init?.purpose ?? "ocf", media: init?.media ?? "ssd", cap: init ? String(init.capacityGb / 1000).replace(".", ",") : "", qty: String(init?.qty ?? 1), price: init ? String(init.unitPrice) : "", ppn: init?.ppnRateBp != null ? formatRateBp(init.ppnRateBp) : "", vendorId: init?.vendorId ?? "", neededBy: init?.neededBy ?? "", status: init?.status ?? "planned", notes: init?.notes ?? "" });
+  const [f, setF] = useState({ purpose: init?.purpose ?? "ocf", media: init?.media ?? "ssd", cap: init ? String(init.capacityGb / 1000).replace(".", ",") : "", qty: String(init?.qty ?? 1), price: init ? plainRupiah(init.unitPrice) : "", ppn: init?.ppnRateBp != null ? formatRateBp(init.ppnRateBp) : "", vendorId: init?.vendorId ?? "", neededBy: init?.neededBy ?? "", status: init?.status ?? "planned", notes: init?.notes ?? "" });
   const [busy, setBusy] = useState(false);
+  const [first] = useState(() => JSON.stringify(f));
   let sub: number | null = null;
   try { sub = lineAmount(Math.round(Number(f.qty) || 0) * 1000, f.price.trim() ? parseRupiah(f.price) : 0); } catch { /* shown on save */ }
   const submit = async (e: React.FormEvent) => {
@@ -235,7 +238,7 @@ function LineDrawer({ slug, scenarioId, init, vendors, onClose }: { slug: string
   };
   const sel = (k: "purpose" | "media" | "status", o: Record<string, string>, label: string) => <label className="grid gap-1">{label}<select value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })}>{Object.entries(o).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>;
   return (
-    <Drawer title={init ? "Ubah drive" : "Tambah drive"} crumb="Hard drive" onClose={onClose}>
+    <Drawer title={init ? "Ubah drive" : "Tambah drive"} crumb="Hard drive" dirty={JSON.stringify(f) !== first} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4 text-sm">
         {sel("purpose", PURPOSES, "Tujuan")}{sel("media", MEDIA, "Media")}
         <label className="grid gap-1">Kapasitas per drive (TB desimal)<input inputMode="decimal" required placeholder="8" value={f.cap} onChange={(e) => setF({ ...f, cap: e.target.value })} /></label>

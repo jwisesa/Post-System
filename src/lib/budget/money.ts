@@ -21,6 +21,9 @@ export function parseRupiah(input: string, opts: { allowNegative?: boolean } = {
   return neg ? -n : n;
 }
 
+/** Grouped number without the "Rp" prefix, sign kept; parseRupiah reads it back. */
+export const plainRupiah = (n: number) => formatRupiah(n).replace(/^(−?)Rp /, "$1");
+
 export function formatRupiah(n: number): string {
   return `${n < 0 ? "−" : ""}Rp ${Math.abs(n).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`;
 }

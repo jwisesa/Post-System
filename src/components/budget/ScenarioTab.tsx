@@ -19,6 +19,7 @@ export function ScenarioTab({ slug, canEdit, scenarios, cmp, scopes, live }: { s
   const toast = useToast();
   const router = useRouter();
   const [drawer, setDrawer] = useState<Drw>(null);
+  const [pend, setPend] = useState<string | null>(null);
   const active = scenarios.find((s) => s.isActive);
   const latest = [...scenarios].reverse().find((s) => !s.isActive);
   const [sel, setSel] = useState<string[]>(() => [active?.id, latest?.id].filter((x): x is string => !!x));
@@ -57,10 +58,10 @@ export function ScenarioTab({ slug, canEdit, scenarios, cmp, scopes, live }: { s
                     <td className="whitespace-nowrap">
                       {canEdit && (
                         <span className="inline-flex flex-wrap gap-1">
-                          {!s.isActive && <button type="button" className="btn-secondary" onClick={() => act(() => switchScenario(slug, s.id), `Rencana "${s.name}" aktif.`)}>Aktifkan</button>}
+                          {!s.isActive && <button type="button" className="btn-secondary" disabled={!!pend} onClick={async () => { setPend(s.id); await act(() => switchScenario(slug, s.id), `Rencana "${s.name}" aktif.`); setPend(null); }}>{pend === s.id ? "Menyimpan…" : "Aktifkan"}</button>}
                           <button type="button" className="btn-ghost" onClick={() => setDrawer({ kind: "new", from: s.id })}>Salin</button>
                           <button type="button" className="btn-ghost" onClick={() => setDrawer({ kind: "rename", id: s.id })}>Ganti nama</button>
-                          <ConfirmButton className="btn-danger" message={`Hapus rencana "${s.name}" beserta pilihan dan belanja drive di dalamnya? Tagihan dan pembayaran tidak terpengaruh.`} disabled={s.isActive} title={s.isActive ? "Rencana aktif tidak bisa dihapus. Aktifkan rencana lain dulu." : undefined} onClick={() => { void act(() => removeScenario(slug, s.id), "Rencana dihapus."); }}>Hapus</ConfirmButton>
+                          <ConfirmButton className="btn-danger" pendingLabel="Menyimpan…" message={`Hapus rencana "${s.name}" beserta pilihan dan belanja drive di dalamnya? Tagihan dan pembayaran tidak terpengaruh.`} disabled={s.isActive} title={s.isActive ? "Rencana aktif tidak bisa dihapus. Aktifkan rencana lain dulu." : undefined} onClick={() => { void act(() => removeScenario(slug, s.id), "Rencana dihapus."); }}>Hapus</ConfirmButton>
                         </span>
                       )}
                     </td>
