@@ -277,6 +277,14 @@ describe("script service", () => {
     expect(await sc.getScript(db, projectId, "")).toBeNull();
   });
 
+  it("drops NUL and control characters instead of failing the insert", async () => {
+    const base = await input();
+    const scenes = (base.scenes as { blocks: { text: string }[]; heading: string }[]).slice(0, 1).map((x) => ({ ...x, heading: `${x.heading}\u0000`, blocks: x.blocks.map((b) => ({ ...b, text: `${b.text}\u0000\u0007x` })) }));
+    const r = await sc.importScript(db, sup, projectId, { ...base, scenes });
+    expect(r.scenes).toBe(1);
+    await sc.deleteScript(db, sup, projectId, r.scriptId); // later tests expect only the first import
+  });
+
   it("validates imports and never trusts the client", async () => {
     const base = await input();
     await expect(sc.importScript(db, sup, projectId, { ...base, scenes: [] })).rejects.toBeInstanceOf(s.InputError);

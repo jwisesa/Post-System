@@ -10,9 +10,11 @@ import { defaultPhase } from "./tags";
 import { BLOCK_TYPES, BUILTIN_KINDS, INT_EXTS, isBuiltinKind, kindDef, MAX_BLOCK_CHARS, MAX_CUSTOM_KINDS, MAX_KIND_LABEL, MAX_TEXT_BYTES, TAG_KINDS, TIMES_OF_DAY, textBytes, withCustom, type Block, type KindDef, type PostTag } from "./types";
 
 const omit = <T extends object, K extends keyof T>(o: T, k: K): Omit<T, K> => { const c = { ...o }; delete c[k]; return c; };
-const str = (max: number) => z.string().max(max).transform((s) => s.trim());
+// Postgres jsonb/text reject \u0000; drop it and other control characters before anything is stored.
+const clean = (s: string) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "");
+const str = (max: number) => z.string().max(max).transform((s) => clean(s).trim());
 const TagSchema = z.object({ kind: z.enum(TAG_KINDS), note: str(200).default(""), auto: z.boolean().default(true), keyword: str(30).optional(), excerpt: str(500).optional() });
-const BlockSchema = z.object({ t: z.enum(BLOCK_TYPES as [string, ...string[]]), text: z.string().max(MAX_BLOCK_CHARS), ext: z.string().max(60).optional() });
+const BlockSchema = z.object({ t: z.enum(BLOCK_TYPES as [string, ...string[]]), text: z.string().max(MAX_BLOCK_CHARS).transform(clean), ext: z.string().max(60).optional() });
 const page = z.number().finite().min(0).max(1000);
 
 /** What the upload preview sends back for saving. Everything is re-validated; nothing from the client is trusted. */
