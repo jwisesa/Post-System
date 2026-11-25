@@ -1,4 +1,6 @@
+import { ShareLinks } from "@/components/access/ShareLinks";
 import { Section } from "@/components/ui/section";
+import { listDeliverables } from "@/lib/deliverables/service";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { ConfirmButton, CopyButton, SubmitButton } from "@/components/ui/controls";
@@ -12,14 +14,14 @@ import { fmtDate } from "@/lib/schedule/dates";
 import { getSchedule } from "@/lib/schedule/service";
 import { trackLabels } from "@/lib/schedule/track-names";
 import { listMembers, listShareLinks } from "@/lib/services";
-import { addMemberAction, createReviewerLinkAction, createShareLinkAction, removeMemberAction, revokeReviewerLinkAction, revokeShareLinkAction, updateReviewerLinkItemsAction } from "../../../actions";
+import { addMemberAction, createReviewerLinkAction, removeMemberAction, revokeReviewerLinkAction, updateReviewerLinkItemsAction } from "../../../actions";
 
 export default async function Access({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ error?: string }> }) {
   const { slug } = await params;
   const { error } = await searchParams;
   const { db, user, project, role } = await loadProject(slug);
   if (!can(role, "access.manage")) notFound();
-  const [members, links, reviewers, schedule, h] = await Promise.all([listMembers(db, project.id), listShareLinks(db, user.id, project.id), listReviewerLinks(db, user.id, project.id), getSchedule(db, project.id, { includeInternal: false }), headers()]);
+  const [members, links, reviewers, schedule, deliverables, h] = await Promise.all([listMembers(db, project.id), listShareLinks(db, user.id, project.id), listReviewerLinks(db, user.id, project.id), getSchedule(db, project.id, { includeInternal: false }), listDeliverables(db, project.id, { includeInternal: false }), headers()]);
   // Non-internal milestones grouped by track, then phase.
   const label = trackLabels(schedule.tracks);
   const groups = schedule.tracks.map((t) => ({
@@ -79,33 +81,17 @@ export default async function Access({ params, searchParams }: { params: Promise
       </Section>
 
       <Section id="view" title="Link view-only" digest={`${links.length} aktif`}>
-        <p className="muted mb-3 text-[13px]">Siapa pun yang memegang link bisa melihat project ini tanpa login dan tanpa bisa mengubah apa pun. Item bertanda internal tidak ditampilkan.</p>
-        {links.length === 0 && <p className="muted mt-3 text-sm">Belum ada link.</p>}
-        <ul className="rows mt-3">
-          {links.map((l) => (
-            <li key={l.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
-              <span className="w-28 shrink-0 truncate font-medium">{l.label}</span>
-              {l.revokedAt ? (
-                <span className="tag">Dicabut</span>
-              ) : (
-                <>
-                  <a className="min-w-0 flex-1 truncate font-mono text-xs underline underline-offset-2" href={`/v/${l.token}`} target="_blank">{`${origin}/v/${l.token}`}</a>
-                  <CopyButton text={`${origin}/v/${l.token}`} label="Salin link" />
-                  <form action={revokeShareLinkAction}>
-                    <input type="hidden" name="slug" value={slug} />
-                    <input type="hidden" name="linkId" value={l.id} />
-                    <ConfirmButton message={`Cabut link "${l.label}"? Yang memegang link ini tidak bisa membukanya lagi.`}>Cabut</ConfirmButton>
-                  </form>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-        <form action={createShareLinkAction} className="mt-3 flex flex-wrap items-end gap-3">
-          <input type="hidden" name="slug" value={slug} />
-          <label className="min-w-48 flex-1"><span>Label link baru (mis. Director, Producer)</span><input name="label" required /></label>
-          <button className="btn">Buat link</button>
-        </form>
+        <p className="muted mb-3 text-[13px]">Siapa pun yang memegang link bisa melihat project ini tanpa login dan tanpa bisa mengubah apa pun. Pilih bagian yang tampil per link; item bertanda internal tidak pernah ditampilkan.</p>
+        <ShareLinks
+          key={links.map((l) => `${l.id}${l.label}${l.note}${l.sections}${l.hiddenIds}${l.revokedAt}`).join("|")}
+          slug={slug}
+          origin={origin}
+          links={links.map((l) => ({ id: l.id, label: l.label, note: l.note, token: l.token, revokedAt: l.revokedAt?.toISOString() ?? null, sections: l.sections, hiddenIds: l.hiddenIds }))}
+          groups={[
+            ...schedule.tracks.filter((t) => t.items.length).map((t) => ({ name: label.get(t.id)!, items: t.items.map((i) => ({ id: i.id, name: `${i.parentId ? "" : "Fase: "}${i.name}` })) })),
+            ...(deliverables.length ? [{ name: "Deliverables", items: deliverables.map((d) => ({ id: d.id, name: d.name })) }] : []),
+          ]}
+        />
       </Section>
       <Section id="reviewer" title="Link reviewer" digest={`${reviewers.length} aktif`}>
         <p className="muted mb-3 text-[13px]">Satu link per orang, tanpa akun. Orang itu hanya melihat milestone yang Anda pilih: bisa menulis feedback dan menyetujui. Cabut kapan saja.</p>

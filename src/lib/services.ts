@@ -5,8 +5,10 @@ import { and, asc, desc, eq, inArray, isNull, like, notLike } from "drizzle-orm"
 import type { Db } from "@/db/client";
 import {
   auditLog,
+  deliverables,
   projectMembers,
   projects,
+  scheduleItems,
   shareLinks,
   teamContacts,
   teamGroups,
@@ -299,13 +301,48 @@ export async function listShareLinks(db: Db, userId: string, projectId: string) 
   return db.select().from(shareLinks).where(eq(shareLinks.projectId, projectId)).orderBy(desc(shareLinks.createdAt));
 }
 
-export async function createShareLink(db: Db, userId: string, projectId: string, label: string) {
+export type ShareOpts = { note?: string; sections?: string[]; hiddenIds?: string[] };
+
+/** Validated sections (never empty) and hidden ids (only this project's schedule items and deliverables). */
+async function shareOpts(db: Db, projectId: string, o: ShareOpts) {
+  const { cleanSections, DEFAULT_SECTIONS, sectionLabel } = await import("./share/sections");
+  const sections = o.sections === undefined ? DEFAULT_SECTIONS : cleanSections(o.sections);
+  if (!sections.length) throw new InputError("Pilih minimal satu bagian untuk link ini.");
+  const [items, delivs] = await Promise.all([
+    db.select({ id: scheduleItems.id }).from(scheduleItems).where(eq(scheduleItems.projectId, projectId)),
+    db.select({ id: deliverables.id }).from(deliverables).where(eq(deliverables.projectId, projectId)),
+  ]);
+  const real = new Set([...items, ...delivs].map((r) => r.id));
+  const hiddenIds = [...new Set(o.hiddenIds ?? [])].filter((id) => real.has(id));
+  const what = `${sections.map(sectionLabel).join(", ")}${hiddenIds.length ? ` (${hiddenIds.length} item disembunyikan)` : ""}`;
+  return { sections, hiddenIds, what, note: (o.note ?? "").trim().slice(0, 120) };
+}
+
+export async function createShareLink(db: Db, userId: string, projectId: string, label: string, opts: ShareOpts = {}) {
   await requireRole(db, userId, projectId, "access.manage");
-  const clean = label.trim() || "View only";
+  const clean = label.trim().slice(0, 60) || "View only";
+  const { sections, hiddenIds, what, note } = await shareOpts(db, projectId, opts);
   return db.transaction(async (tx) => {
-    const [link] = await tx.insert(shareLinks).values({ projectId, label: clean, token: randomBytes(24).toString("base64url"), createdBy: userId }).returning();
-    await record(tx, { projectId, userId, entity: "share_link", entityId: link.id, action: "create", summary: `Membuat link view-only "${clean}"` });
+    const [link] = await tx.insert(shareLinks).values({ projectId, label: clean, note, sections, hiddenIds, token: randomBytes(24).toString("base64url"), createdBy: userId }).returning();
+    await record(tx, { projectId, userId, entity: "share_link", entityId: link.id, action: "create", summary: `Membuat link view-only "${clean}": ${what}` });
     return link;
+  });
+}
+
+/** Changes what an active link shows; the token and URL stay the same. */
+export async function updateShareLink(db: Db, userId: string, projectId: string, linkId: string, input: ShareOpts & { label: string }) {
+  await requireRole(db, userId, projectId, "access.manage");
+  const label = input.label.trim().slice(0, 60);
+  if (!label) throw new InputError("Label link wajib diisi.");
+  const { sections, hiddenIds, what, note } = await shareOpts(db, projectId, input);
+  await db.transaction(async (tx) => {
+    const [link] = await tx
+      .update(shareLinks)
+      .set({ label, note, sections, hiddenIds })
+      .where(and(eq(shareLinks.id, linkId), eq(shareLinks.projectId, projectId), isNull(shareLinks.revokedAt)))
+      .returning();
+    if (!link) throw new InputError("Link tidak ditemukan.");
+    await record(tx, { projectId, userId, entity: "share_link", entityId: linkId, action: "update", summary: `Mengubah isi link view-only "${label}": ${what}` });
   });
 }
 
@@ -321,35 +358,65 @@ export async function revokeShareLink(db: Db, userId: string, projectId: string,
   });
 }
 
-/** Everything a view-only link may see. Null for unknown or revoked tokens. */
-export async function getViewerData(db: Db, token: string) {
+/** What a view-only link may reach, before it is cut down to sections: the link's sections and the non-internal schedule and deliverables minus its hidden ids. Shared by the page and the calendar feed. */
+export async function viewerScope(db: Db, token: string) {
   const [row] = await db
-    .select({ project: projects, label: shareLinks.label })
+    .select({ project: projects, link: shareLinks })
     .from(shareLinks)
     .innerJoin(projects, eq(projects.id, shareLinks.projectId))
     .where(and(eq(shareLinks.token, token), isNull(shareLinks.revokedAt)));
   if (!row) return null;
   const { getSchedule } = await import("./schedule/service");
-  const { listAttachments } = await import("./assets/service");
-  const schedule = await getSchedule(db, row.project.id, { includeInternal: false });
-  const visible = new Set(schedule.tracks.flatMap((t) => t.items.map((i) => i.id)));
-  // Links on hidden items stay hidden; comments are never sent to viewers.
   const { listDeliverables } = await import("./deliverables/service");
-  const deliverables = await listDeliverables(db, row.project.id, { includeInternal: false });
-  for (const d of deliverables) visible.add(d.id);
-  const attachments = (await listAttachments(db, row.project.id, { includeInternal: false })).filter((a) => a.targetType === "project" || visible.has(a.targetId));
+  const { cleanSections, hideItems } = await import("./share/sections");
+  const hidden = new Set(row.link.hiddenIds);
+  const sections = new Set(cleanSections(row.link.sections));
+  const schedule = hideItems(await getSchedule(db, row.project.id, { includeInternal: false }), hidden);
+  const deliverables = (await listDeliverables(db, row.project.id, { includeInternal: false })).filter((d) => !hidden.has(d.id));
+  return { project: row.project, label: row.link.label, sections, hidden, schedule, deliverables };
+}
+
+const NO_TODAY = { week: { start: "", end: "", days: [], phases: [], milestones: [] }, feedback: [], signoffs: [], dueToday: [], late: [], next7: [], followUp: [], review: [], hardDeadlines: [], deliverables: { total: 0, done: 0 } };
+
+/** Everything a view-only link may see. Null for unknown or revoked tokens. Only the link's sections are queried and sent; budget and script are never reachable from here. */
+export async function getViewerData(db: Db, token: string) {
+  const sc = await viewerScope(db, token);
+  if (!sc) return null;
+  const { sections: has } = sc;
+  const { listAttachments } = await import("./assets/service");
   const { getToday } = await import("./today/service");
   const { today } = await import("./schedule/dates");
+  const sch = has.has("timeline") || has.has("assets") ? sc.schedule : { ...sc.schedule, tracks: [], deps: [] };
+  const deliverables = has.has("deliverables") ? sc.deliverables : [];
+  // Links on hidden items stay hidden; comments are never sent to viewers.
+  const visible = new Set([...(has.has("timeline") ? sch.tracks.flatMap((t) => t.items.map((i) => i.id)) : []), ...deliverables.map((d) => d.id)]);
+  const attachments = has.has("assets") || has.has("timeline") || has.has("deliverables")
+    ? (await listAttachments(db, sc.project.id, { includeInternal: false })).filter((a) => (a.targetType === "project" ? has.has("assets") : visible.has(a.targetId)))
+    : [];
+  const feedback = has.has("feedback")
+    ? (await (await import("./feedback/service")).listPoints(db, sc.project.id, { includeInternal: false }))
+        .filter((p) => sc.schedule.tracks.some((t) => t.items.some((i) => i.id === p.itemId && i.parentId)))
+        .map((p) => ({ itemId: p.itemId, itemName: sc.schedule.tracks.flatMap((t) => t.items).find((i) => i.id === p.itemId)!.name, ref: p.ref, body: p.body, status: p.status as string }))
+    : [];
+  const checks = has.has("checks")
+    ? (await import("./checks/rules")).runChecks({
+        slug: "", today: today(), tech: (await getTechSpec(db, sc.project.id)) as Record<string, string>, deliverables: sc.deliverables,
+        items: sc.schedule.tracks.flatMap((t) => t.items.map((x) => ({ id: x.id, name: x.name, trackId: t.id, trackName: t.name, parentId: x.parentId, dueDate: x.dueDate }))),
+      }).map((f) => ({ rule: f.rule, severity: f.severity, title: f.title, detail: f.detail }))
+    : [];
   return {
-    project: row.project,
-    label: row.label,
-    techSpec: await getTechSpec(db, row.project.id),
-    team: await getTeam(db, row.project.id, { includeInternal: false }),
-    schedule,
+    project: sc.project,
+    label: sc.label,
+    sections: [...has],
+    techSpec: has.has("technical") ? await getTechSpec(db, sc.project.id) : {},
+    team: has.has("team") ? await getTeam(db, sc.project.id, { includeInternal: false }) : [],
+    schedule: sch,
     attachments,
     deliverables,
+    feedback,
+    checks,
     // Follow-up is an internal working list (with PIC contact details); viewers never get it.
-    today: { ...(await getToday(db, row.project.id, today(), { includeInternal: false })), followUp: [], feedback: [], signoffs: [] },
+    today: has.has("today") ? { ...(await getToday(db, sc.project.id, today(), { includeInternal: false, hidden: sc.hidden })), followUp: [], feedback: [], signoffs: [] } : NO_TODAY,
   };
 }
 

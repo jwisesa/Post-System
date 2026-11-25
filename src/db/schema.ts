@@ -78,6 +78,12 @@ export const shareLinks = ps.table("share_links", {
     .references(() => projects.id, { onDelete: "cascade" }),
   token: text("token").notNull().unique(),
   label: text("label").notNull(),
+  /** Who the link is for (free text, admin only). */
+  note: text("note").notNull().default(""),
+  /** Which parts the link shows; see lib/share/sections. Budget and script can never be listed. */
+  sections: jsonb("sections").$type<string[]>().notNull().default(["today", "timeline", "deliverables", "assets", "technical", "team"]),
+  /** Schedule item and deliverable ids hidden on top of the internal flag. */
+  hiddenIds: jsonb("hidden_ids").$type<string[]>().notNull().default([]),
   createdBy: uuid("created_by").references(() => users.id),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: createdAt(),

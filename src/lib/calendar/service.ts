@@ -8,7 +8,7 @@ import { listDeliverables } from "../deliverables/service";
 import type { Schedule } from "../schedule/service";
 import { getSchedule } from "../schedule/service";
 import { statusLabel } from "../schedule/templates";
-import { getViewerData, record, requireRole } from "../services";
+import { record, requireRole, viewerScope } from "../services";
 import type { IcsEvent } from "./ics";
 
 const newToken = () => randomBytes(24).toString("base64url");
@@ -73,9 +73,11 @@ export async function getAdminFeed(db: Db, token: string): Promise<Feed | null> 
   return { projectName: row.project.name, events: buildEvents(schedule, delivs) };
 }
 
-/** Null for unknown or revoked share links. Internal items are never included. */
+/** Null for unknown or revoked share links. Internal and hidden items are never included; items and deliverables only when the link shows Timeline/Hari Ini or Deliverables/Hari Ini. */
 export async function getViewerFeed(db: Db, shareToken: string): Promise<Feed | null> {
-  const data = await getViewerData(db, shareToken);
-  if (!data) return null;
-  return { projectName: data.project.name, events: buildEvents(data.schedule, data.deliverables) };
+  const sc = await viewerScope(db, shareToken);
+  if (!sc) return null;
+  const sched = sc.sections.has("timeline") || sc.sections.has("today");
+  const delivs = sc.sections.has("deliverables") || sc.sections.has("today");
+  return { projectName: sc.project.name, events: buildEvents(sched ? sc.schedule : { ...sc.schedule, tracks: [] }, delivs ? sc.deliverables : []) };
 }

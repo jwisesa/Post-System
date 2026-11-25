@@ -97,9 +97,16 @@ export async function removeMemberAction(f: FormData) {
   await finish(`/admin/p/${project.slug}/access`, () => s.removeMember(db, user.id, project.id, str(f, "userId")));
 }
 
+const shareInput = (f: FormData) => ({ note: str(f, "note"), sections: f.getAll("sections").map(String), hiddenIds: f.getAll("hiddenIds").map(String) });
+
 export async function createShareLinkAction(f: FormData) {
   const { db, user, project } = await ctx(f);
-  await finish(`/admin/p/${project.slug}/access`, () => s.createShareLink(db, user.id, project.id, str(f, "label")));
+  await finish(`/admin/p/${project.slug}/access`, () => s.createShareLink(db, user.id, project.id, str(f, "label"), shareInput(f)));
+}
+
+export async function updateShareLinkAction(f: FormData) {
+  const { db, user, project } = await ctx(f);
+  await finish(`/admin/p/${project.slug}/access`, () => s.updateShareLink(db, user.id, project.id, str(f, "linkId"), { label: str(f, "label"), ...shareInput(f) }));
 }
 
 export async function revokeShareLinkAction(f: FormData) {

@@ -7,6 +7,7 @@ import { phaseIndex } from "@/components/timeline/shared";
 import { addDays, diffDays } from "../schedule/dates";
 import { listSignoffs } from "../review/service";
 import { listPoints } from "../feedback/service";
+import { hideItems } from "../share/sections";
 import { getSchedule } from "../schedule/service";
 import { statusLabel } from "../schedule/templates";
 import { calOf, isOff, workDays } from "../schedule/workdays";
@@ -33,8 +34,8 @@ const dow = (d: string) => (new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7; // 
 const wibDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" });
 const byDue = (a: { dueDate: string }, b: { dueDate: string }) => a.dueDate.localeCompare(b.dueDate);
 
-export async function getToday(db: Db, projectId: string, today: string, opts: { includeInternal: boolean; feedback?: boolean }) {
-  const [schedule, delivs, team, allAttachments, points] = await Promise.all([
+export async function getToday(db: Db, projectId: string, today: string, opts: { includeInternal: boolean; feedback?: boolean; hidden?: Set<string> }) {
+  const [schedule0, delivs0, team, attachments0, points] = await Promise.all([
     getSchedule(db, projectId, opts),
     listDeliverables(db, projectId, opts),
     getTeam(db, projectId, opts),
@@ -42,6 +43,12 @@ export async function getToday(db: Db, projectId: string, today: string, opts: {
     // Feedback can be sensitive: only callers that ask for it (the admin board) get it.
     opts.feedback ? listPoints(db, projectId, opts) : Promise.resolve([]),
   ]);
+  // Per-link hidden ids (viewer links): a hidden phase takes its milestones and their links with it.
+  const hide = opts.hidden ?? new Set<string>();
+  const schedule = hideItems(schedule0, hide);
+  const delivs = delivs0.filter((d) => !hide.has(d.id));
+  const shown = new Set(schedule.tracks.flatMap((t) => t.items.map((i) => i.id)));
+  const allAttachments = hide.size ? attachments0.filter((a) => a.targetType === "project" || shown.has(a.targetId) || delivs.some((d) => d.id === a.targetId)) : attachments0;
   const contacts = new Map(team.flatMap((g) => g.contacts).map((c) => [c.id, c]));
 
   const items = schedule.tracks.flatMap((t) => t.items.map((i) => ({ ...i, trackName: t.name })));

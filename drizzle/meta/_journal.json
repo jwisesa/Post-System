@@ -127,6 +127,13 @@
       "when": 1795643518758,
       "tag": "0017_normal_tusk",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795644770871,
+      "tag": "0018_faithful_mongoose",
+      "breakpoints": true
     }
   ]
 }
