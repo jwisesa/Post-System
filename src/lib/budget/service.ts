@@ -47,9 +47,15 @@ export async function getBudget(db: Db, userId: string, projectId: string) {
     db.select().from(budgetPayments).where(eq(budgetPayments.projectId, projectId)).orderBy(asc(budgetPayments.paidOn), asc(budgetPayments.createdAt)),
   ]);
   const scenarioId = scenario[0]?.id ?? null;
-  const picks = scenarioId ? await db.select().from(budgetPicks).where(eq(budgetPicks.scenarioId, scenarioId)) : [];
-  const driveLines = scenarioId ? await db.select().from(budgetDriveLines).where(eq(budgetDriveLines.scenarioId, scenarioId)) : [];
-  return { scenarioId, vendors, scopes, bids, docs, versions: versions.map((r) => ({ ...r.v, authorName: r.author ?? "—" })), picks, invoices, payments, driveLines };
+  const [allScenarios, allPicks, allDriveLines] = await Promise.all([
+    db.select().from(budgetScenarios).where(eq(budgetScenarios.projectId, projectId)).orderBy(asc(budgetScenarios.createdAt), asc(budgetScenarios.id)),
+    db.select().from(budgetPicks).where(eq(budgetPicks.projectId, projectId)),
+    db.select().from(budgetDriveLines).where(eq(budgetDriveLines.projectId, projectId)),
+  ]);
+  const picks = allPicks.filter((p) => p.scenarioId === scenarioId);
+  const driveLines = allDriveLines.filter((l) => l.scenarioId === scenarioId);
+  const scenarios = allScenarios.map((s) => ({ id: s.id, name: s.name, notes: s.notes, isActive: s.isActive, createdAt: s.createdAt, pickCount: allPicks.filter((p) => p.scenarioId === s.id).length, driveLineCount: allDriveLines.filter((l) => l.scenarioId === s.id).length }));
+  return { scenarioId, scenarioName: scenarios.find((s) => s.id === scenarioId)?.name ?? null, scenarios, allPicks, allDriveLines, vendors, scopes, bids, docs, versions: versions.map((r) => ({ ...r.v, authorName: r.author ?? "—" })), picks, invoices, payments, driveLines };
 }
 export type BudgetData = Awaited<ReturnType<typeof getBudget>>;
 
@@ -66,6 +72,7 @@ export async function getScope(db: Db, userId: string, projectId: string, scopeI
     scope,
     phases: phases.filter((p) => scope.phaseIds.includes(p.id)),
     deliverables: deliverables.filter((d) => scope.deliverableIds.includes(d.id)),
+    scenarioName: all.scenarioName,
     vendors: all.vendors,
     bids,
     docs,

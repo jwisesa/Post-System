@@ -2,6 +2,7 @@
 // Anggaran & Vendor. Amounts arrive as integers; the service re-validates everything.
 
 import * as d from "@/lib/budget/drives";
+import * as sn from "@/lib/budget/scenarios";
 import * as b from "@/lib/budget/service";
 import { runForClient as run } from "./action-helpers";
 
@@ -66,4 +67,21 @@ export async function saveDrive(slug: string, id: string | null, input: d.DriveL
 }
 export async function removeDrive(slug: string, id: string) {
   return run(slug, (db, u, p) => d.deleteDriveLine(db, u, p, id).then(() => ({})));
+}
+
+// ---------- scenarios ----------
+export async function newScenario(slug: string, name: string, copyFromId: string | null) {
+  return run(slug, (db, u, p) => sn.createScenario(db, u, p, name, copyFromId).then(() => ({})));
+}
+export async function editScenario(slug: string, id: string, name: string, notes: string) {
+  return run(slug, (db, u, p) => sn.renameScenario(db, u, p, id, name, notes).then(() => ({})));
+}
+export async function switchScenario(slug: string, id: string) {
+  return run(slug, (db, u, p) => sn.activateScenario(db, u, p, id).then(() => ({})));
+}
+export async function removeScenario(slug: string, id: string) {
+  return run(slug, (db, u, p) => sn.deleteScenario(db, u, p, id).then(() => ({})));
+}
+export async function setScenarioPick(slug: string, scenarioId: string, scopeId: string, bidId: string | null, versionId: string | null) {
+  return run(slug, (db, u, p) => sn.pickInScenario(db, u, p, scenarioId, scopeId, bidId, versionId).then(() => ({})));
 }

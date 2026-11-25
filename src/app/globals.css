@@ -1144,3 +1144,9 @@ details.tl-details > summary::-webkit-details-marker { display: none; }
 /* ---------- budget C ---------- */
 .table input[type="number"], .table select { max-width: 100%; }
 .table input.w-16, .table input.w-20, .table input.w-24 { min-width: 0; }
+
+/* ---------- budget D ---------- */
+.sc-cmp th, .sc-cmp td { min-width: 9rem; vertical-align: top; }
+.sc-cmp th:first-child, .sc-cmp td:first-child { min-width: 8rem; }
+.sc-cell { display: grid; gap: 0.125rem; justify-items: start; }
+.sc-cell .bg-num { text-align: start; }

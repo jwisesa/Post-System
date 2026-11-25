@@ -3,6 +3,7 @@ import { BudgetView } from "@/components/budget/BudgetView";
 import { can } from "@/lib/auth/permissions";
 import { invoiceRow, jakartaToday } from "@/lib/budget/invoice-view";
 import { getDrivePlan } from "@/lib/budget/drives";
+import { buildComparison } from "@/lib/budget/scenarios";
 import { rollup } from "@/lib/budget/rollup";
 import { getBudget } from "@/lib/budget/service";
 import { listDeliverables } from "@/lib/deliverables/service";
@@ -10,8 +11,9 @@ import { loadProject } from "@/lib/project-context";
 import { listPhases } from "@/lib/script/service";
 import { getTeam } from "@/lib/services";
 
-export default async function BudgetPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function BudgetPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ tab?: string }> }) {
   const { slug } = await params;
+  const { tab } = await searchParams;
   const { db, project, role, user } = await loadProject(slug);
   if (!can(role, "budget.view")) notFound();
   const data = await getBudget(db, user.id, project.id);
@@ -25,6 +27,14 @@ export default async function BudgetPage({ params }: { params: Promise<{ slug: s
         <p className="page-meta">Budget per lingkup, penawaran vendor, dan versinya. Angka sebelum pajak.</p>
       </div>
       <BudgetView
+        initialTab={tab === "rencana" ? "plans" : undefined}
+        plans={{
+          scenarioName: data.scenarioName,
+          scenarios: data.scenarios.map((s) => ({ id: s.id, name: s.name, notes: s.notes, isActive: s.isActive, pickCount: s.pickCount, driveLineCount: s.driveLineCount })),
+          cmp: buildComparison(data, data.scenarios.map((s) => s.id)),
+          scopes: data.scopes.map((s) => ({ id: s.id, name: s.name, bids: data.bids.filter((b) => b.scopeId === s.id).map((b) => { const q = data.docs.find((d) => d.bidId === b.id && d.kind === "quote"); return { id: b.id, vendor: data.vendors.find((v) => v.id === b.vendorId)?.name ?? "—", versions: data.versions.filter((v) => v.docId === q?.id).map((v) => ({ id: v.id, number: v.number, status: v.status })) }; }) })),
+          live: { invoiced: total.invoiced, paid: total.paid },
+        }}
         drive={{
           calc: plan.calc, seeded: plan.seeded, rates: plan.rates, projectRateIds: plan.projectRateIds, tech: plan.tech, tracker: plan.tracker,
           vendors: data.vendors.filter((v) => !v.archivedAt).map((v) => ({ id: v.id, name: v.name })),

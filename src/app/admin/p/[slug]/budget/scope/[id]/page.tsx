@@ -43,6 +43,7 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
         <p className="page-meta"><Link href={`/admin/p/${slug}/budget`}>Anggaran & vendor</Link></p>
         <h1 className="page-title">{d.scope.name}</h1>
         <p className="page-meta">{categoryLabel(d.scope.category)} · Target <span className="tabular-nums">{formatRupiah(d.scope.budget)}</span> sebelum pajak</p>
+        {d.scenarioName && <p className="page-meta"><Link href={`/admin/p/${slug}/budget?tab=rencana`}><span className="tag">Rencana: {d.scenarioName}</span></Link></p>}
         <p className="page-meta">Fase: {d.phases.length ? d.phases.map((p, i) => <span key={p.id}>{i > 0 && ", "}<Link href={`/admin/p/${slug}/timeline?item=${p.id}`} className="underline">{p.name}</Link></span>) : "—"} · Deliverable: {d.deliverables.map((x) => x.name).join(", ") || "—"}</p>
       </div>
       <ScopeView

@@ -8,6 +8,8 @@ import { Drawer } from "@/components/ui/controls";
 import { useToast } from "@/components/ui/toast";
 import { categoryLabel, SERVICE_CATEGORIES, TAX_NOTE } from "@/lib/budget/catalog";
 import { formatRupiah, MoneyError, parseRupiah } from "@/lib/budget/money";
+import { ScenarioTab, type ScenarioInfo, type PickScope } from "./ScenarioTab";
+import type { Comparison } from "@/lib/budget/scenarios";
 import { DriveTab, type DriveProps } from "./DriveTab";
 import { InvoiceList, type InvoiceRow } from "./InvoiceParts";
 import { VendorPanel, type VendorRow } from "./VendorPanel";
@@ -60,12 +62,13 @@ export function ScopeDrawer({ slug, init, phases, deliverables, onClose }: { slu
   );
 }
 
-export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases, deliverables, vendors, contacts, drive }: {
+export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases, deliverables, vendors, contacts, drive, plans, initialTab }: {
+  plans: { scenarioName: string | null; scenarios: ScenarioInfo[]; cmp: Comparison; scopes: PickScope[]; live: { invoiced: number; paid: number } }; initialTab?: "sum" | "plans";
   drive: Omit<DriveProps, "slug" | "canEdit">;
   slug: string; canEdit: boolean; rows: ScopeRow[]; total: { budget: number; chosen: number; invoiced: number; paid: number; overpaid: number; provisional: boolean }; today: string; invoices: InvoiceRow[];
   phases: Option[]; deliverables: Option[]; vendors: VendorRow[]; contacts: Option[];
 }) {
-  const [tab, setTab] = useState<"sum" | "bills" | "vendor" | "drive">("sum");
+  const [tab, setTab] = useState<"sum" | "bills" | "vendor" | "drive" | "plans">(initialTab ?? "sum");
   const [adding, setAdding] = useState(false);
   const over = (n: number) => (n < 0 ? "text-danger" : "");
   return (
@@ -76,7 +79,9 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
           <button type="button" aria-pressed={tab === "bills"} onClick={() => setTab("bills")}>Tagihan</button>
           <button type="button" aria-pressed={tab === "vendor"} onClick={() => setTab("vendor")}>Vendor</button>
           <button type="button" aria-pressed={tab === "drive"} onClick={() => setTab("drive")}>Hard drive</button>
+          <button type="button" aria-pressed={tab === "plans"} onClick={() => setTab("plans")}>Rencana</button>
         </div>
+        {plans.scenarioName && tab !== "plans" && <span className="muted text-sm"><span className="tag">Rencana: {plans.scenarioName}</span> <button type="button" className="underline" onClick={() => setTab("plans")}>Ganti rencana</button></span>}
         {tab === "sum" && canEdit && rows.length > 0 && <button type="button" className="btn-secondary" onClick={() => setAdding(true)}>Tambah lingkup</button>}
       </div>
       {tab === "sum" && (rows.length === 0 ? (
@@ -115,6 +120,7 @@ export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases
       ))}
       {tab === "bills" && <InvoiceList slug={slug} invoices={invoices} today={today} />}
       {tab === "drive" && <DriveTab key={`${drive.seeded}${JSON.stringify(drive.calc)}${drive.rates.length}`} slug={slug} canEdit={canEdit} {...drive} />}
+      {tab === "plans" && <ScenarioTab slug={slug} canEdit={canEdit} {...plans} />}
       {tab === "vendor" && <VendorPanel slug={slug} canEdit={canEdit} vendors={vendors} contacts={contacts} />}
       {adding && <ScopeDrawer slug={slug} init={{ id: null, name: "", category: "other", budget: 0, phaseIds: [], deliverableIds: [], notes: "" }} phases={phases} deliverables={deliverables} onClose={() => setAdding(false)} />}
     </section>
