@@ -134,6 +134,13 @@
       "when": 1795644770871,
       "tag": "0018_faithful_mongoose",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795645585542,
+      "tag": "0019_jazzy_starbolt",
+      "breakpoints": true
     }
   ]
 }

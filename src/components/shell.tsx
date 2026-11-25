@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { logoutAction } from "@/app/admin/actions";
+import { vapidConfigured } from "@/lib/push/vapid";
+import { NotifyMenu } from "./notify-menu";
 import { ThemeToggle } from "./ui/controls";
 
 export function Brand() {
@@ -18,6 +20,7 @@ export function UserMenu({ name, role }: { name: string; role?: string }) {
         {name}
         {role && <span className="muted"> · {role}</span>}
       </span>
+      <NotifyMenu vapidKey={vapidConfigured() ? process.env.VAPID_PUBLIC_KEY : undefined} />
       <ThemeToggle />
       <form action={logoutAction}><button className="btn-ghost">Keluar</button></form>
     </div>

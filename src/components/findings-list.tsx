@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
+import { markReadAction } from "@/app/admin/notify-actions";
 import { Section } from "./ui/section";
 
 type Finding = { rule: string; severity: "error" | "warn" | "info"; title: string; detail: string; fix: { href: string; label: string } };
@@ -23,9 +24,17 @@ export function FindingsList({ findings, userId, slug }: { findings: Finding[]; 
   const gone = hidden.filter((k) => live.has(k));
   const visible = findings.filter((f) => showAll || !gone.includes(keyOf(f)));
   const shown = visible.filter((f) => !gone.includes(keyOf(f)));
+  const [cleared, setCleared] = useState(false);
+  const clean = async () => {
+    await markReadAction("check");
+    navigator.serviceWorker?.controller?.postMessage({ type: "clear", kind: "check" });
+    window.dispatchEvent(new Event("ps-notify"));
+    setCleared(true);
+  };
   return (
     <>
       <div className="page-actions" style={{ justifyContent: "flex-start" }}>
+        <button type="button" className="btn-secondary" onClick={clean}>{cleared ? "Notifikasi dibersihkan" : "Bersihkan notifikasi"}</button>
         {gone.length > 0 && <button type="button" className="btn-ghost" onClick={() => setShowAll(!showAll)}>{gone.length} disembunyikan · {showAll ? "sembunyikan lagi" : "tampilkan"}</button>}
         {shown.length > 0 && <button type="button" className="btn-secondary" onClick={() => save([...new Set([...gone, ...shown.map(keyOf)])])}>Sembunyikan semua</button>}
       </div>

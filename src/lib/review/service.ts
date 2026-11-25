@@ -6,6 +6,7 @@ import { feedbackPoints, projects, reviewerLinks, scheduleItems, signoffs, users
 import { parsePoints } from "../feedback/parse";
 import { getSchedule } from "../schedule/service";
 import { statusLabel } from "../schedule/templates";
+import { afterSafe, notifyReview } from "../push/service";
 import { InputError, pgSafe, record, requireRole } from "../services";
 
 const clean = (v: string, n: number) => v.trim().slice(0, n);
@@ -101,24 +102,29 @@ export async function submitReviewerFeedback(db: Db, token: string, itemId: stri
   if (!parsed.length) throw new InputError("Feedback kosong.");
   if (parsed.length > 100) throw new InputError("Maksimal 100 poin sekali kirim.");
   const { link, item } = await authorize(db, token, itemId);
-  return db.transaction(async (tx) => {
+  const count = await db.transaction(async (tx) => {
     const [{ top }] = await tx.select({ top: max(feedbackPoints.sortOrder) }).from(feedbackPoints).where(eq(feedbackPoints.itemId, itemId));
     const rows = await tx
       .insert(feedbackPoints)
       .values(parsed.map((p, n) => ({ projectId: link.projectId, itemId, body: pgSafe(p.body), ref: pgSafe(p.ref.slice(0, 40)), fromWho: link.name.slice(0, 60), reviewerLinkId: link.id, sortOrder: (top ?? 0) + n + 1, createdBy: null })))
       .returning({ id: feedbackPoints.id });
     await record(tx, { projectId: link.projectId, userId: null, entity: "feedback", entityId: rows[0].id, action: "create", summary: `${link.name} (link reviewer) menambah ${rows.length} poin di "${item.name}"`, after: { points: parsed.slice(0, 20) } });
-    return rows.length;
+    return { n: rows.length, id: rows[0].id };
   });
+  // Text names the milestone only, never the comment body (lock screens).
+  afterSafe(() => notifyReview(db, link.projectId, `review:${count.id}`, count.id, "Komentar reviewer baru", `${count.n} poin baru di "${item.name}"`));
+  return count.n;
 }
 
 export async function signoffViaLink(db: Db, token: string, itemId: string, note: string) {
   const { link, item } = await authorize(db, token, itemId);
   try {
-    await db.transaction(async (tx) => {
+    const sid = await db.transaction(async (tx) => {
       const [s] = await tx.insert(signoffs).values({ projectId: link.projectId, itemId, signerName: link.name, signerRole: link.role, reviewerLinkId: link.id, note: clean(note, 500) }).returning();
       await record(tx, { projectId: link.projectId, userId: null, entity: "signoff", entityId: s.id, action: "create", summary: `${link.name} (link reviewer) menyetujui "${item.name}"` });
+      return s.id;
     });
+    afterSafe(() => notifyReview(db, link.projectId, `review:${sid}`, sid, "Persetujuan reviewer baru", `Milestone "${item.name}" disetujui`));
   } catch (e) {
     const err = e as { code?: string; cause?: { code?: string } };
     if (err.code === "23505" || err.cause?.code === "23505") throw new InputError("Sudah disetujui.");

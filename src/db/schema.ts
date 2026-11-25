@@ -716,3 +716,32 @@ export const calendarTokens = ps.table("calendar_tokens", {
   createdAt: createdAt(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 });
+
+/** Web Push endpoints of a user's devices. The push itself carries no data; see lib/push. */
+export const pushSubscriptions = ps.table("push_subscriptions", {
+  id: id(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  keys: jsonb("keys").$type<{ p256dh: string; auth: string }>().notNull(),
+  userAgent: text("user_agent").notNull().default(""),
+  createdAt: createdAt(),
+});
+
+/** In-app inbox + source for pushes. Never holds budget amounts, script text or reviewer comment bodies (lock screens). */
+export const notifications = ps.table(
+  "notifications",
+  {
+    id: id(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    projectId: projectRef(),
+    kind: text("kind").$type<"deadline" | "invoice_due" | "review_comment" | "check">().notNull(),
+    refId: uuid("ref_id"),
+    title: text("title").notNull(),
+    body: text("body").notNull().default(""),
+    url: text("url").notNull(),
+    dedupeKey: text("dedupe_key").notNull().unique(),
+    createdAt: createdAt(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+  },
+  (t) => [index("notifications_user_idx").on(t.userId, t.readAt)],
+);
