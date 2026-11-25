@@ -6,7 +6,7 @@ import { Icon } from "./icons";
 
 const PAGES: Record<string, string> = {
   timeline: "Timeline", deliverables: "Deliverables", budget: "Anggaran & vendor", assets: "Aset & dokumen", technical: "Technical Page",
-  checks: "Pemeriksaan", edl: "Tool EDL", script: "Naskah", team: "Tim", access: "Akses", report: "Laporan", activity: "Change log",
+  checks: "Pemeriksaan", edl: "Tool EDL", framing: "Framing Chart", script: "Naskah", team: "Tim", access: "Akses", report: "Laporan", activity: "Change log",
 };
 const SUB: Record<string, string> = { scope: "Scope", compare: "Bandingkan", print: "Cetak", markers: "Penanda", export: "Export", upload: "Unggah" };
 
