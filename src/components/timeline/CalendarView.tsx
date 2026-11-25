@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { fmtRange } from "@/lib/schedule/dates";
+import { addDays, fmtRange } from "@/lib/schedule/dates";
 import { statusLabel } from "@/lib/schedule/templates";
 import { isOff, type Cal } from "@/lib/schedule/workdays";
 import { DOW, HEAD, LANE, monthFmt, monthWeeks } from "./calendar-layout";
@@ -26,28 +26,39 @@ const Chevron = ({ dir }: { dir: "l" | "r" }) => (
 
 export default function CalendarView({ tracks, today, cal, ph, progress, onOpen }: ViewProps) {
   const items = useMemo(() => tracks.flatMap((t) => t.items), [tracks]);
-  const [month, setMonth] = useState(() => {
+  // `at` is any day of what is shown: the month, or the week that contains it.
+  const [at, setAt] = useState(() => {
     const first = items.reduce((m, i) => (i.startDate < m ? i.startDate : m), "9999-99-99");
-    return (first > today ? first : today).slice(0, 7) + "-01";
+    return first > today ? first : today;
   });
+  const [unit, setUnit] = useState<"month" | "week">("month");
+  const month = at.slice(0, 7) + "-01";
   const step = (n: number) => {
+    if (unit === "week") return setAt(addDays(at, n * 7));
     const d = new Date(`${month}T00:00:00Z`);
     d.setUTCMonth(d.getUTCMonth() + n);
-    setMonth(d.toISOString().slice(0, 10));
+    setAt(d.toISOString().slice(0, 10));
   };
 
-  const weeks = useMemo(() => monthWeeks(items, month), [items, month]);
+  const all = useMemo(() => monthWeeks(items, month), [items, month]);
+  const weeks = unit === "week" ? all.filter((w) => w.days.some(({ d }) => d === at)) : all;
+  const label = unit === "week" && weeks[0] ? `${Number(weeks[0].days[0].d.slice(8))} – ${Number(weeks[0].days[6].d.slice(8))} ${monthFmt.format(new Date(`${weeks[0].days[3].d}T00:00:00Z`))}` : monthFmt.format(new Date(`${month}T00:00:00Z`));
 
   return (
     <div className="text-ink">
-      <div className="mb-3 flex items-center gap-2">
-        <button type="button" className="btn-ghost" onClick={() => step(-1)} aria-label="Bulan sebelumnya"><Chevron dir="l" /></button>
-        <h2 className="min-w-40 text-center font-display text-lg font-semibold capitalize">{monthFmt.format(new Date(`${month}T00:00:00Z`))}</h2>
-        <button type="button" className="btn-ghost" onClick={() => step(1)} aria-label="Bulan berikutnya"><Chevron dir="r" /></button>
-        <button type="button" className="btn-secondary" onClick={() => setMonth(today.slice(0, 7) + "-01")}>Hari ini</button>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <button type="button" className="btn-ghost" onClick={() => step(-1)} aria-label={unit === "week" ? "Minggu sebelumnya" : "Bulan sebelumnya"}><Chevron dir="l" /></button>
+        <h2 className="min-w-40 text-center font-display text-lg font-semibold capitalize">{label}</h2>
+        <button type="button" className="btn-ghost" onClick={() => step(1)} aria-label={unit === "week" ? "Minggu berikutnya" : "Bulan berikutnya"}><Chevron dir="r" /></button>
+        <button type="button" className="btn-secondary" onClick={() => setAt(today)}>Hari ini</button>
+        <div role="group" aria-label="Rentang kalender" className="seg ml-auto">
+          <button type="button" aria-pressed={unit === "month"} onClick={() => setUnit("month")}>Bulan</button>
+          <button type="button" aria-pressed={unit === "week"} onClick={() => setUnit("week")}>Minggu</button>
+        </div>
       </div>
-      <div className="grid gap-px overflow-hidden rounded-xl bg-line">
-        <div className="grid grid-cols-7 gap-px">
+      <div tabIndex={0} role="region" aria-label="Kalender, bisa digulir" className="max-h-[72dvh] max-w-full overflow-auto overscroll-contain rounded-xl focus-visible:outline-2 focus-visible:outline-accent">
+      <div className="grid min-w-[640px] gap-px bg-line">
+        <div className="sticky top-0 z-30 grid grid-cols-7 gap-px">
           {DOW.map((n) => <div key={n} className="bg-raised px-2 py-1 text-xs font-semibold text-ink-2">{n}</div>)}
         </div>
         {weeks.map((w) => (
@@ -56,7 +67,7 @@ export default function CalendarView({ tracks, today, cal, ph, progress, onOpen 
               <div
                 key={d}
                 className={`min-w-0 px-1 pb-1 ${d === today ? "bg-sel" : isOff(cal, d) ? "bg-[var(--weekend)]" : "bg-bg"} ${d.slice(0, 7) !== month.slice(0, 7) ? "opacity-50" : ""}`}
-                style={{ minHeight: 72, paddingTop: HEAD + w.lanes * LANE + 2 }}
+                style={{ minHeight: unit === "week" ? 240 : 72, paddingTop: HEAD + w.lanes * LANE + 2 }}
               >
                 {miles.slice(0, 3).map((m) => (
                   <button key={m.id} type="button" title={titleOf(m)} onClick={() => onOpen(m.id)} className="flex w-full items-center gap-1.5 py-0.5 text-left text-[11px]">
@@ -91,6 +102,7 @@ export default function CalendarView({ tracks, today, cal, ph, progress, onOpen 
             </div>
           </div>
         ))}
+      </div>
       </div>
     </div>
   );

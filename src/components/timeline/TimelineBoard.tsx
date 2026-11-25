@@ -11,6 +11,7 @@ import { PHASE_COLORS, STATUSES, statusLabel } from "@/lib/schedule/templates";
 import { blockedEntries, calOf, endAfter, isOff, snap, workDays } from "@/lib/schedule/workdays";
 import { Drawer } from "../ui/controls";
 import { Icon } from "../ui/icons";
+import { Popover } from "../ui/popover";
 import { useToast } from "../ui/toast";
 import CalendarView from "./CalendarView";
 import { DaysPanel } from "./DaysPanel";
@@ -22,7 +23,7 @@ import { AgendaList, ItemHead, itemTabs, ItemPanel, type TabId, ManagePanel, New
 import { dayOffset, durationLabel, phaseIndex, isLate, progressOf, signed, slip, type Item, type Mode } from "./shared";
 import VerticalGantt from "./VerticalGantt";
 import { TemplatePanel } from "./TemplatePanel";
-import { stamp, VersionsPanel } from "./VersionsPanel";
+import { VersionsPanel } from "./VersionsPanel";
 
 const ROW = 36;
 const HEAD = 48;
@@ -98,8 +99,14 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
   const [leftPref, setLeft] = useState(LEFT_DEFAULT);
   const [coarse, setCoarse] = useState(false);
   const [vw, setVw] = useState(1200);
+  // Phone: portrait width, or a landscape phone. There the board is a read-only viewer (taps open items, scrolling never moves dates).
+  const [phone, setPhone] = useState(false);
+  const [mview, setMview] = useState<"agenda" | "gantt">("agenda");
+  const gantt = phone ? mview === "gantt" : view === "gantt";
+  const lock = phone && coarse;
+  const pickMview = (v: "agenda" | "gantt") => { setMview(v); localStorage.setItem("ps.timeline.mview", v); };
   // On a narrow board (phone in landscape, small tablet) the label column may take 40% at most, so the bars stay visible.
-  const left = Math.min(leftPref, Math.max(140, Math.round(vw * 0.4)));
+  const left = phone ? 112 : Math.min(leftPref, Math.max(140, Math.round(vw * 0.4)));
   const labelW = left; // renderRow has its own `left` (the bar's x), so rows use this name
   const [gripping, setGripping] = useState(false);
   const live = useRef({ px: PX_DEFAULT, left: LEFT_DEFAULT });
@@ -133,6 +140,16 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
     const p = stored >= PX_MIN && stored <= PX_MAX ? stored : legacy;
     if (p) setPx(p);
     setCoarse(window.matchMedia("(pointer: coarse)").matches);
+    if (localStorage.getItem("ps.timeline.mview") === "gantt") setMview("gantt");
+    const pm = window.matchMedia("(max-width: 767px), (orientation: landscape) and (max-height: 500px)");
+    const land = window.matchMedia("(orientation: landscape) and (max-height: 500px)");
+    setPhone(pm.matches);
+    if (land.matches) setMview("gantt");
+    const onPm = () => setPhone(pm.matches);
+    const onLand = () => { if (land.matches) setMview("gantt"); };
+    pm.addEventListener("change", onPm);
+    land.addEventListener("change", onLand);
+    return () => { pm.removeEventListener("change", onPm); land.removeEventListener("change", onLand); };
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
   const setWidth = (n: number, save = true) => { const v = clampLeft(n); setLeft(v); if (save) localStorage.setItem("ps.timeline.left", String(v)); };
@@ -212,6 +229,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
 
   const matches = (i: Item) => (!fStatus || i.status === fStatus) && (!fPic || i.picContactId === fPic) && (!fLate || isLate(i, today)) && (!fHard || i.hardDeadline);
   const filtering = Boolean(fStatus || fPic || fLate || fHard);
+  const nFilters = [fStatus, fPic, fLate, fHard].filter(Boolean).length;
   const shown = tracks.map((t) => ({ ...t, items: t.items.filter(matches) }));
   const rows: ({ type: "track"; track: (typeof tracks)[number] } | { type: "item"; item: Item })[] = [];
   for (const t of shown) {
@@ -232,7 +250,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
     const a = anchor.current;
     anchor.current = null;
     el.scrollTo({ left: a ? Math.max(0, a.day * px + live.current.left - a.ax) : Math.max(0, diffDays(min, focus) * px - 160), behavior: "instant" });
-  }, [min, focus, px, view]);
+  }, [min, focus, px, gantt]);
 
   // What one screen shows, and ctrl/cmd + wheel (also a trackpad pinch) to zoom around the pointer. React's wheel handler is passive, so this is native.
   useEffect(() => {
@@ -247,7 +265,27 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => { ro.disconnect(); el.removeEventListener("wheel", onWheel); };
-  }, [view, tracks.length, zoomTo]);
+  }, [gantt, tracks.length, zoomTo]);
+
+  // Two-finger pinch on a phone zooms around the midpoint; one finger keeps scrolling natively (touch-action pan-x pan-y).
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || !phone) return;
+    const ptrs = new Map<number, number>();
+    let pinch: { d0: number; v0: number } | null = null;
+    const gap = () => { const [a, b] = [...ptrs.values()]; return Math.abs(a - b) || 1; };
+    const mid = () => [...ptrs.values()].reduce((t, v) => t + v, 0) / ptrs.size - el.getBoundingClientRect().left;
+    const down = (e: PointerEvent) => { if (e.pointerType !== "touch") return; ptrs.set(e.pointerId, e.clientX); pinch = ptrs.size === 2 ? { d0: gap(), v0: live.current.px } : null; };
+    const move = (e: PointerEvent) => { if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, e.clientX); if (pinch && ptrs.size === 2) zoomTo(pinch.v0 * (gap() / pinch.d0), mid()); };
+    const up = (e: PointerEvent) => { ptrs.delete(e.pointerId); pinch = null; };
+    const touch = (e: TouchEvent) => { if (e.touches.length === 2) e.preventDefault(); };
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+    el.addEventListener("touchmove", touch, { passive: false });
+    return () => { el.removeEventListener("pointerdown", down); el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", up); el.removeEventListener("touchmove", touch); };
+  }, [gantt, phone, tracks.length, zoomTo]);
 
   // Arriving from Hari Ini with ?item=: bring that row into view.
   useEffect(() => {
@@ -389,6 +427,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
   // ---------- pointer handling ----------
 
   function dragHandlers(item: Item, kind: DragKind) {
+    if (lock) return { onClick: () => openItem(item.id) };
     if (!editable) return { onClick: (e: React.MouseEvent) => pick(item.id, e) };
     return {
       onPointerDown: (e: React.PointerEvent) => {
@@ -453,7 +492,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
 
   const marquee = {
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!editable || e.button !== 0 || (e.target as HTMLElement).closest(".tl-label, .track-band, [data-grip], button, select, input, a")) return;
+      if (!editable || lock || e.button !== 0 || (e.target as HTMLElement).closest(".tl-label, .track-band, [data-grip], button, select, input, a")) return;
       const el = e.currentTarget;
       const pt = canvasPoint(e);
       const st = { x0: pt.x, y0: pt.y, ex: pt.x, ey: pt.y, cx: e.clientX, cy: e.clientY, pid: e.pointerId, add: e.shiftKey || e.metaKey || e.ctrlKey, touch: e.pointerType === "touch", active: false, timer: undefined as ReturnType<typeof setTimeout> | undefined };
@@ -491,7 +530,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
     const stop = (e: TouchEvent) => { if (mqRef.current?.active) e.preventDefault(); };
     el.addEventListener("touchmove", stop, { passive: false });
     return () => el.removeEventListener("touchmove", stop);
-  }, [view, tracks.length]);
+  }, [gantt, tracks.length]);
 
   // ---------- label column resize ----------
 
@@ -537,7 +576,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
   const weeksShown = Math.max(1, (vw - left) / px) / 7;
   const readout = weeksShown >= 1 ? `≈ ${Math.round(weeksShown)} minggu` : `≈ ${Math.max(1, Math.round(weeksShown * 7))} hari`;
   const presetId = PRESETS.find((z) => z.px === Math.round(px * 10) / 10)?.id;
-  const lastVersion = versions[0];
+  const goToday = () => scroller.current?.scrollTo({ left: Math.max(0, x(today) - 160), behavior: "smooth" });
 
   const linkCount = new Map<string, number>();
   for (const a of attachments) if (a.targetType === "schedule_item") linkCount.set(a.targetId, (linkCount.get(a.targetId) ?? 0) + 1);
@@ -560,7 +599,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
 
   return (
     <div className="space-y-3 tl-root" data-drawer={panel ? "" : undefined}>
-      {/* toolbar: primary row (view, zoom, history, panels, actions), then a row of filters */}
+      {/* toolbar: view, zoom and history on the left; filters, + Item and the ⋯ menu on the right */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
         <select aria-label="Tampilan" className="!w-auto hidden md:block" value={view === "gantt" ? (presetId ?? "custom") : view} onChange={(e) => pickView(e.target.value)}>
           <optgroup label="Gantt">
@@ -570,7 +609,11 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
           <option value="vertical">Gantt vertikal</option>
           <option value="calendar">Kalender</option>
         </select>
-        {view === "gantt" && (
+        <div role="group" aria-label="Tampilan" className="seg md:hidden">
+          <button type="button" aria-pressed={mview === "agenda"} onClick={() => pickMview("agenda")}>Agenda</button>
+          <button type="button" aria-pressed={mview === "gantt"} onClick={() => pickMview("gantt")}>Gantt</button>
+        </div>
+        {gantt && (
           <>
             <div role="group" aria-label="Zoom" className="hidden items-center gap-1 md:flex">
               <button type="button" className="btn-ghost !px-1.5" aria-label="Perkecil" title="Perkecil (Ctrl/Cmd + roda mouse)" onClick={() => zoomTo(px * 0.8)}><Icon name="minus" /></button>
@@ -578,7 +621,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
               <button type="button" className="btn-ghost !px-1.5" aria-label="Perbesar" title="Perbesar (Ctrl/Cmd + roda mouse)" onClick={() => zoomTo(px * 1.25)}><Icon name="plus" /></button>
               <span className="muted w-24 text-xs tabular-nums" aria-live="polite" title="Rentang yang tampak dalam satu layar">{readout}</span>
             </div>
-            <button type="button" className="btn-ghost hidden md:inline-flex" onClick={() => scroller.current?.scrollTo({ left: Math.max(0, x(today) - 160), behavior: "smooth" })}>Hari ini</button>
+            <button type="button" className="btn-ghost hidden md:inline-flex" onClick={goToday}>Hari ini</button>
           </>
         )}
         {editable && (
@@ -587,59 +630,54 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
             <button type="button" className="btn-ghost !px-1.5" aria-label="Ulangi" title="Ulangi (Shift+Cmd/Ctrl+Z)" disabled={!history.redo.length} onClick={redo}><Icon name="redo" /></button>
           </div>
         )}
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {editable && (
-            <>
-              {lastVersion && <span className="muted hidden max-w-48 truncate text-xs xl:inline" title={`Versi terakhir: ${lastVersion.name}`}>{lastVersion.name} · {stamp.format(new Date(lastVersion.createdAt))}</span>}
-              <button type="button" className="btn-secondary" onClick={() => setPanel({ kind: "versions" })}>Versi</button>
-            </>
-          )}
-          {tracks.length > 0 && (
-            <details className="tl-details relative">
-              <summary className="btn-secondary cursor-pointer" aria-label="Export"><Icon name="download" /> Export</summary>
-              <div className="tl-pop" role="menu" aria-label="Export">
-                {[
-                  { href: `/admin/p/${slug}/timeline/print`, icon: "print", label: "PDF Gantt" },
-                  { href: `/admin/p/${slug}/timeline/print?view=calendar`, icon: "today", label: "PDF Kalender" },
-                  { href: `/admin/p/${slug}/timeline/export`, icon: "download", label: "Excel / Sheets (CSV)", download: true },
-                  { href: `/admin/p/${slug}/timeline/export?type=feedback`, icon: "feedback", label: "Feedback (CSV)", download: true },
-                ].map((l) => (
-                  <a key={l.href} role="menuitem" href={l.href} download={l.download} onClick={(e) => e.currentTarget.closest("details")?.removeAttribute("open")}><Icon name={l.icon as "print"} /> {l.label}</a>
-                ))}
+        {gantt && phasesWithKids.length > 0 && (
+          <button type="button" className="btn-ghost hidden md:inline-flex" onClick={() => setCollapsed((c) => { const s = new Set(c); for (const id of phasesWithKids) if (allFolded) s.delete(id); else s.add(id); return s; })}>
+            {allFolded ? "Buka milestone" : "Ciutkan milestone"}
+          </button>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <Popover label={nFilters ? `Filter (${nFilters})` : "Filter"} className="btn-secondary" trigger={<>Filter{nFilters > 0 && <span className="tabular-nums"> ({nFilters})</span>}</>}>
+            {() => (
+              <div className="field-pop w-64 max-w-[80vw]">
+                <select aria-label="Filter status" className="w-full" value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
+                  <option value="">Semua status</option>
+                  {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+                {contacts.length > 0 && (
+                  <select aria-label="Filter PIC" className="w-full" value={fPic} onChange={(e) => setFPic(e.target.value)}>
+                    <option value="">Semua PIC</option>
+                    {contacts.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                )}
+                <label className="check"><input type="checkbox" checked={fLate} onChange={(e) => setFLate(e.target.checked)} /> Terlambat</label>
+                <label className="check"><input type="checkbox" checked={fHard} onChange={(e) => setFHard(e.target.checked)} /> Hard deadline</label>
+                {editable && (
+                  <label className="check" title="Saat sebuah item digeser, item yang menunggunya ikut bergeser. Jika mati, hanya item itu yang pindah dan bentrokan ditandai merah.">
+                    <input type="checkbox" checked={cascade} onChange={(e) => toggleCascade(e.target.checked)} /> Geser yang bergantung
+                  </label>
+                )}
+                {filtering && <button type="button" className="!inline-flex !w-auto justify-self-start text-accent" onClick={() => { setFStatus(""); setFPic(""); setFLate(false); setFHard(false); }}>Hapus filter</button>}
               </div>
-            </details>
-          )}
-          <button type="button" className="btn-secondary" title="Hari kerja & libur" onClick={() => setPanel({ kind: "days" })}><Icon name="today" /> Libur <span className="tabular-nums text-ink-2">{holidayCount}</span></button>
-          {editable && (
-            <>
-              {tracks.length > 0 && <button type="button" className="btn-secondary" onClick={() => setPanel({ kind: "new", trackId: tracks[0].id, parentId: null, date: today })}><Icon name="plus" /> Item</button>}
-              <button type="button" className="btn" onClick={() => setPanel({ kind: "manage" })}>Kelola</button>
-            </>
-          )}
-        </div>
-        <div className="flex w-full flex-wrap items-center gap-2">
-          <select aria-label="Filter status" className="!w-auto" value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
-            <option value="">Semua status</option>
-            {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-          {contacts.length > 0 && (
-            <select aria-label="Filter PIC" className="!w-auto max-w-44" value={fPic} onChange={(e) => setFPic(e.target.value)}>
-              <option value="">Semua PIC</option>
-              {contacts.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-            </select>
-          )}
-          <label className="check"><input type="checkbox" checked={fLate} onChange={(e) => setFLate(e.target.checked)} /> Terlambat</label>
-          <label className="check"><input type="checkbox" checked={fHard} onChange={(e) => setFHard(e.target.checked)} /> Hard deadline</label>
-          {editable && (
-            <label className="check" title="Saat sebuah item digeser, item yang menunggunya ikut bergeser. Jika mati, hanya item itu yang pindah dan bentrokan ditandai merah.">
-              <input type="checkbox" checked={cascade} onChange={(e) => toggleCascade(e.target.checked)} /> Geser yang bergantung
-            </label>
-          )}
-          {view === "gantt" && phasesWithKids.length > 0 && (
-            <button type="button" className="btn-ghost hidden md:inline-flex" onClick={() => setCollapsed((c) => { const s = new Set(c); for (const id of phasesWithKids) if (allFolded) s.delete(id); else s.add(id); return s; })}>
-              {allFolded ? "Buka milestone" : "Ciutkan milestone"}
-            </button>
-          )}
+            )}
+          </Popover>
+          {editable && tracks.length > 0 && <button type="button" className="btn" onClick={() => setPanel({ kind: "new", trackId: tracks[0].id, parentId: null, date: today })}><Icon name="plus" /> Item</button>}
+          <Popover label="Lainnya" className="btn-secondary" trigger={<span aria-hidden>⋯</span>}>
+            {(close) => (
+              <>
+                {editable && <button type="button" role="menuitem" onClick={() => { close(); setPanel({ kind: "versions" }); }}>Versi</button>}
+                {tracks.length > 0 && [
+                  { href: `/admin/p/${slug}/timeline/print`, icon: "print", label: "Export PDF Gantt" },
+                  { href: `/admin/p/${slug}/timeline/print?view=calendar`, icon: "today", label: "Export PDF Kalender" },
+                  { href: `/admin/p/${slug}/timeline/export`, icon: "download", label: "Export Excel / Sheets (CSV)", download: true },
+                  { href: `/admin/p/${slug}/timeline/export?type=feedback`, icon: "feedback", label: "Export Feedback (CSV)", download: true },
+                ].map((l) => (
+                  <a key={l.href} role="menuitem" href={l.href} download={l.download} onClick={() => setTimeout(close)}><Icon name={l.icon as "print"} /> {l.label}</a>
+                ))}
+                <button type="button" role="menuitem" onClick={() => { close(); setPanel({ kind: "days" }); }}><Icon name="today" /> Libur <span className="tabular-nums text-ink-2">{holidayCount}</span></button>
+                {editable && <button type="button" role="menuitem" onClick={() => { close(); setPanel({ kind: "manage" }); }}>Kelola</button>}
+              </>
+            )}
+          </Popover>
         </div>
       </div>
 
@@ -652,18 +690,18 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
       ) : (
         <>
           {/* narrow screens: agenda */}
-          <div className="md:hidden"><AgendaList tracks={shown} today={today} onOpen={openItem} ph={ph} cal={cal} /></div>
+          <div className={mview === "gantt" ? "hidden" : "md:hidden"}><AgendaList tracks={shown} today={today} onOpen={openItem} ph={ph} cal={cal} /></div>
 
           {view === "calendar" && <div className="hidden md:block"><CalendarView tracks={shown} cal={cal} ph={ph} progress={progress} today={today} onOpen={openItem} /></div>}
           {view === "vertical" && <div className="hidden md:block"><VerticalGantt tracks={shown} cal={cal} ph={ph} progress={progress} today={today} onOpen={openItem} /></div>}
 
-          {view === "gantt" && (
-            <div ref={scroller} className="tl hidden max-h-[74dvh] overflow-auto overscroll-contain md:block" style={{ "--row": `${ROW}px` } as React.CSSProperties} data-testid="timeline-board">
+          {gantt && (
+            <div ref={scroller} className={`tl ${mview === "gantt" ? "" : "hidden"} max-h-[74dvh] overflow-auto overscroll-contain md:block`} style={{ "--row": `${ROW}px`, ...(phone ? { touchAction: "pan-x pan-y" } : {}) } as React.CSSProperties} data-testid="timeline-board">
               <div className="relative" style={{ width: left + width }}>
                 <div className="tl-head sticky top-0 z-30 flex" style={{ height: HEAD }}>
                   <div className="sticky left-0 z-10 flex shrink-0 items-end whitespace-nowrap bg-bg px-3 pb-2 text-xs text-ink-2" style={{ width: left, "--gx": `${left}px` } as React.CSSProperties}>
                     {filtering ? `${rowOf.size} dari ${allItems.length} item` : `${allItems.length} item`}
-                    {editable && <span className="tl-grip" {...grip} />}
+                    {editable && !lock && <span className="tl-grip" {...grip} />}
                   </div>
                   <div className="relative" style={{ width }}>
                     {months.map((m) => <div key={m.key} className="tl-month" style={{ left: m.left }}>{m.label}</div>)}
@@ -676,7 +714,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
                 </div>
 
                 <div ref={canvas} className="relative select-none" style={{ height: bodyHeight }} {...marquee}>
-                  {editable && (
+                  {editable && !lock && (
                     <div className="sticky left-0 z-30 h-0 w-0" style={{ "--gx": `${left}px` } as React.CSSProperties}>
                       <span className="tl-grip" style={{ top: 0, height: bodyHeight }} {...grip} />
                     </div>
@@ -750,7 +788,18 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
             </div>
           )}
 
-          {view === "gantt" && editable && (
+          {gantt && phone && mview === "gantt" && (
+            <div role="toolbar" aria-label="Zoom dan navigasi gantt" className="sticky bottom-[calc(12px+env(safe-area-inset-bottom))] z-40 mx-auto flex w-fit max-w-full items-center gap-1 rounded-xl bg-bg p-1 shadow-[var(--float-lg)] md:hidden">
+              <button type="button" className="btn-ghost btn-icon" aria-label="Perkecil" onClick={() => zoomTo(px * 0.8)}><Icon name="minus" /></button>
+              <button type="button" className="btn-ghost btn-icon" aria-label="Perbesar" onClick={() => zoomTo(px * 1.25)}><Icon name="plus" /></button>
+              <div role="group" aria-label="Skala" className="seg !flex-nowrap !gap-0">
+                {PRESETS.map((z) => <button key={z.id} type="button" className="!px-2" aria-pressed={presetId === z.id} onClick={() => zoomTo(z.px)}>{z.label}</button>)}
+              </div>
+              <button type="button" className="btn-ghost !px-2" onClick={goToday}>Hari ini</button>
+            </div>
+          )}
+
+          {gantt && editable && (
             <details ref={help} className="tl-details relative hidden w-fit md:block">
               <summary className="btn-ghost !px-2" aria-label="Pintasan dan cara memakai jadwal" title="Pintasan (?)">?</summary>
               <div className="tl-pop tl-pop-up w-96 max-w-[90vw] space-y-2 p-3 text-[13px]" role="group" aria-label="Pintasan">
@@ -764,7 +813,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
       )}
 
       {/* step controls for one selected item: each press moves one working day, with undo, cascade and snapping */}
-      {one && view === "gantt" && (
+      {one && gantt && (
         <div role="toolbar" aria-label={`Atur jadwal "${one.name}"`} className="sheet-bar fixed inset-x-0 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-50 mx-auto hidden w-fit max-w-[calc(100%-2rem)] flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-sm md:flex">
           <span className="max-w-40 truncate font-medium">{one.name}</span>
           {([...(one.parentId ? [] : [["Mulai", "start", "minus", "plus"], ["Selesai", "due", "minus", "plus"]] as const), ["Geser", "move", "left", "chevron"]] as const).map(([label, kind, back, fwd]) => (
@@ -859,7 +908,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
         data-selected={sel.has(item.id) || undefined}
         data-late={late || undefined}
         data-signed={signedBy ? "" : undefined}
-        className={`milestone ${editable ? "cursor-grab touch-pan-y active:cursor-grabbing" : "cursor-pointer"}`}
+        className={`milestone ${editable && !lock ? "cursor-grab touch-pan-y active:cursor-grabbing" : "cursor-pointer"}`}
         style={{ left: x(p.start) + px / 2 - 6 }}
         onKeyDown={(e) => keys(e, item)}
         onDoubleClick={(e) => { e.stopPropagation(); openItem(item.id); }}
@@ -893,7 +942,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
             ? <button type="button" aria-expanded={!folded} aria-label={`${folded ? "Buka" : "Ciutkan"} milestone ${item.name}`} className="cursor-pointer text-muted hover:text-ink" onClick={() => toggle(item.id)}><Icon name="chevron" className={`transition-transform duration-150 ${folded ? "" : "rotate-90"}`} /></button>
             : <span className="w-4 shrink-0" />)}
           <span aria-hidden className={milestone ? "diamond" : "ph-mark"} />
-          <button type="button" title={`${item.name} · ${fmtRange(p.start, p.due)} · ${durationLabel(cal, p.start, p.due, item.workHours)} · ${statusLabel(item.status)}`} className={`min-w-[7rem] flex-1 cursor-pointer truncate text-left hover:underline ${milestone ? "text-[13px] text-ink-2" : "text-[13px] font-medium"}`} onClick={(e) => (e.shiftKey || e.metaKey || e.ctrlKey ? pick(item.id, e) : openItem(item.id))}>
+          <button type="button" title={`${item.name} · ${fmtRange(p.start, p.due)} · ${durationLabel(cal, p.start, p.due, item.workHours)} · ${statusLabel(item.status)}`} className={`min-w-0 flex-1 cursor-pointer truncate md:min-w-[7rem] text-left hover:underline ${milestone ? "text-[13px] text-ink-2" : "text-[13px] font-medium"}`} onClick={(e) => (e.shiftKey || e.metaKey || e.ctrlKey ? pick(item.id, e) : openItem(item.id))}>
             {item.name}
             {!milestone && folded && <span className="ml-1.5 text-xs font-normal text-muted tabular-nums">{children.length}</span>}
             {item.hardDeadline && <span className="ml-1.5 text-xs font-medium text-danger" title="Hard deadline: tidak ikut bergeser">hard</span>}
@@ -939,7 +988,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
                 data-conflict={conflictIds.has(item.id) || undefined}
                 data-dragging={isSubject || undefined}
                 data-preview={(m && !isSubject) || undefined}
-                className={`bar ${editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
+                className={`bar ${editable && !lock ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
                 style={{ left, width: w, "--p": progress(item.id) } as React.CSSProperties}
                 onKeyDown={(e) => keys(e, item)}
                 onDoubleClick={(e) => { e.stopPropagation(); openItem(item.id); }}
@@ -948,7 +997,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
                 {w >= 64 && <span className="truncate">{item.name}</span>}
               </div>
               {/* resize handles sit beside the bar (it clips its children) so their hit area can reach past the ends */}
-              {editable && (w >= 24 || big(item.id)) && (
+              {editable && !lock && (w >= 24 || big(item.id)) && (
                 <>
                   <span aria-hidden className="bar-handle" data-edge="start" data-big={big(item.id) || undefined} style={{ "--e": `${left}px` } as React.CSSProperties} {...dragHandlers(item, "start")} />
                   <span aria-hidden className="bar-handle" data-edge="due" data-big={big(item.id) || undefined} style={{ "--e": `${left + w}px` } as React.CSSProperties} {...dragHandlers(item, "due")} />
@@ -956,7 +1005,7 @@ export function TimelineBoard({ schedule, mode, slug, today, contacts, groups = 
               )}
               {item.hardDeadline && <span aria-hidden className="bar-wall" style={{ left: left + w - 1 }} />}
               {folded && children.filter(matches).map(marker)}
-              {editable && (
+              {editable && !lock && (
                 <span aria-hidden title="Seret ke item lain untuk membuat dependency" data-link-handle={item.id} className="bar-link touch-none" style={{ left: left + w + (big(item.id) ? 26 : 6), top: (ROW - 9) / 2 }} {...linkHandlers(item)} />
               )}
             </>
