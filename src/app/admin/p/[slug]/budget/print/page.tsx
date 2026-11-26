@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { LinesView } from "@/components/budget/LinesView";
 import { PrintActions } from "@/components/timeline/PrintActions";
 import { can } from "@/lib/auth/permissions";
 import { categoryLabel, TAX_NOTE, VERSION_STATUSES, type VersionStatusCode } from "@/lib/budget/catalog";
@@ -84,7 +85,7 @@ export default async function PrintBudget({ params, searchParams }: { params: Pr
                 const doc = data.docs.find((d) => d.id === v.docId);
                 const bid = doc && data.bids.find((b) => b.id === doc.bidId);
                 if (!doc || !bid || bid.scopeId !== one.id) return [];
-                return [<tr key={v.id}><td className={td}>{vendor(bid.vendorId)}</td><td className={td}>{doc.kind === "quote" ? "Penawaran" : `Tambahan: ${doc.title}`}</td><td className={td}>v{v.number}</td><td className={`${td} whitespace-nowrap`}>{v.docDate ? fmtDate(v.docDate) : "—"}</td><td className={td}>{VERSION_STATUSES[v.status as VersionStatusCode] ?? v.status}</td><td className={tdn}>{rp(v.subtotal)}</td><td className={tdn}>{rp(v.ppn)}</td><td className={tdn}>{rp(v.pph23)}</td><td className={tdn}>{rp(v.subtotal + v.ppn - v.pph23)}</td></tr>];
+                return [<tr key={v.id}><td className={td}>{vendor(bid.vendorId)}</td><td className={td}>{doc.kind === "quote" ? "Penawaran" : `Tambahan: ${doc.title}`}</td><td className={td}>v{v.number}</td><td className={`${td} whitespace-nowrap`}>{v.docDate ? fmtDate(v.docDate) : "—"}</td><td className={td}>{VERSION_STATUSES[v.status as VersionStatusCode] ?? v.status}</td><td className={tdn}>{rp(v.subtotal)}</td><td className={tdn}>{rp(v.ppn)}</td><td className={tdn}>{rp(v.pph23)}</td><td className={tdn}>{rp(v.subtotal + v.ppn - v.pph23)}</td></tr>, ...(v.lines.length ? [<tr key={`${v.id}-l`}><td /><td colSpan={8} className="pb-3"><LinesView lines={v.lines} className="w-full text-xs" /></td></tr>] : [])];
               })}
             </tbody>
           </>

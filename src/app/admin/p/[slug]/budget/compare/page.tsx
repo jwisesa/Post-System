@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { can } from "@/lib/auth/permissions";
 import { categoryLabel, TAX_NOTE, VERSION_STATUSES, type VersionStatusCode } from "@/lib/budget/catalog";
 import { compareVersions, type Side } from "@/lib/budget/compare";
+import { isCounted, kindOf } from "@/lib/budget/lines";
 import { formatQty, formatRateBp, formatRupiah } from "@/lib/budget/money";
 import { getBudget } from "@/lib/budget/service";
 import { loadProject } from "@/lib/project-context";
@@ -12,7 +13,7 @@ const KIND = { changed: "Berubah", added: "Baru", removed: "Hilang", same: "Sama
 const ROW = { changed: "cmp-changed", added: "cmp-added", removed: "cmp-removed", same: "" } as const;
 const sign = (n: number) => (n === 0 ? "—" : `${n > 0 ? "+" : ""}${formatRupiah(n)}`);
 const tone = (n: number) => (n > 0 ? "text-danger" : "muted");
-const dash = (s?: string) => s ?? "—";
+const dash = (s?: string | false) => s || "—";
 const inPkg = <span className="muted">termasuk paket</span>;
 
 function Head({ s, label }: { s: Side; label: string }) {
@@ -80,14 +81,14 @@ export default async function BudgetComparePage({ params, searchParams }: { para
                 {c.diff.rows.length === 0 && <tr><td colSpan={9} className="muted">Kedua versi tidak punya item (lump sum).</td></tr>}
                 {c.diff.rows.map((r, i) => (
                   <tr key={`${r.key}-${i}`} className={ROW[r.kind]}>
-                    <td>{r.item}{r.oldItem && <span className="muted"> (dulu {r.oldItem})</span>}</td>
+                    <td>{kindOf((r.b ?? r.a)!) === "included" && <span className="muted">↳ </span>}{r.item}{r.oldItem && <span className="muted"> (dulu {r.oldItem})</span>}{(r.b ?? r.a)?.group && <span className="muted block text-xs">{(r.b ?? r.a)!.group}</span>}{r.changes && <span className="muted block text-xs">{r.changes.join(" · ")}</span>}</td>
                     <td><span className={`tag ${r.kind === "added" ? "tag-ok" : r.kind === "removed" ? "tag-danger" : r.kind === "changed" ? "tag-warn" : ""}`}>{KIND[r.kind]}</span></td>
                     <td className="bg-num">{dash(r.a && `${formatQty(r.a.qtyMilli)} ${r.a.unit}`)}</td>
                     <td className="bg-num">{dash(r.b && `${formatQty(r.b.qtyMilli)} ${r.b.unit}`)}</td>
-                    <td className="bg-num">{r.a && c.a.lump ? inPkg : dash(r.a && formatRupiah(r.a.unitPrice))}</td>
-                    <td className="bg-num">{r.b && c.b.lump ? inPkg : dash(r.b && formatRupiah(r.b.unitPrice))}</td>
-                    <td className="bg-num">{r.a && c.a.lump ? inPkg : dash(r.a && formatRupiah(r.a.amount))}</td>
-                    <td className="bg-num">{r.b && c.b.lump ? inPkg : dash(r.b && formatRupiah(r.b.amount))}</td>
+                    <td className="bg-num">{r.a && (c.a.lump || kindOf(r.a) === "included") ? inPkg : dash(r.a && isCounted(kindOf(r.a)) && formatRupiah(r.a.unitPrice))}</td>
+                    <td className="bg-num">{r.b && (c.b.lump || kindOf(r.b) === "included") ? inPkg : dash(r.b && isCounted(kindOf(r.b)) && formatRupiah(r.b.unitPrice))}</td>
+                    <td className="bg-num">{r.a && (c.a.lump || kindOf(r.a) === "included") ? inPkg : dash(r.a && isCounted(kindOf(r.a)) && formatRupiah(r.a.amount))}</td>
+                    <td className="bg-num">{r.b && (c.b.lump || kindOf(r.b) === "included") ? inPkg : dash(r.b && isCounted(kindOf(r.b)) && formatRupiah(r.b.amount))}</td>
                     <td className={`bg-num ${tone(r.delta)}`}>{sign(r.delta)}</td>
                   </tr>
                 ))}

@@ -1,7 +1,8 @@
 import type { BudgetLine } from "@/db/schema";
+import { KIND_LABEL, kindOf } from "./lines";
 
 export type Line = BudgetLine;
-export type LineDiff = { key: string; kind: "added" | "removed" | "changed" | "same"; item: string; oldItem?: string; a?: Line; b?: Line; delta: number };
+export type LineDiff = { key: string; kind: "added" | "removed" | "changed" | "same"; item: string; oldItem?: string; a?: Line; b?: Line; delta: number; changes?: string[] };
 export type VersionLike = { lines: Line[]; subtotal: number; ppn: number; pph23: number };
 
 const norm = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
@@ -20,8 +21,13 @@ export function diffVersions(a: VersionLike, b: VersionLike) {
   const rows: LineDiff[] = b.lines.map((l, i) => {
     const m = pair.get(i);
     if (!m) return { key: l.key, kind: "added", item: l.item, b: l, delta: l.amount };
-    const changed = m.item !== l.item || m.qtyMilli !== l.qtyMilli || m.unit !== l.unit || m.unitPrice !== l.unitPrice || m.amount !== l.amount;
-    return { key: l.key, kind: changed ? "changed" : "same", item: l.item, oldItem: m.item !== l.item ? m.item : undefined, a: m, b: l, delta: l.amount - m.amount };
+    const changes: string[] = [];
+    if (kindOf(m) !== kindOf(l)) changes.push(`jenis: ${KIND_LABEL[kindOf(m)]} → ${KIND_LABEL[kindOf(l)]}`);
+    if ((m.group ?? "") !== (l.group ?? "")) changes.push(`bagian: ${m.group || "—"} → ${l.group || "—"}`);
+    if ((m.parent ?? "") !== (l.parent ?? "")) changes.push("isi paket pindah");
+    if ((m.priceState ?? "") !== (l.priceState ?? "") || (m.note ?? "") !== (l.note ?? "")) changes.push("info berubah");
+    const changed = changes.length > 0 || m.item !== l.item || m.qtyMilli !== l.qtyMilli || m.unit !== l.unit || m.unitPrice !== l.unitPrice || m.amount !== l.amount;
+    return { key: l.key, kind: changed ? "changed" : "same", item: l.item, oldItem: m.item !== l.item ? m.item : undefined, a: m, b: l, delta: l.amount - m.amount, ...(changes.length ? { changes } : {}) };
   });
   for (const l of a.lines) if (!used.has(l)) rows.push({ key: l.key, kind: "removed", item: l.item, a: l, delta: -l.amount });
   return { rows, dSubtotal: b.subtotal - a.subtotal, dPpn: b.ppn - a.ppn, dPph23: b.pph23 - a.pph23, dNet: net(b) - net(a) };

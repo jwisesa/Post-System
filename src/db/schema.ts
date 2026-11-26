@@ -506,7 +506,8 @@ export const scriptAliases = ps.table(
 // Money is whole Rupiah (bigint, mode number; the service keeps |x| <= 1e15). Rates are integer basis points; quantities are thousandths.
 // Phase / deliverable links on a scope are id arrays with no foreign key (resolved on read), so a timeline edit never touches financial data.
 
-export type BudgetLine = { key: string; item: string; qtyMilli: number; unit: string; unitPrice: number; amount: number; note?: string };
+/** kind (absent = "item"): item/package are counted (qty x unitPrice); included/note never are. note = info text. parent = key of the package an included line belongs to. */
+export type BudgetLine = { key: string; item: string; qtyMilli: number; unit: string; unitPrice: number; amount: number; note?: string; kind?: "item" | "package" | "included" | "note"; group?: string; parent?: string; priceState?: "varies" | "unavailable" };
 export type BudgetVersionStatus = "draft" | "sent" | "negotiating" | "approved" | "rejected" | "superseded";
 
 const money = (n: string) => bigint(n, { mode: "number" });
@@ -764,4 +765,19 @@ export const notifications = ps.table(
     readAt: timestamp("read_at", { withTimezone: true }),
   },
   (t) => [index("notifications_user_idx").on(t.userId, t.readAt)],
+);
+
+/** Saved Framing Chart settings (the tool's URL-state object, never image data). Name is unique per project, case-insensitive. */
+export const framingCharts = ps.table(
+  "framing_charts",
+  {
+    id: id(),
+    projectId: projectRef(),
+    name: text("name").notNull(),
+    state: jsonb("state").$type<Record<string, string>>().notNull(),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("framing_charts_name_uq").on(t.projectId, sql`lower(${t.name})`)],
 );

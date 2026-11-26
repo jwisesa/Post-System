@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { addScopeBid, chooseBid, removeBid, removeScope } from "@/app/admin/budget-actions";
 import { ConfirmButton } from "@/components/ui/controls";
 import { Popover } from "@/components/ui/popover";
@@ -15,9 +15,11 @@ import type { VendorCmp } from "@/lib/budget/vendors";
 import { ScopeDrawer, type Option, type ScopeForm } from "./BudgetView";
 import { InvoiceTable, type DocOption, type InvoiceRow } from "./InvoiceParts";
 import { StatusSelect } from "./StatusSelect";
-import { VersionDrawer, type PrefillLine, type SeedItem } from "./VersionDrawer";
+import type { BudgetLine } from "@/db/schema";
+import { LinesView } from "./LinesView";
+import { VersionDrawer, type SeedItem } from "./VersionDrawer";
 
-export type VersionRow = { id: string; number: number; ref: string; docDate: string | null; status: VersionStatusCode; subtotal: number; ppn: number; pph23: number; ppnRateBp: number | null; pph23RateBp: number | null; notes: string; statusNote: string; links: string[]; authorName: string; lines: PrefillLine[]; pricing: "items" | "lump"; corrected: boolean };
+export type VersionRow = { id: string; number: number; ref: string; docDate: string | null; status: VersionStatusCode; subtotal: number; ppn: number; pph23: number; ppnRateBp: number | null; pph23RateBp: number | null; notes: string; statusNote: string; links: string[]; authorName: string; lines: BudgetLine[]; pricing: "items" | "lump"; corrected: boolean };
 export type CoSeries = { docId: string; title: string; versions: VersionRow[] };
 export type BidView = { id: string; vendor: string; vendorId: string; docId: string; picked: boolean; versions: VersionRow[]; changeOrders: CoSeries[]; invoices: InvoiceRow[]; docs: DocOption[]; ppnBp: number | null; pph23Bp: number | null };
 
@@ -34,7 +36,8 @@ function VersionTable({ slug, canEdit, versions, base, vendor, onCorrect, from =
                       const ni = from + k;
                       const prev = newest[ni + 1];
                       return (
-                      <tr key={v.id} aria-current={v.status === "approved" ? "true" : undefined} style={v.status === "approved" ? { background: "color-mix(in srgb, var(--ok) 8%, transparent)" } : undefined}>
+                      <Fragment key={v.id}>
+                      <tr aria-current={v.status === "approved" ? "true" : undefined} style={v.status === "approved" ? { background: "color-mix(in srgb, var(--ok) 8%, transparent)" } : undefined}>
                         <td className="tabular-nums">v{v.number}{v.corrected && <span className="muted"> · dikoreksi</span>}{v.pricing === "lump" && <span className="tag ms-1">lump sum</span>}{v.ref && <span className="muted"> {v.ref}</span>}</td>
                         <td className="tabular-nums whitespace-nowrap" title={v.docDate ?? undefined}>{shortDate(v.docDate)}{v.authorName && <> · <span className="muted">{v.authorName}</span></>}</td>
                         <td className="whitespace-nowrap"><span className={`tag ${v.status === "approved" ? "tag-ok" : v.status === "rejected" ? "tag-danger" : ""}`} style={v.status === "superseded" ? { opacity: 0.7 } : undefined}>{VERSION_STATUSES[v.status]}</span></td>
@@ -49,6 +52,8 @@ function VersionTable({ slug, canEdit, versions, base, vendor, onCorrect, from =
                           <Link href={prev ? `${base}?a=${prev.id}&b=${v.id}` : `${base}?a=${v.id}`} className="underline">Bandingkan</Link>
                         </td>
                       </tr>
+                      {v.lines.length > 0 && <tr><td colSpan={8} className="!py-0"><details className="py-1.5"><summary className="muted cursor-pointer text-xs">Rincian ({v.lines.length} baris)</summary><div className="overflow-x-auto py-2"><LinesView lines={v.lines} /></div></details></td></tr>}
+                      </Fragment>
                       );
                     })}
                   </tbody>
@@ -94,7 +99,7 @@ export function ScopeView({ slug, canEdit, today, scope, meta, top, bids, addabl
     if (r.ok) { then?.(); router.refresh(); }
   };
   const unpaid = bids.some((b) => b.invoices.some((i) => i.status !== "cancelled" && i.payments.reduce((n, p) => n + p.amount, 0) < i.subtotal + i.ppn - i.pph23));
-  const exportItems = [{ href: `/admin/p/${slug}/budget/export?type=versions&scope=${scope.id}`, label: "CSV versi penawaran", kind: "csv" as const }, { href: `/admin/p/${slug}/budget/print?view=scope&scope=${scope.id}`, label: "PDF lingkup ini", kind: "pdf" as const }];
+  const exportItems = [{ href: `/admin/p/${slug}/budget/export?type=versions&scope=${scope.id}`, label: "CSV versi penawaran", kind: "csv" as const }, { href: `/admin/p/${slug}/budget/export?type=lines&scope=${scope.id}`, label: "CSV rincian item", kind: "csv" as const }, { href: `/admin/p/${slug}/budget/print?view=scope&scope=${scope.id}`, label: "PDF lingkup ini", kind: "pdf" as const }];
   return (
     <div className="space-y-5">
       <header className="page-head">

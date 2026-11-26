@@ -3,6 +3,7 @@ import { can } from "@/lib/auth/permissions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { compareVersions } from "@/lib/budget/compare";
 import { csvText } from "@/lib/budget/export";
+import { KIND_LABEL, kindOf } from "@/lib/budget/lines";
 import { toCsv } from "@/lib/schedule/csv";
 import { today } from "@/lib/schedule/dates";
 import { getProjectForUser, InputError } from "@/lib/services";
@@ -24,9 +25,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
     if (e instanceof InputError) return new Response(e.message, { status: 400 });
     throw e;
   }
-  const rows: string[][] = [["Item", "Status", "Jumlah lama", "Jumlah baru", "Harga lama (Rp)", "Harga baru (Rp)", "Jumlah lama (Rp)", "Jumlah baru (Rp)", "Selisih (Rp)"]];
-  for (const r of c.diff.rows) rows.push([csvText(r.item), KIND[r.kind], q(r.a?.qtyMilli), q(r.b?.qtyMilli), String(r.a?.unitPrice ?? ""), String(r.b?.unitPrice ?? ""), String(r.a?.amount ?? ""), String(r.b?.amount ?? ""), String(r.delta)]);
-  const t = (l: string, x: number, y: number) => ["", l, "", "", "", "", String(x), String(y), String(y - x)];
+  const rows: string[][] = [["Bagian", "Jenis", "Item", "Status", "Jumlah lama", "Jumlah baru", "Harga lama (Rp)", "Harga baru (Rp)", "Jumlah lama (Rp)", "Jumlah baru (Rp)", "Selisih (Rp)"]];
+  for (const r of c.diff.rows) rows.push([csvText((r.b ?? r.a)?.group ?? ""), KIND_LABEL[kindOf((r.b ?? r.a)!)], csvText(r.item), KIND[r.kind], q(r.a?.qtyMilli), q(r.b?.qtyMilli), String(r.a?.unitPrice ?? ""), String(r.b?.unitPrice ?? ""), String(r.a?.amount ?? ""), String(r.b?.amount ?? ""), String(r.delta)]);
+  const t = (l: string, x: number, y: number) => ["", "", "", l, "", "", "", "", String(x), String(y), String(y - x)];
   rows.push(t("Subtotal", c.a.subtotal, c.b.subtotal), t("PPN (perkiraan)", c.a.ppn, c.b.ppn), t("PPh 23 (perkiraan)", c.a.pph23, c.b.pph23), t("Net (perkiraan)", c.a.subtotal + c.a.ppn - c.a.pph23, c.b.subtotal + c.b.ppn - c.b.pph23));
   return new Response("﻿" + toCsv(rows), {
     headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${slug}-bandingkan-anggaran-${today()}.csv"` },

@@ -25,7 +25,7 @@ export default async function ScopePage({ params }: { params: Promise<{ slug: st
   const [phases, deliverables] = await Promise.all([listPhases(db, project.id), listDeliverables(db, project.id, { includeInternal: true })]);
   const pick = d.picks[0];
   const today = jakartaToday();
-  const vrows = (docId: string) => d.versions.filter((v) => v.docId === docId).map((v) => ({ id: v.id, number: v.number, ref: v.ref, docDate: v.docDate, status: v.status, subtotal: v.subtotal, ppn: v.ppn, pph23: v.pph23, ppnRateBp: v.ppnRateBp, pph23RateBp: v.pph23RateBp, notes: v.notes, statusNote: v.statusNote, links: v.links, authorName: v.authorName, pricing: v.pricing, corrected: !!v.correctsVersionId, lines: v.lines.map((l) => ({ key: l.key, item: l.item, qtyMilli: l.qtyMilli, unit: l.unit, unitPrice: l.unitPrice })) }));
+  const vrows = (docId: string) => d.versions.filter((v) => v.docId === docId).map((v) => ({ id: v.id, number: v.number, ref: v.ref, docDate: v.docDate, status: v.status, subtotal: v.subtotal, ppn: v.ppn, pph23: v.pph23, ppnRateBp: v.ppnRateBp, pph23RateBp: v.pph23RateBp, notes: v.notes, statusNote: v.statusNote, links: v.links, authorName: v.authorName, pricing: v.pricing, corrected: !!v.correctsVersionId, lines: v.lines }));
   const bids = d.bids.map((b) => {
     const doc = d.docs.find((x) => x.bidId === b.id && x.kind === "quote")!;
     const vendor = d.vendors.find((v) => v.id === b.vendorId);

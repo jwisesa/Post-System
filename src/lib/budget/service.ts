@@ -12,6 +12,7 @@ import { listDeliverables } from "../deliverables/service";
 import { listPhases } from "../script/service";
 import { InputError, listEntityActivity, record, requireRole, type Tx } from "../services";
 import { CANCEL_MARK, DEFAULT_PPH23_BP, DEFAULT_PPN_BP, NEXT, SERVICE_CATEGORIES, VERSION_STATUSES, type VersionStatusCode } from "./catalog";
+import { isCounted, LINE_KINDS, type LineKind } from "./lines";
 import { lineAmount, MAX_RP, taxOf } from "./money";
 import { invoiceState } from "./rollup";
 
@@ -350,7 +351,7 @@ export async function createChangeOrder(db: Db, userId: string, projectId: strin
 export type VersionInput = {
   ref: string;
   docDate: string;
-  lines: { key?: string; item: string; qtyMilli: number; unit: string; unitPrice: number; note?: string }[];
+  lines: { key?: string; item: string; qtyMilli: number; unit: string; unitPrice: number; note?: string; kind?: LineKind; group?: string; parent?: string; priceState?: "varies" | "unavailable" | null }[];
   lumpSum?: number;
   /** "lump": subtotal = lumpSum and lines are unpriced sub-points of the package. Default "items". */
   pricing?: "items" | "lump";
@@ -367,10 +368,14 @@ const VersionSchema = z.object({
   lines: z.array(z.object({
     key: z.string().max(64).optional(),
     item: str(200).refine((s) => s.length > 0, "Nama item wajib diisi."),
-    qtyMilli: z.number().int().min(1, "Kuantitas harus lebih dari 0.").max(1e12),
+    qtyMilli: z.number().int().min(0).max(1e12), // 0 = listed but not taken
     unit: str(20).default(""),
     unitPrice: rp, // may be negative: a "Diskon" line
     note: str(200).optional(),
+    kind: z.enum(LINE_KINDS).default("item"),
+    group: str(60).optional(),
+    parent: z.string().max(64).optional(),
+    priceState: z.enum(["varies", "unavailable"]).nullable().optional(),
   })).max(300),
   pricing: z.enum(["items", "lump"]).default("items"),
   lumpSum: rp.optional(), // may be negative for a change order ("Pengurangan"); quotes are checked against the doc kind below
@@ -412,11 +417,14 @@ async function versionTx(tx: Tx, userId: string, projectId: string, docId: strin
     });
     subtotal = d.lumpSum;
   } else if (d.lines.length) {
+    const packages = new Set(d.lines.filter((l) => l.kind === "package" && l.key).map((l) => l.key));
     const keys = new Set<string>();
     lines = d.lines.map((l) => {
+      if (l.parent && (l.kind !== "included" || !packages.has(l.parent))) throw new InputError(`Baris "${l.item}": isi paket harus merujuk ke baris Paket di versi yang sama.`);
+      const paid = isCounted(l.kind);
       const key = l.key && !keys.has(l.key) ? l.key : randomUUID();
       keys.add(key);
-      return { key, item: l.item, qtyMilli: l.qtyMilli, unit: l.unit, unitPrice: l.unitPrice, amount: lineAmount(l.qtyMilli, l.unitPrice), ...(l.note ? { note: l.note } : {}) };
+      return { key, item: l.item, qtyMilli: l.qtyMilli, unit: l.unit, unitPrice: paid ? l.unitPrice : 0, amount: paid ? lineAmount(l.qtyMilli, l.unitPrice) : 0, ...(l.note ? { note: l.note } : {}), ...(l.kind !== "item" ? { kind: l.kind } : {}), ...(l.group ? { group: l.group } : {}), ...(l.parent ? { parent: l.parent } : {}), ...(l.kind === "note" && l.priceState ? { priceState: l.priceState } : {}) };
     });
     subtotal = lines.reduce((n, l) => n + l.amount, 0);
   } else {

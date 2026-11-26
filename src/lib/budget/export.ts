@@ -3,13 +3,14 @@ import type { Db } from "@/db/client";
 import { can } from "../auth/permissions";
 import { getProjectForUser, InputError } from "../services";
 import { categoryLabel, VERSION_STATUSES, type VersionStatusCode } from "./catalog";
-import { lineAmount } from "./money";
+import { kindOf, KIND_LABEL, PRICE_STATE } from "./lines";
+import { formatQty, lineAmount } from "./money";
 import { invoiceState, rollup } from "./rollup";
 import { buildComparison } from "./scenarios";
 import { getBudget } from "./service";
 import { DRIVE_STATUS, MEDIA, PURPOSES } from "./drives";
 
-export const EXPORT_TYPES = ["scopes", "versions", "invoices", "drives", "scenarios", "vendors"] as const;
+export const EXPORT_TYPES = ["scopes", "versions", "lines", "invoices", "drives", "scenarios", "vendors"] as const;
 export type ExportType = (typeof EXPORT_TYPES)[number];
 const INV_STATUS = { planned: "Rencana", received: "Diterima", cancelled: "Dibatalkan" } as const;
 const n = (x: number) => String(x);
@@ -53,6 +54,17 @@ export async function budgetCsvRows(db: Db, userId: string, projectId: string, t
         const bid = doc && data.bids.find((b) => b.id === doc.bidId);
         if (!doc || !bid || (scopeId && bid.scopeId !== scopeId)) return [];
         return [[csvText(scopeName(bid.scopeId)), csvText(vendorName(bid.vendorId)), doc.kind === "quote" ? "Penawaran" : csvText(`Tambahan: ${doc.title}`), `v${v.number}`, v.docDate ?? "", VERSION_STATUSES[v.status as VersionStatusCode] ?? v.status, n(v.subtotal), n(v.ppn), n(v.pph23), n(v.subtotal + v.ppn - v.pph23), csvText(v.notes)]];
+      }),
+    ];
+  }
+  if (type === "lines") {
+    return [
+      ["Lingkup", "Vendor", "Dokumen", "Nomor", "Bagian", "Jenis", "Item", "Info", "Qty", "Satuan", "Harga satuan (Rp)", "Jumlah (Rp)", "Status harga"],
+      ...data.versions.flatMap((v) => {
+        const doc = data.docs.find((d) => d.id === v.docId);
+        const bid = doc && data.bids.find((b) => b.id === doc.bidId);
+        if (!doc || !bid || (scopeId && bid.scopeId !== scopeId)) return [];
+        return v.lines.map((l) => [csvText(scopeName(bid.scopeId)), csvText(vendorName(bid.vendorId)), doc.kind === "quote" ? "Penawaran" : csvText(`Tambahan: ${doc.title}`), `v${v.number}`, csvText(l.group ?? ""), KIND_LABEL[kindOf(l)], csvText(l.item), csvText(l.note ?? ""), formatQty(l.qtyMilli), csvText(l.unit), n(l.unitPrice), n(l.amount), l.priceState ? PRICE_STATE[l.priceState] : ""]);
       }),
     ];
   }
