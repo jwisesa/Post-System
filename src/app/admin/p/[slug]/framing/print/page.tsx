@@ -1,14 +1,20 @@
+import { notFound } from "next/navigation";
 import { FramingChart } from "@/components/framing/FramingChart";
 import { PrintActions } from "@/components/timeline/PrintActions";
 import { chartFonts } from "@/components/framing/fonts";
 import { buildSpec, parseState } from "@/lib/framing/frame";
+import { getChart } from "@/lib/framing/service";
 import { loadProject } from "@/lib/project-context";
 
 /** One page exactly the chart's pixel size, SVG edge to edge (vector). Screen view scales it to fit. */
 export default async function PrintFraming({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { slug } = await params;
-  const { project } = await loadProject(slug);
-  const spec = buildSpec(parseState(await searchParams, project.name));
+  const { db, project } = await loadProject(slug);
+  const q = await searchParams;
+  // ?chart=<id> alone prints that saved chart (project-scoped); explicit settings in the URL win
+  const id = typeof q.chart === "string" ? q.chart : "", saved = id && !Object.keys(q).some((k) => k !== "chart") ? await getChart(db, project.id, id) : null;
+  if (id && !Object.keys(q).some((k) => k !== "chart") && !saved) notFound();
+  const spec = buildSpec(saved ? parseState(saved.state, project.name) : parseState(q, project.name));
   return (
     <>
       <style>{`

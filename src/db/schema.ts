@@ -781,3 +781,18 @@ export const framingCharts = ps.table(
   },
   (t) => [uniqueIndex("framing_charts_name_uq").on(t.projectId, sql`lower(${t.name})`)],
 );
+
+/** Saved Framing Chart settings (the tool's URL-state object, never image data). Name is unique per project, case-insensitive. */
+export const framingCharts = ps.table(
+  "framing_charts",
+  {
+    id: id(),
+    projectId: projectRef(),
+    name: text("name").notNull(),
+    state: jsonb("state").$type<Record<string, string>>().notNull(),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("framing_charts_name_uq").on(t.projectId, sql`lower(${t.name})`)],
+);

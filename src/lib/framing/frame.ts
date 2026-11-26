@@ -75,10 +75,11 @@ export function deliveryRect(r: Rect, dw: number, dh: number, sx = 1) {
   return { rect: { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h }, srcW, scale: srcW / dw, upscale: srcW < dw };
 }
 /** Pure state transitions for the tool UI (one click = one update). */
-export type Action = { t: "set"; p: Partial<State> } | { t: "layer"; k: string } | { t: "list"; key: "guides" | "dsf"; id: string; layer?: string } | { t: "reset"; project: string };
+export type Action = { t: "set"; p: Partial<State> } | { t: "layer"; k: string } | { t: "list"; key: "guides" | "dsf"; id: string; layer?: string } | { t: "reset"; project: string } | { t: "load"; s: State };
 export const toggleLayer = (layers: string, k: string) => (layers.includes(k) ? layers.split(k).join("") : layers + k);
 export function reduce(s: State, a: Action): State {
   if (a.t === "set") return { ...s, ...a.p };
+  if (a.t === "load") return a.s;
   if (a.t === "reset") return { ...DEFAULTS, project: a.project };
   if (a.t === "layer") return { ...s, layers: toggleLayer(s.layers, a.k) };
   const cur = s[a.key] ? s[a.key].split(",") : [];

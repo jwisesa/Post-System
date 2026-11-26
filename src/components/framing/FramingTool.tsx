@@ -8,6 +8,7 @@ import { CAMERAS, FILM } from "@/lib/framing/cameras";
 import { ASPECTS, buildSpec, COLOR_CHARTS, DELIVERY, filmStats, FPS, LAYERS, parseState, PRESETS, reduce, SCANS, serialize, SQUEEZES, type State } from "@/lib/framing/frame";
 import { FramingChart } from "./FramingChart";
 import { chartFonts } from "./fonts";
+import { SavedCharts, type Chart } from "./SavedCharts";
 
 const lbl = "block space-y-1 text-sm";
 const fld = "w-full";
@@ -40,14 +41,32 @@ async function svgString(svg: SVGSVGElement) {
 }
 function save(href: string, name: string) { const a = document.createElement("a"); a.href = href; a.download = name; a.click(); }
 
-export function FramingTool({ slug, project, initial }: { slug: string; project: string; initial: Record<string, string> }) {
-  const [s, dispatch] = useReducer(reduce, undefined, () => parseState(initial, project));
+export function FramingTool({ slug, project, initial, charts: initialCharts, openedId }: { slug: string; project: string; initial: Record<string, string>; charts: Chart[]; openedId: string | null }) {
+  const [charts, setCharts] = useState(initialCharts), [openId, setOpenId] = useState(openedId), [hideView, setHideView] = useState(false);
+  // ?chart=<id> alone loads the saved state; extra params are unsaved edits on top of it
+  const [s, dispatch] = useReducer(reduce, undefined, () => {
+    const saved = initialCharts.find((c) => c.id === openedId);
+    return saved && !Object.keys(initial).some((k) => k !== "chart") ? parseState(saved.state, project) : parseState(initial, project);
+  });
+  const opened = charts.find((c) => c.id === openId);
+  const dirty = !!opened && serialize(s, project) !== serialize(parseState(opened.state, project), project);
   const [busy, setBusy] = useState(false), [err, setErr] = useState(""), [copied, setCopied] = useState(false);
   const ref = useRef<SVGSVGElement>(null);
   const spec = useMemo(() => buildSpec(s), [s]);
   const set = (p: Partial<State>) => dispatch({ t: "set", p });
   // URL mirrors state after render (never inside a state updater, where Next's history patch can drop the update)
-  useEffect(() => { const q = serialize(s, project); history.replaceState(null, "", q ? `?${q}` : location.pathname); }, [s, project]);
+  useEffect(() => {
+    const p = new URLSearchParams(serialize(s, project)); if (openId) p.set("chart", openId);
+    const q = p.toString(); history.replaceState(null, "", q ? `?${q}` : location.pathname);
+  }, [s, project, openId]);
+  // Below lg the app's sidebar becomes a sticky top header: pin the preview just under it
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const a = document.querySelector<HTMLElement>("aside.sidebar"); if (!a || !wrap.current) return;
+    const el = wrap.current, set = () => el.style.setProperty("--fc-top", getComputedStyle(a).position === "sticky" ? `${a.offsetHeight}px` : "0px");
+    set(); const ro = new ResizeObserver(set); ro.observe(a); return () => ro.disconnect();
+  }, []);
+  const confirmLeave = () => !dirty || window.confirm("Ada perubahan yang belum disimpan. Lanjut dan buang perubahan?");
   const cam = CAMERAS.find((c) => c.id === s.cam) ?? CAMERAS[0];
   const fmt = FILM.find((f) => f.id === s.film) ?? FILM[0], gate = fmt.gates.find((g) => g.id === s.gate) ?? fmt.gates[0];
   const st = filmStats(fmt, gate, +s.scan, spec.fps);
@@ -78,8 +97,23 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
     <label className={lbl}><span className="muted">{label}</span><input className={fld} value={s[k]} placeholder={ph} maxLength={120} onChange={(e) => set({ [k]: e.target.value })} /></label>
   );
   return (
-    <div className="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-      <div className="space-y-2">
+    <div className="fc-wrap" ref={wrap}>
+      <div className="fc-preview" data-collapsed={hideView || undefined}>
+        <div className="fc-bar">
+          <SavedCharts slug={slug} project={project} state={s} charts={charts} setCharts={setCharts} openId={openId} setOpenId={setOpenId} dirty={dirty}
+            onOpen={(c) => { if (c.id === openId || confirmLeave()) { setOpenId(c.id); dispatch({ t: "load", s: parseState(c.state, project) }); } }}
+            onNew={() => { if (confirmLeave()) { setOpenId(null); dispatch({ t: "reset", project }); } }} />
+          <button type="button" className="btn" disabled={busy} onClick={png}>{busy ? "…" : <>PNG<span className="fc-wide">&nbsp;{spec.W}×{spec.H}</span></>}</button>
+          <Link className="btn-secondary" href={`/admin/p/${slug}/framing/print?${dirty || !openId ? q : `chart=${openId}`}`} target="_blank">PDF</Link>
+          <button type="button" className="btn-ghost fc-wide" onClick={copySvg}>{copied ? "Tersalin" : "SVG"}</button>
+          <button type="button" className="btn-ghost" onClick={() => dispatch({ t: "reset", project })}>Reset</button>
+          <button type="button" className="btn-ghost fc-narrow" aria-expanded={!hideView} aria-label="Tampilkan preview" onClick={() => setHideView(!hideView)}>{hideView ? "Buka ▾" : "Tutup ▴"}</button>
+        </div>
+        <p role="status" className="text-sm text-danger empty:hidden">{err}</p>
+        <div className="fc-stage"><FramingChart spec={spec} fonts={chartFonts} svgRef={ref} fill /></div>
+        <p className="muted fc-cap tabular-nums">{spec.camera} · {spec.mode} · {spec.W}×{spec.H} · bingkai {spec.arLabel}</p>
+      </div>
+      <div className="fc-controls space-y-2">
         <Section id="kamera" title="Kamera" digest={spec.camera}>
           <div className="space-y-3 p-3">
             <div role="group" aria-label="Jenis" className="flex gap-2">
@@ -137,10 +171,6 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
             <label className={lbl}><span className="muted">Safety crop: {s.crop}%</span>
               <input type="range" min={0} max={30} step={1} className={fld} value={s.crop} onChange={(e) => set({ crop: e.target.value })} />
               <span className="muted block text-xs">Area konten mengecil ke dalam bingkai; 0% = konten memenuhi framing decision.</span></label>
-            <fieldset className="space-y-1"><legend className="muted text-sm">Delivery safe frame</legend>
-              <div className="flex flex-wrap gap-x-4 gap-y-1">{DELIVERY.map((x) => (
-                <label key={x.id} className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={s.dsf.split(",").includes(x.id)} onChange={() => toggleD(x.id)} />{x.label} {x.w}×{x.h}</label>))}</div>
-            </fieldset>
             <label className={lbl}><span className="muted">Frame rate proyek</span>
               <select className={fld} value={s.fps} onChange={(e) => set({ fps: e.target.value })}>{FPS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
             <fieldset className="space-y-1"><legend className="muted text-sm">Panduan ekstraksi</legend>
@@ -161,22 +191,23 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
               {Object.entries(PRESETS).map(([k, v]) => <button key={k} type="button" className={s.style === v.style ? "btn" : "btn-secondary"} aria-pressed={s.style === v.style} onClick={() => set({ layers: v.layers, style: v.style })}>{v.label}</button>)}
             </div>
             {Object.entries(LAYERS).map(([k, v]) => <label key={k} className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={s.layers.includes(k)} onChange={() => toggle(k)} />{v}</label>)}
-            <label className="col-span-2 block space-y-1 text-sm"><span className="muted">Color chart</span>
-              <select className={fld} value={s.cc} onChange={(e) => set({ cc: e.target.value })}>{COLOR_CHARTS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select></label>
             <p className="muted col-span-2 text-xs">Font chart: Barlow dan JetBrains Mono.</p>
           </div>
         </Section>
-      </div>
-      <div className="order-first min-w-0 space-y-3 lg:order-none">
-        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 py-2" style={{ background: "var(--bg)" }}>
-          <button type="button" className="btn" disabled={busy} onClick={png}>{busy ? "Membuat PNG…" : `Unduh PNG ${spec.W}×${spec.H}`}</button>
-          <Link className="btn-secondary" href={`/admin/p/${slug}/framing/print${q ? `?${q}` : ""}`} target="_blank">Cetak PDF</Link>
-          <button type="button" className="btn-ghost" onClick={copySvg}>{copied ? "Tersalin" : "Salin sebagai SVG"}</button>
-          <button type="button" className="btn-ghost" onClick={() => { dispatch({ t: "reset", project }); }}>Reset</button>
-          <span role="status" className="text-sm text-danger">{err}</span>
-        </div>
-        <div className="overflow-hidden rounded-md border border-line"><FramingChart spec={spec} fonts={chartFonts} svgRef={ref} /></div>
-        <p className="muted text-sm tabular-nums">{spec.camera} · {spec.mode} · {spec.W}×{spec.H} · bingkai {spec.arLabel}</p>
+        <Section id="color" title="Color chart" digest={COLOR_CHARTS.find((x) => x.id === s.cc)?.label}>
+          <div className="space-y-3 p-3">
+            <label className="block space-y-1 text-sm"><span className="muted">Color chart</span>
+              <select className={fld} value={s.cc} onChange={(e) => set({ cc: e.target.value })}>{COLOR_CHARTS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select></label>
+          </div>
+        </Section>
+        <Section id="delivery" title="Delivery" digest={spec.delivery.length ? spec.delivery.map((d) => d.label).join(", ") : "Mati"}>
+          <div className="space-y-3 p-3">
+            <fieldset className="space-y-1"><legend className="muted text-sm">Delivery safe frame</legend>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">{DELIVERY.map((x) => (
+                <label key={x.id} className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={s.dsf.split(",").includes(x.id)} onChange={() => toggleD(x.id)} />{x.label} {x.w}×{x.h}</label>))}</div>
+            </fieldset>
+          </div>
+        </Section>
       </div>
     </div>
   );
