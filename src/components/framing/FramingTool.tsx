@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Popover } from "@/components/ui/popover";
 import { Section } from "@/components/ui/section";
 import { CAMERAS, FILM } from "@/lib/framing/cameras";
-import { ASPECTS, buildSpec, DEFAULTS, filmStats, FPS, LAYERS, parseState, PRESETS, SCANS, serialize, SQUEEZES, type State } from "@/lib/framing/frame";
+import { ASPECTS, buildSpec, COLOR_CHARTS, DELIVERY, filmStats, FPS, LAYERS, parseState, PRESETS, reduce, SCANS, serialize, SQUEEZES, type State } from "@/lib/framing/frame";
 import { FramingChart } from "./FramingChart";
 import { chartFonts } from "./fonts";
 
@@ -41,21 +41,20 @@ async function svgString(svg: SVGSVGElement) {
 function save(href: string, name: string) { const a = document.createElement("a"); a.href = href; a.download = name; a.click(); }
 
 export function FramingTool({ slug, project, initial }: { slug: string; project: string; initial: Record<string, string> }) {
-  const [s, setS] = useState<State>(() => parseState(initial, project));
+  const [s, dispatch] = useReducer(reduce, undefined, () => parseState(initial, project));
   const [busy, setBusy] = useState(false), [err, setErr] = useState(""), [copied, setCopied] = useState(false);
   const ref = useRef<SVGSVGElement>(null);
   const spec = useMemo(() => buildSpec(s), [s]);
-  const set = (p: Partial<State>) => setS((o) => {
-    const n = { ...o, ...p };
-    const q = serialize(n, project); history.replaceState(null, "", q ? `?${q}` : location.pathname);
-    return n;
-  });
+  const set = (p: Partial<State>) => dispatch({ t: "set", p });
+  // URL mirrors state after render (never inside a state updater, where Next's history patch can drop the update)
+  useEffect(() => { const q = serialize(s, project); history.replaceState(null, "", q ? `?${q}` : location.pathname); }, [s, project]);
   const cam = CAMERAS.find((c) => c.id === s.cam) ?? CAMERAS[0];
   const fmt = FILM.find((f) => f.id === s.film) ?? FILM[0], gate = fmt.gates.find((g) => g.id === s.gate) ?? fmt.gates[0];
   const st = filmStats(fmt, gate, +s.scan, spec.fps);
   const squeezes = s.kind === "film" ? [1, 2] : cam.squeeze ?? [1];
-  const toggle = (k: string) => set({ layers: s.layers.includes(k) ? s.layers.replace(k, "") : s.layers + k });
-  const toggleG = (id: string) => { const g = s.guides ? s.guides.split(",") : []; set({ guides: (g.includes(id) ? g.filter((x) => x !== id) : [...g, id]).join(","), layers: s.layers.includes("g") ? s.layers : s.layers + "g" }); };
+  const toggle = (k: string) => dispatch({ t: "layer", k });
+  const toggleG = (id: string) => dispatch({ t: "list", key: "guides", id, layer: "g" });
+  const toggleD = (id: string) => dispatch({ t: "list", key: "dsf", id, layer: "d" });
   const mode = cam.modes.find((m) => m.id === (s.mode || cam.modes[0].id)) ?? cam.modes[0];
   const name = `framing-${spec.camera}-${spec.W}x${spec.H}`.replace(/\W+/g, "-").toLowerCase();
 
@@ -63,9 +62,9 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
     if (!ref.current) return; setBusy(true); setErr("");
     try {
       const xml = await svgString(ref.current), url = URL.createObjectURL(new Blob([xml], { type: "image/svg+xml" }));
-      const img = new Image(); img.src = url; await img.decode();
+      await document.fonts.ready; const img = new Image(); img.src = url; await img.decode();
       const cv = document.createElement("canvas"); cv.width = spec.W; cv.height = spec.H;
-      cv.getContext("2d")!.drawImage(img, 0, 0, spec.W, spec.H); URL.revokeObjectURL(url);
+      const cx = cv.getContext("2d")!; cx.imageSmoothingEnabled = false; cx.drawImage(img, 0, 0, spec.W, spec.H); // 1:1, no resampling URL.revokeObjectURL(url);
       const blob = await new Promise<Blob | null>((r) => cv.toBlob(r, "image/png"));
       if (!blob) throw new Error("kanvas terlalu besar"); const u = URL.createObjectURL(blob); save(u, `${name}.png`); setTimeout(() => URL.revokeObjectURL(u), 5000);
     } catch (e) { setErr(`Gagal membuat PNG: ${e instanceof Error ? e.message : "tidak diketahui"}`); } finally { setBusy(false); }
@@ -124,7 +123,7 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
             </>)}
           </div>
         </Section>
-        <Section id="bingkai" title="Bingkai" digest={`${spec.arLabel} · ${spec.safety}%`}>
+        <Section id="bingkai" title="Bingkai" digest={`${spec.arLabel} · crop ${spec.crop}%`}>
           <div className="space-y-3 p-3">
             <label className={lbl}><span className="muted">Rasio aspek</span>
               <select className={fld} value={s.ar} onChange={(e) => set({ ar: e.target.value })}>
@@ -135,8 +134,13 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
               <select className={fld} value={spec.desq ? "desqueezed" : "squeezed"} onChange={(e) => set({ out: e.target.value })}>
                 <option value="desqueezed">Desqueezed</option><option value="squeezed">Squeezed</option></select>
               <span className="muted block text-xs">{spec.desq ? "Desqueezed: rasio akhir untuk editorial, VFX dan delivery." : "Squeezed: piksel sensor, apa yang direkam kamera."}{spec.squeeze === 1 ? " Tidak berpengaruh pada lens spherical." : ""}</span></label>
-            <label className={lbl}><span className="muted">Safety: {s.safety}%</span>
-              <input type="range" min={50} max={100} step={1} className={fld} value={s.safety} onChange={(e) => set({ safety: e.target.value })} /></label>
+            <label className={lbl}><span className="muted">Safety crop: {s.crop}%</span>
+              <input type="range" min={0} max={30} step={1} className={fld} value={s.crop} onChange={(e) => set({ crop: e.target.value })} />
+              <span className="muted block text-xs">Area konten mengecil ke dalam bingkai; 0% = konten memenuhi framing decision.</span></label>
+            <fieldset className="space-y-1"><legend className="muted text-sm">Delivery safe frame</legend>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">{DELIVERY.map((x) => (
+                <label key={x.id} className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={s.dsf.split(",").includes(x.id)} onChange={() => toggleD(x.id)} />{x.label} {x.w}×{x.h}</label>))}</div>
+            </fieldset>
             <label className={lbl}><span className="muted">Frame rate proyek</span>
               <select className={fld} value={s.fps} onChange={(e) => set({ fps: e.target.value })}>{FPS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
             <fieldset className="space-y-1"><legend className="muted text-sm">Panduan ekstraksi</legend>
@@ -151,12 +155,14 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
             {text("director", "Sutradara")}{text("production", "Produksi")}{text("unit", "Unit / huruf kamera", "A")}{text("notes", "Catatan")}
           </div>
         </Section>
-        <Section id="tampilan" title="Tampilan" digest={Object.values(PRESETS).find((p) => p.layers === s.layers)?.label ?? "Kustom"}>
+        <Section id="tampilan" title="Tampilan" digest={Object.values(PRESETS).find((p) => p.style === s.style && p.layers === s.layers)?.label ?? "Kustom"}>
           <div className="grid grid-cols-2 gap-2 p-3">
             <div role="group" aria-label="Preset" className="col-span-2 flex gap-2">
-              {Object.entries(PRESETS).map(([k, v]) => <button key={k} type="button" className={s.layers === v.layers ? "btn" : "btn-secondary"} aria-pressed={s.layers === v.layers} onClick={() => set({ layers: v.layers })}>{v.label}</button>)}
+              {Object.entries(PRESETS).map(([k, v]) => <button key={k} type="button" className={s.style === v.style ? "btn" : "btn-secondary"} aria-pressed={s.style === v.style} onClick={() => set({ layers: v.layers, style: v.style })}>{v.label}</button>)}
             </div>
             {Object.entries(LAYERS).map(([k, v]) => <label key={k} className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={s.layers.includes(k)} onChange={() => toggle(k)} />{v}</label>)}
+            <label className="col-span-2 block space-y-1 text-sm"><span className="muted">Color chart</span>
+              <select className={fld} value={s.cc} onChange={(e) => set({ cc: e.target.value })}>{COLOR_CHARTS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select></label>
             <p className="muted col-span-2 text-xs">Font chart: Barlow dan JetBrains Mono.</p>
           </div>
         </Section>
@@ -166,7 +172,7 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
           <button type="button" className="btn" disabled={busy} onClick={png}>{busy ? "Membuat PNG…" : `Unduh PNG ${spec.W}×${spec.H}`}</button>
           <Link className="btn-secondary" href={`/admin/p/${slug}/framing/print${q ? `?${q}` : ""}`} target="_blank">Cetak PDF</Link>
           <button type="button" className="btn-ghost" onClick={copySvg}>{copied ? "Tersalin" : "Salin sebagai SVG"}</button>
-          <button type="button" className="btn-ghost" onClick={() => { setS({ ...DEFAULTS, project }); history.replaceState(null, "", location.pathname); }}>Reset</button>
+          <button type="button" className="btn-ghost" onClick={() => { dispatch({ t: "reset", project }); }}>Reset</button>
           <span role="status" className="text-sm text-danger">{err}</span>
         </div>
         <div className="overflow-hidden rounded-md border border-line"><FramingChart spec={spec} fonts={chartFonts} svgRef={ref} /></div>

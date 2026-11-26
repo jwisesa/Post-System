@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CAMERAS, FILM } from "@/lib/framing/cameras";
-import { buildSpec, DEFAULTS, filmStats, fitBlock, framing, parseState, placeGuideLabels, safety, serialize, textW, wrapText } from "@/lib/framing/frame";
+import { buildSpec, DEFAULTS, filmStats, fitBlock, framing, parseState, placeGuideLabels, safeRect, deliveryRect, reduce, resolutions, serialize, textW, wrapText } from "@/lib/framing/frame";
 
 describe("framing math", () => {
   it("16:9 in a 3:2 sensor crops height", () => {
@@ -17,7 +17,7 @@ describe("framing math", () => {
   });
   it("full sensor and safety", () => {
     expect(framing(100, 50, 0)).toEqual({ x: 0, y: 0, w: 100, h: 50 });
-    const s = safety({ x: 0, y: 0, w: 1000, h: 500 }, 90);
+    const s = safeRect({ x: 0, y: 0, w: 1000, h: 500 }, 10);
     expect(s).toEqual({ x: 50, y: 25, w: 900, h: 450 });
   });
 });
@@ -105,5 +105,54 @@ describe("output mode (desqueezed)", () => {
     const back = parseState(Object.fromEntries(new URLSearchParams(serialize(s))));
     expect(back.out).toBe("squeezed"); const sp = buildSpec(back); expect(sp.desq).toBe(false); expect(sp.W).toBe(sp.sensorW);
     expect(buildSpec(parseState({ sq: "2" })).desq).toBe(true); expect(buildSpec(parseState({})).desq).toBe(false);
+  });
+});
+
+describe("safe frame inset", () => {
+  for (const sq of ["1", "2"]) for (const out of ["desqueezed", "squeezed"]) for (const crop of [0, 5, 15]) {
+    it(`sq ${sq} ${out} crop ${crop}`, () => {
+      const sp = buildSpec({ ...DEFAULTS, cam: "arri-mini-lf", mode: "169", sq, out }), d = framing(sp.W, sp.H, sp.ar, sp.desq ? 1 : sp.squeeze), c = safeRect(d, sp.crop && crop ? crop : crop);
+      if (!crop) expect(c).toEqual(d);
+      expect(c.w).toBeLessThanOrEqual(d.w); expect(c.x * 2 + c.w).toBe(d.x * 2 + d.w); expect(c.y * 2 + c.h).toBe(d.y * 2 + d.h);
+      expect(Math.abs(c.w / d.w - (1 - crop / 100))).toBeLessThan(0.002); expect(Number.isInteger(c.x) && Number.isInteger(c.y)).toBe(true);
+    });
+  }
+});
+describe("delivery safe frame", () => {
+  const d = { x: 0, y: 270, w: 8640, h: 4860 };
+  it("16:9 active holds UHD fully, oversampled 2.25x", () => {
+    const g = deliveryRect(d, 3840, 2160); expect(g.rect).toEqual(d); expect(g.scale).toBeCloseTo(2.25); expect(g.upscale).toBe(false);
+  });
+  it("wide frame gets a centred 16:9 rect; DCI in 16:9 is width-limited", () => {
+    const w = { x: 0, y: 500, w: 8640, h: 3615 }, g = deliveryRect(w, 3840, 2160);
+    expect(g.rect.h).toBe(3615); expect(Math.abs(g.rect.w / g.rect.h - 16 / 9) * g.rect.h).toBeLessThan(2); expect(g.rect.x * 2 + g.rect.w).toBe(8640);
+    const k = deliveryRect(d, 4096, 2160); expect(k.rect.w).toBe(8640); expect(k.rect.y * 2 + k.rect.h).toBe(270 * 2 + 4860);
+  });
+  it("warns upscale when the source is smaller", () => { const g = deliveryRect({ x: 0, y: 0, w: 1920, h: 1080 }, 3840, 2160); expect(g.upscale).toBe(true); expect(g.scale).toBe(0.5); });
+  it("squeezed output counts desqueezed source width", () => { const g = deliveryRect({ x: 0, y: 0, w: 4320, h: 3000 }, 3840, 2160, 2); expect(g.srcW).toBe(g.rect.w * 2); });
+});
+describe("resolution strings", () => {
+  it("recorded vs active vs canvas", () => {
+    const sp = buildSpec({ ...DEFAULTS, cam: "arri-mini-lf", mode: "169", sq: "2" }), d = framing(sp.W, sp.H, sp.ar, 1), r = resolutions(sp, d);
+    expect(r.recorded).toBe(`${sp.sensorW} × ${sp.H}`); expect(r.canvas).toBe(`${sp.W} × ${sp.H}`); expect(r.activeDesq).toBe(`${d.w} × ${d.h}`); expect(r.active).toBe(`${Math.round(d.w / 2)} × ${d.h}`);
+    const sph = buildSpec(DEFAULTS), r2 = resolutions(sph, framing(sph.W, sph.H, sph.ar, 1)); expect(r2.canvas).toBe("");
+  });
+});
+describe("state: new params, legacy and reducer", () => {
+  it("round trips crop/style/dsf/cc", () => {
+    const s = { ...DEFAULTS, crop: "15", style: "slate", dsf: "uhd,hd", cc: "both" };
+    expect(parseState(Object.fromEntries(new URLSearchParams(serialize(s))))).toEqual(s);
+    expect(buildSpec(s).delivery.map((x) => x.id)).toEqual(["uhd", "hd"]);
+  });
+  it("legacy safety=90 maps to crop 10; netflix layers still parse", () => {
+    const s = parseState({ safety: "90", layers: "smlcx" }); expect(s.crop).toBe("10"); expect(s.layers).toBe("smlcx");
+    expect(parseState({ crop: "3", safety: "90" }).crop).toBe("3"); expect(parseState({ style: "bogus" }).style).toBe(DEFAULTS.style);
+  });
+  it("one toggle = one update, twice restores", () => {
+    const a = reduce(DEFAULTS, { t: "layer", k: "s" }); expect(a.layers.includes("s")).toBe(false);
+    expect(reduce(a, { t: "layer", k: "s" }).layers.includes("s")).toBe(true);
+    const g = reduce({ ...DEFAULTS, layers: "x" }, { t: "list", key: "dsf", id: "uhd", layer: "d" }); expect(g.dsf).toBe("uhd"); expect(g.layers).toBe("xd");
+    expect(reduce(g, { t: "list", key: "dsf", id: "uhd", layer: "d" }).dsf).toBe("");
+    expect(reduce(a, { t: "reset", project: "P" })).toEqual({ ...DEFAULTS, project: "P" });
   });
 });
