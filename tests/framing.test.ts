@@ -43,7 +43,7 @@ describe("data and state", () => {
     const s = { ...DEFAULTS, cam: "arri-mini-lf", mode: "169", sq: "2", title: "Uji" };
     const back = parseState(Object.fromEntries(new URLSearchParams(serialize(s))));
     expect(back).toEqual(s);
-    const spec = buildSpec(s); expect(spec.W).toBe(3840); expect(spec.squeeze).toBe(2);
+    const spec = buildSpec(s); expect(spec.sensorW).toBe(3840); expect(spec.W).toBe(7680); expect(spec.squeeze).toBe(2);
   });
 });
 
@@ -87,5 +87,23 @@ describe("film verification", () => {
   it("every gate declares source and verified flag; unverified are explained", () => {
     for (const f of FILM) for (const g of f.gates) { expect(g.source.accessed).toBe("2026-11-26"); expect(typeof g.verified).toBe("boolean"); }
     expect(FILM[1].gates[0].mm).toEqual([24.9, 13.9]);
+  });
+});
+
+describe("output mode (desqueezed)", () => {
+  for (const sq of [1.3, 1.5, 1.8, 2]) for (const ar of [2.39, 16 / 9, 1]) {
+    it(`desqueezed @${sq} ar ${ar.toFixed(2)}`, () => {
+      const spec = buildSpec({ ...DEFAULTS, sq: String(sq), ar: ar === 1 ? "100" : ar === 2.39 ? "239" : "178" });
+      expect(spec.desq).toBe(true); expect(spec.sensorW).toBeGreaterThan(0);
+      const cw = Math.round(spec.sensorW * sq); expect(Math.abs(spec.W - cw)).toBeLessThanOrEqual(1); expect(spec.W % 2).toBe(0);
+      const r = framing(spec.W, spec.H, ar, 1);
+      expect(Math.abs(r.w / r.h - ar) * r.h).toBeLessThanOrEqual(2);
+    });
+  }
+  it("mode switch round-trips via URL, squeezed keeps sensor size", () => {
+    const s = { ...DEFAULTS, sq: "2", out: "squeezed" };
+    const back = parseState(Object.fromEntries(new URLSearchParams(serialize(s))));
+    expect(back.out).toBe("squeezed"); const sp = buildSpec(back); expect(sp.desq).toBe(false); expect(sp.W).toBe(sp.sensorW);
+    expect(buildSpec(parseState({ sq: "2" })).desq).toBe(true); expect(buildSpec(parseState({})).desq).toBe(false);
   });
 });

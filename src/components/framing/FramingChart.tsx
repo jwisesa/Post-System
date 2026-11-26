@@ -17,17 +17,17 @@ function tri(x: number, y: number, dx: number, dy: number, t: number) {
   return `${x + px * t},${y + py * t} ${x - px * t},${y - py * t} ${x + dx * t * 1.5},${y + dy * t * 1.5}`;
 }
 
-/** Pure SVG; viewBox = sensor pixels, so rasterising at width W gives exactly the camera resolution. */
+/** Pure SVG; viewBox = output canvas pixels (sensor, or desqueezed width), so rasterising at width W gives exactly the canvas size. */
 export function FramingChart({ spec, fonts, svgRef }: { spec: Spec; fonts: { text: string; mono: string }; svgRef?: React.Ref<SVGSVGElement> }) {
   const { W, H, layers: L } = spec, on = (k: string) => L.includes(k);
-  const d = framing(W, H, spec.ar, spec.squeeze), sf = safety(d, spec.safety);
+  const sq = spec.desq ? 1 : spec.squeeze, d = framing(W, H, spec.ar, sq), sf = safety(d, spec.safety);
   const u = Math.sqrt(d.w * d.h) / 3456; // 1 unit = 1px on a 4608x2592 frame
   const cx = W / 2, cy = H / 2, sw = 3 * u, fs = (n: number) => n * u;
   const t = fs(40), sr = Math.min(d.w, d.h) * 0.06, inset = sr * 1.35;
   const info = spec.info, maxW = d.w * 0.6;
   const rows: [string, string][] = ([
     ["Sensor mode", spec.mode + (spec.codec ? ` · ${spec.codec}` : "")],
-    ["Framing decision", `${d.w} × ${d.h}`], ["Aspect ratio", spec.arLabel + (spec.squeeze !== 1 ? ` · ${spec.squeeze}x squeeze` : "")],
+    ["Framing decision", spec.desq ? `${d.w} × ${d.h} desqueezed · ${Math.round(d.w / spec.squeeze)} × ${d.h} sensor` : `${d.w} × ${d.h}`], ["Aspect ratio", spec.arLabel + (spec.squeeze !== 1 ? ` · ${spec.squeeze}x squeeze${spec.desq ? " (desqueezed)" : ""}` : "")],
     ["Frame rate", `${spec.fps} fps`], ["DoP", info.dop], ["Director", info.director], ["Production", info.production],
   ] as [string, string][]).filter(([, v]) => v);
   const cam = spec.camera + (info.unit ? ` · ${info.unit}` : "");
@@ -44,7 +44,7 @@ export function FramingChart({ spec, fonts, svgRef }: { spec: Spec; fonts: { tex
   const tlh = tf.size * 1.15;
   const titleBase = cy - fs(110) - (tf.lines[0].length - 1) * tlh;
   // guide labels
-  const gr = spec.guides.map((g) => ({ ...g, r: framing(W, H, g.ar, spec.squeeze) }));
+  const gr = spec.guides.map((g) => ({ ...g, r: framing(W, H, g.ar, sq) }));
   const gl = placeGuideLabels(gr.map((g) => g.r.y), fs(54));
   const labelled = new Map(gl.map((x) => [x.i, x]));
   const hMark = [0.1, 0.5, 0.9];

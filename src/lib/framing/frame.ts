@@ -63,8 +63,8 @@ export function filmStats(f: FilmFormat, g: Gate, scanW: number, fps: number) {
   return { w, h, bytes, mb: bytes / 1e6, gbPerMin: (bytes * fps * 60) / 1e9, ftPerMin, r400: roll(400), r1000: roll(1000) };
 }
 
-export type State = Record<"kind" | "cam" | "mode" | "film" | "gate" | "scan" | "ar" | "guides" | "sq" | "safety" | "fps" | "project" | "title" | "dop" | "director" | "production" | "notes" | "unit" | "layers", string>;
-export const DEFAULTS: State = { kind: "digital", cam: CAMERAS[0].id, mode: "", film: FILM[0].id, gate: "", scan: "4096", ar: "178", guides: "239,185", sq: "1", safety: "90", fps: "24", project: "", title: "", dop: "", director: "", production: "", notes: "", unit: "", layers: PRESETS.netflix.layers };
+export type State = Record<"kind" | "cam" | "mode" | "film" | "gate" | "scan" | "ar" | "guides" | "sq" | "out" | "safety" | "fps" | "project" | "title" | "dop" | "director" | "production" | "notes" | "unit" | "layers", string>;
+export const DEFAULTS: State = { kind: "digital", cam: CAMERAS[0].id, mode: "", film: FILM[0].id, gate: "", scan: "4096", ar: "178", guides: "239,185", sq: "1", out: "desqueezed", safety: "90", fps: "24", project: "", title: "", dop: "", director: "", production: "", notes: "", unit: "", layers: PRESETS.netflix.layers };
 export const SCANS = [{ id: "2048", label: "2K" }, { id: "4096", label: "4K" }, { id: "6144", label: "6K" }];
 
 export function parseState(q: Record<string, string | string[] | undefined>, project = ""): State {
@@ -79,7 +79,8 @@ export function serialize(s: State, project = ""): string {
 }
 
 export type Spec = {
-  W: number; H: number; mm: [number, number]; camera: string; mode: string; codec?: string; film: boolean;
+  /** W x H = output canvas (desqueezed width when desq), sensorW = recorded sensor width. */
+  W: number; H: number; sensorW: number; desq: boolean; mm: [number, number]; camera: string; mode: string; codec?: string; film: boolean;
   squeeze: number; ar: number; arLabel: string; guides: { ar: number; label: string }[]; safety: number; fps: number;
   info: { project: string; title: string; dop: string; director: string; production: string; notes: string; unit: string }; layers: string;
 };
@@ -98,9 +99,11 @@ export function buildSpec(s: State): Spec {
     const c = CAMERAS.find((x) => x.id === s.cam) ?? CAMERAS[0], m = c.modes.find((x) => x.id === s.mode) ?? c.modes[0];
     [W, H] = m.px; mm = m.mm; camera = `${c.brand} ${c.name}`; mode = m.label; codec = m.codecs?.join(" / ");
   }
+  const desq = sq !== 1 && s.out !== "squeezed", sensorW = W;
+  if (desq) W = even(W * sq);
   const guides = s.guides.split(",").map((id) => ASPECTS.find((a) => a.id === id)).filter((a): a is (typeof ASPECTS)[number] => !!a).map((a) => ({ ar: a.ar, label: a.label }));
   const fps = FPS.includes(+s.fps) ? +s.fps : 24;
   const { project, title, dop, director, production, notes, unit } = s;
-  return { W, H, mm, camera, mode, codec, film, squeeze: sq, ar, arLabel: ar ? arLabel(ar) : "Full sensor", guides, safety: Math.min(100, Math.max(50, +s.safety || 90)), fps, info: { project, title, dop, director, production, notes, unit }, layers: s.layers };
+  return { W, H, sensorW, desq, mm, camera, mode, codec, film, squeeze: sq, ar, arLabel: ar ? arLabel(ar) : "Full sensor", guides, safety: Math.min(100, Math.max(50, +s.safety || 90)), fps, info: { project, title, dop, director, production, notes, unit }, layers: s.layers };
 }
 export type { Camera, Mode };

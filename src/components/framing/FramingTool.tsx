@@ -131,6 +131,10 @@ export function FramingTool({ slug, project, initial }: { slug: string; project:
                 <option value="0">Sensor penuh</option>{ASPECTS.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}</select></label>
             <label className={lbl}><span className="muted">Lens squeeze</span>
               <select className={fld} value={s.sq} onChange={(e) => set({ sq: e.target.value })}>{SQUEEZES.filter((x) => squeezes.includes(x)).map((x) => <option key={x} value={x}>{x === 1 ? "1.0 (spherical)" : `${x}x`}</option>)}</select></label>
+            <label className={lbl}><span className="muted">Tampilan hasil / Output</span>
+              <select className={fld} value={spec.desq ? "desqueezed" : "squeezed"} onChange={(e) => set({ out: e.target.value })}>
+                <option value="desqueezed">Desqueezed</option><option value="squeezed">Squeezed</option></select>
+              <span className="muted block text-xs">{spec.desq ? "Desqueezed: rasio akhir untuk editorial, VFX dan delivery." : "Squeezed: piksel sensor, apa yang direkam kamera."}{spec.squeeze === 1 ? " Tidak berpengaruh pada lens spherical." : ""}</span></label>
             <label className={lbl}><span className="muted">Safety: {s.safety}%</span>
               <input type="range" min={50} max={100} step={1} className={fld} value={s.safety} onChange={(e) => set({ safety: e.target.value })} /></label>
             <label className={lbl}><span className="muted">Frame rate proyek</span>
