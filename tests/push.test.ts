@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createPgliteDb, type Db } from "@/db/client";
 import { budgetInvoices, budgetScopes, budgetVendors, notifications, pushSubscriptions, scheduleItems } from "@/db/schema";
-import { authorized, listUnread, markAllRead, notify, runDaily, subscribe, unsubscribe } from "@/lib/push/service";
+import { authorized, isPushEndpoint, listUnread, markAllRead, notify, runDaily, subscribe, unsubscribe } from "@/lib/push/service";
 import { sendPing, vapidJwt } from "@/lib/push/vapid";
 import * as rv from "@/lib/review/service";
 import { addDays } from "@/lib/schedule/dates";
@@ -52,6 +52,25 @@ describe("web push + notifications", () => {
     expect((await db.select().from(pushSubscriptions)).length).toBe(1);
     await unsubscribe(db, sup, "https://push.example/a");
     expect((await db.select().from(pushSubscriptions)).length).toBe(0);
+  });
+
+  it("only known push hosts over https are accepted", () => {
+    for (const ok of ["https://fcm.googleapis.com/fcm/send/x", "https://updates.push.services.mozilla.com/wpush/v2/x", "https://wns2-par02p.notify.windows.com/w/?token=x", "https://web.push.apple.com/x", "https://api.push.apple.com/3/device/x"]) expect(isPushEndpoint(ok)).toBe(true);
+    for (const bad of ["http://fcm.googleapis.com/x", "https://evil.example/x", "https://fcm.googleapis.com.evil.example/x", "https://127.0.0.1/x", "https://notpush.apple.com.evil.io/x", "nope"]) expect(isPushEndpoint(bad)).toBe(false);
+  });
+
+  it("an endpoint is never rebound to another user, and each user keeps at most 10 devices", async () => {
+    await db.delete(pushSubscriptions);
+    await subscribe(db, sup, { endpoint: "https://push.example/own", keys: { p256dh: "k", auth: "a" } });
+    await subscribe(db, other, { endpoint: "https://push.example/own", keys: { p256dh: "z", auth: "z" } });
+    const rows = await db.select().from(pushSubscriptions);
+    expect(rows.map((r) => r.userId)).toEqual([other]);
+    for (let i = 0; i < 12; i++) await subscribe(db, sup, { endpoint: `https://push.example/d${i}`, keys: { p256dh: "k", auth: "a" } });
+    const mine = (await db.select().from(pushSubscriptions)).filter((r) => r.userId === sup).map((r) => r.endpoint);
+    expect(mine.length).toBe(10);
+    expect(mine).toContain("https://push.example/d11");
+    expect(mine).not.toContain("https://push.example/d0");
+    await db.delete(pushSubscriptions);
   });
 
   it("deletes a subscription on 410 and 404, keeps it on 500", async () => {

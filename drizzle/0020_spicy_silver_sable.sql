@@ -1,0 +1,3 @@
+UPDATE "post_system"."calendar_tokens" t SET "revoked_at" = now() WHERE "revoked_at" IS NULL AND EXISTS (SELECT 1 FROM "post_system"."calendar_tokens" n WHERE n."project_id" = t."project_id" AND n."user_id" = t."user_id" AND n."revoked_at" IS NULL AND (n."created_at", n."id") > (t."created_at", t."id"));
+--> statement-breakpoint
+CREATE UNIQUE INDEX "calendar_tokens_active_uq" ON "post_system"."calendar_tokens" USING btree ("project_id","user_id") WHERE revoked_at is null;

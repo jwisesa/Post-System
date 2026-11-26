@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { getDb } from "@/db/client";
 import { getCurrentUser } from "@/lib/auth/session";
-import { subscribe, unsubscribe } from "@/lib/push/service";
+import { isPushEndpoint, subscribe, unsubscribe } from "@/lib/push/service";
 
-const Sub = z.object({ endpoint: z.url().max(1000).startsWith("https://"), keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }) });
+const Sub = z.object({ endpoint: z.url().max(1000).refine(isPushEndpoint), keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }) });
 const Del = z.object({ endpoint: z.string().max(1000) });
 
 export async function POST(req: Request) {

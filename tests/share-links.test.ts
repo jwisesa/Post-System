@@ -113,4 +113,18 @@ describe("per-link sections and hidden items", () => {
     await s.revokeShareLink(db, sup, projectId, l.id);
     await expect(s.updateShareLink(db, sup, projectId, l.id, { label: "X" })).rejects.toBeInstanceOf(s.InputError);
   });
+
+  it("a checks-only link shows no technical values, deliverable names or phase names", async () => {
+    await s.updateTechSpec(db, sup, projectId, { frameRate: "23.976", masterResolution: "3840x2160", aspectRatio: "2.39:1", sound_tc_fps: "25" });
+    await d.addDeliverable(db, sup, projectId, { name: "Teaser-Bocor-Klien", platform: "YouTube", groupName: "", trackId: null, spec: { frameRate: "59.94" }, origin: "delivered", dueDate: "2027-01-25", notes: "", internal: false });
+    const full = (await s.getViewerData(db, (await link(["checks", "technical", "deliverables", "timeline"])).token))!;
+    expect(full.checks.length).toBeGreaterThan(0);
+    const only = (await s.getViewerData(db, (await link(["checks"])).token))!;
+    const json = JSON.stringify(only);
+    for (const secret of ["23.976", "3840x2160", "2.39", "59.94", "Teaser-Bocor-Klien", "Trailer 30s", "Fase Rahasia Klien", "Fase Terbuka", "2027-01"]) expect(json).not.toContain(secret);
+    expect(only.checks).toEqual([]);
+    const withTech = (await s.getViewerData(db, (await link(["checks", "technical"])).token))!;
+    expect(withTech.checks.every((c) => ["fps.sound", "fps.camera", "aspect.master"].includes(c.rule))).toBe(true);
+    expect(JSON.stringify(withTech.checks)).not.toContain("Teaser-Bocor-Klien");
+  });
 });

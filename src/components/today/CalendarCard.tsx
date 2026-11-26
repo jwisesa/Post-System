@@ -1,15 +1,19 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { regenerateCalendarLink } from "@/app/admin/today-actions";
+import { createCalendarLink, regenerateCalendarLink } from "@/app/admin/today-actions";
 import { CopyButton } from "../ui/controls";
 import { useToast } from "../ui/toast";
 
-export function CalendarCard({ slug, origin, initialToken }: { slug: string; origin: string; initialToken: string }) {
+export function CalendarCard({ slug, origin, initialToken }: { slug: string; origin: string; initialToken: string | null }) {
   const toast = useToast();
   const [token, setToken] = useState(initialToken);
   const [busy, start] = useTransition();
-  const url = `${origin}/cal/${token}.ics`;
+  const url = token ? `${origin}/cal/${token}.ics` : "";
+  const create = () => start(async () => {
+    const r = await createCalendarLink(slug);
+    if (r.ok) setToken(r.token); else toast({ message: r.error, tone: "error" });
+  });
   const regenerate = () => {
     if (!window.confirm("Buat ulang link kalender? Link lama berhenti berfungsi dan kalender yang sudah berlangganan perlu diganti.")) return;
     start(async () => {
@@ -23,11 +27,15 @@ export function CalendarCard({ slug, origin, initialToken }: { slug: string; ori
         <h2>Langganan kalender</h2>
         <p className="muted mt-1 text-[13px]">Link pribadi untuk Anda. Jangan dibagikan: siapa pun yang memegangnya bisa melihat jadwal project, termasuk item internal.</p>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <code className="min-w-0 flex-1 truncate bg-raised px-2 py-1.5 font-mono text-xs">{url}</code>
-        <CopyButton text={url} label="Salin link" />
-        <button type="button" className="btn-danger" disabled={busy} onClick={regenerate}>Buat ulang link</button>
-      </div>
+      {token ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <code className="min-w-0 flex-1 truncate bg-raised px-2 py-1.5 font-mono text-xs">{url}</code>
+          <CopyButton text={url} label="Salin link" />
+          <button type="button" className="btn-danger" disabled={busy} onClick={regenerate}>Buat ulang link</button>
+        </div>
+      ) : (
+        <button type="button" className="btn" disabled={busy} onClick={create}>Buat link kalender</button>
+      )}
       <ul className="muted list-disc space-y-1 pl-5 text-[13px]">
         <li>iPhone / Mac: Kalender → Tambah Kalender Langganan, lalu tempel link.</li>
         <li>Google Calendar: Kalender lain → Dari URL, lalu tempel link.</li>

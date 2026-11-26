@@ -38,7 +38,7 @@ export async function sendPing(t: PushTarget, f: Fetch = fetch): Promise<number>
   if (!pub || !priv) return 0;
   try {
     const jwt = vapidJwt(t.endpoint, process.env.VAPID_SUBJECT || "mailto:admin@example.com", pub, priv);
-    const res = await f(t.endpoint, { method: "POST", headers: { TTL: "86400", Urgency: "normal", Authorization: `vapid t=${jwt}, k=${pub}`, "Content-Length": "0" } });
+    const res = await f(t.endpoint, { method: "POST", headers: { TTL: "86400", Urgency: "normal", Authorization: `vapid t=${jwt}, k=${pub}`, "Content-Length": "0" }, signal: AbortSignal.timeout(5000) });
     return res.status;
   } catch {
     return 0;

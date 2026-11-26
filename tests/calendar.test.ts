@@ -77,6 +77,7 @@ describe("calendar feeds", () => {
   });
 
   it("returns the same token until regenerated; regenerating kills the old one", async () => {
+    expect(await cal.getCalendarToken(db, sup, projectId)).toBeNull(); // reading never creates
     const t1 = await cal.getOrCreateCalendarToken(db, sup, projectId);
     expect(await cal.getOrCreateCalendarToken(db, sup, projectId)).toBe(t1);
     expect(t1).toMatch(/^[A-Za-z0-9_-]{32}$/);

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { markReadAction } from "@/app/admin/notify-actions";
 
 type Item = { id: string; title: string; body: string; url: string };
@@ -15,7 +15,12 @@ export function NotifyMenu({ vapidKey }: { vapidKey?: string }) {
   const [push, setPush] = useState<PushState>("unsupported");
   const [busy, setBusy] = useState(false);
 
+  const ref = useRef<HTMLDetailsElement>(null);
+  const loaded = useRef(false);
   const load = useCallback(async () => {
+    // UserMenu is mounted for both mobile and desktop; the one hidden by CSS (offsetParent null) skips the fetch.
+    if (ref.current?.offsetParent === null) return;
+    loaded.current = true;
     const r = await fetch("/api/push/inbox", { cache: "no-store" }).catch(() => null);
     if (r?.ok) setItems((await r.json()).notifications);
   }, []);
@@ -24,10 +29,14 @@ export function NotifyMenu({ vapidKey }: { vapidKey?: string }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch of browser/server state
     void load();
     window.addEventListener("ps-notify", load);
-    if (!vapidKey || !supported()) return () => window.removeEventListener("ps-notify", load);
-    if (Notification.permission === "denied") { setPush("blocked"); return () => window.removeEventListener("ps-notify", load); }
+    let t: ReturnType<typeof setTimeout>;
+    const onResize = () => { clearTimeout(t); t = setTimeout(() => { if (!loaded.current) void load(); }, 300); }; // became visible after a breakpoint change
+    window.addEventListener("resize", onResize);
+    const cleanup = () => { window.removeEventListener("ps-notify", load); window.removeEventListener("resize", onResize); clearTimeout(t); };
+    if (!vapidKey || !supported()) return cleanup;
+    if (Notification.permission === "denied") { setPush("blocked"); return cleanup; }
     navigator.serviceWorker.getRegistration("/sw.js").then((r) => r?.pushManager.getSubscription()).then((s) => setPush(s ? "on" : "off")).catch(() => setPush("off"));
-    return () => window.removeEventListener("ps-notify", load);
+    return cleanup;
   }, [load, vapidKey]);
 
   const enable = async () => {
@@ -59,7 +68,7 @@ export function NotifyMenu({ vapidKey }: { vapidKey?: string }) {
   };
 
   return (
-    <details className="relative" onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open && void load()}>
+    <details ref={ref} className="relative" onToggle={(e) => (e.currentTarget as HTMLDetailsElement).open && void load()}>
       <summary className="btn-ghost btn-icon relative cursor-pointer list-none" aria-label={`Notifikasi${items.length ? `, ${items.length} belum dibaca` : ""}`} title="Notifikasi">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
         {items.length > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-4 text-white tabular-nums" data-testid="bell-count">{items.length}</span>}

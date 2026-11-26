@@ -1,5 +1,6 @@
 // All reads and writes go through here. Every mutation checks the caller's
 // role and writes an audit_log row in the same transaction.
+import type { ShareSection } from "./share/sections";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull, like, notLike } from "drizzle-orm";
 import type { Db } from "@/db/client";
@@ -24,7 +25,8 @@ export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 export class InputError extends Error {}
 
 /** Text safe for Postgres jsonb/text: no control or invisible bidi/zero-width characters, no lone surrogates (a slice can split an emoji pair). */
-export const pgSafe = (s: string) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u00ad\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/g, "").toWellFormed();
+// U+200C/U+200D (ZWNJ/ZWJ) are kept: emoji ZWJ sequences and Persian/Indic shaping need them.
+export const pgSafe = (s: string) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u00ad\u200b\u200e\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/g, "").toWellFormed();
 
 export type Change = {
   projectId: string;
@@ -376,6 +378,13 @@ export async function viewerScope(db: Db, token: string) {
   return { project: row.project, label: row.link.label, sections, hidden, schedule, deliverables };
 }
 
+/** Sections a Pemeriksaan rule reads. Unknown rules default to all three so a new rule cannot leak. */
+const CHECK_NEEDS: Record<string, ShareSection[]> = {
+  "fps.sound": ["technical"], "fps.camera": ["technical"], "aspect.master": ["technical"],
+  "fps.deliverable": ["technical", "deliverables"], "aspect.deliverable": ["technical", "deliverables"], "preset.deviation": ["technical", "deliverables"],
+  "preset.version": ["deliverables"], "due.beforeFinish": ["deliverables", "timeline"],
+};
+
 const NO_TODAY = { week: { start: "", end: "", days: [], phases: [], milestones: [] }, feedback: [], signoffs: [], dueToday: [], late: [], next7: [], followUp: [], review: [], hardDeadlines: [], deliverables: { total: 0, done: 0 } };
 
 /** Everything a view-only link may see. Null for unknown or revoked tokens. Only the link's sections are queried and sent; budget and script are never reachable from here. */
@@ -389,7 +398,8 @@ export async function getViewerData(db: Db, token: string) {
   const sch = has.has("timeline") || has.has("assets") ? sc.schedule : { ...sc.schedule, tracks: [], deps: [] };
   const deliverables = has.has("deliverables") ? sc.deliverables : [];
   // Links on hidden items stay hidden; comments are never sent to viewers.
-  const visible = new Set([...(has.has("timeline") ? sch.tracks.flatMap((t) => t.items.map((i) => i.id)) : []), ...deliverables.map((d) => d.id)]);
+  // Assets-only links also get attachments on items that are not hidden/internal (sc.schedule is already filtered); only ids are used, the item list itself is not sent.
+  const visible = new Set([...(has.has("timeline") || has.has("assets") ? sc.schedule.tracks.flatMap((t) => t.items.map((i) => i.id)) : []), ...deliverables.map((d) => d.id)]);
   const attachments = has.has("assets") || has.has("timeline") || has.has("deliverables")
     ? (await listAttachments(db, sc.project.id, { includeInternal: false })).filter((a) => (a.targetType === "project" ? has.has("assets") : visible.has(a.targetId)))
     : [];
@@ -398,11 +408,15 @@ export async function getViewerData(db: Db, token: string) {
         .filter((p) => sc.schedule.tracks.some((t) => t.items.some((i) => i.id === p.itemId && i.parentId)))
         .map((p) => ({ itemId: p.itemId, itemName: sc.schedule.tracks.flatMap((t) => t.items).find((i) => i.id === p.itemId)!.name, ref: p.ref, body: p.body, status: p.status as string }))
     : [];
+  // Findings quote technical values, deliverable names and phase names/dates: keep only those whose input sections are all shared.
   const checks = has.has("checks")
-    ? (await import("./checks/rules")).runChecks({
-        slug: "", today: today(), tech: (await getTechSpec(db, sc.project.id)) as Record<string, string>, deliverables: sc.deliverables,
-        items: sc.schedule.tracks.flatMap((t) => t.items.map((x) => ({ id: x.id, name: x.name, trackId: t.id, trackName: t.name, parentId: x.parentId, dueDate: x.dueDate }))),
-      }).map((f) => ({ rule: f.rule, severity: f.severity, title: f.title, detail: f.detail }))
+    ? (await import("./checks/rules"))
+        .runChecks({
+          slug: "", today: today(), tech: (await getTechSpec(db, sc.project.id)) as Record<string, string>, deliverables: sc.deliverables,
+          items: sc.schedule.tracks.flatMap((t) => t.items.map((x) => ({ id: x.id, name: x.name, trackId: t.id, trackName: t.name, parentId: x.parentId, dueDate: x.dueDate }))),
+        })
+        .filter((f) => (CHECK_NEEDS[f.rule] ?? ["technical", "deliverables", "timeline"]).every((k) => has.has(k)))
+        .map((f) => ({ rule: f.rule, severity: f.severity, title: f.title, detail: f.detail }))
     : [];
   return {
     project: sc.project,

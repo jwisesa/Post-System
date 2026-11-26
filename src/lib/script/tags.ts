@@ -16,7 +16,7 @@ const EXTENSION = /\((?:V\.?\s?O\.?|O\.?\s?S\.?|OFF)\)/i;
 const CUE_NAME = re(ADR_CUES);
 
 // Not services.pgSafe: this module is bundled into client components. Slicing can only split a surrogate pair, so well-formedness is all it needs.
-const pgSafe = (s: string) => s.toWellFormed();
+const pgSafe = (s: string) => s.toWellFormed?.() ?? s;
 
 const MAX_EXCERPT = 240;
 

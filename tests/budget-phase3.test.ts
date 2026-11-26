@@ -50,6 +50,8 @@ describe("budget phase 3", () => {
     const [pick0] = await db.select().from(budgetPicks);
     await db.update(budgetPicks).set({ versionId: old.id }).where(eq(budgetPicks.scopeId, pick0.scopeId));
     await expect(b.correctVersion(db, u, pid, old.id, ver({ pricing: "lump", lumpSum: 1 }), " ")).rejects.toThrow(/alasan/);
+    const when = new Date("2026-03-01T10:00:00Z");
+    await db.update(budgetVersions).set({ statusAt: when, statusBy: u }).where(eq(budgetVersions.id, old.id));
     const r = await b.correctVersion(db, u, pid, old.id, ver({ pricing: "lump", lumpSum: 135_000_000, lines: [L("Color grading SDR")] }), "salah ketik");
     const vs = (await b.getBudget(db, u, pid)).versions;
     const o = vs.find((x) => x.id === old.id)!, n = vs.find((x) => x.id === r.versionId)!;
@@ -57,6 +59,9 @@ describe("budget phase 3", () => {
     expect(o.statusNote).toBe(`Dikoreksi oleh versi ${r.number}`);
     expect(n.status).toBe("approved");
     expect(n.correctsVersionId).toBe(old.id);
+    const [nRow] = await db.select().from(budgetVersions).where(eq(budgetVersions.id, r.versionId));
+    expect(nRow.statusBy).toBe(u); // approval time/user carried over, not reset
+    expect(nRow.statusAt?.toISOString()).toBe(when.toISOString());
     expect((await db.select().from(budgetPicks))[0].versionId).toBe(n.id);
     const log = (await db.select().from(auditLog).where(eq(auditLog.projectId, pid))).find((a) => a.summary.startsWith("Koreksi versi"))!;
     expect(log.summary).toBe(`Koreksi versi ${old.number} → versi ${r.number} dari "Studio A"`);

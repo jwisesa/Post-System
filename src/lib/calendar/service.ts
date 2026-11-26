@@ -13,13 +13,22 @@ import type { IcsEvent } from "./ics";
 
 const newToken = () => randomBytes(24).toString("base64url");
 
-export async function getOrCreateCalendarToken(db: Db, userId: string, projectId: string): Promise<string> {
+const activeToken = (userId: string, projectId: string) =>
+  and(eq(calendarTokens.projectId, projectId), eq(calendarTokens.userId, userId), isNull(calendarTokens.revokedAt));
+
+/** Read-only: safe to call while rendering. Null until the user creates a link. */
+export async function getCalendarToken(db: Db, userId: string, projectId: string): Promise<string | null> {
   await requireRole(db, userId, projectId, "project.view");
-  const active = and(eq(calendarTokens.projectId, projectId), eq(calendarTokens.userId, userId), isNull(calendarTokens.revokedAt));
-  const [existing] = await db.select().from(calendarTokens).where(active).orderBy(desc(calendarTokens.createdAt)).limit(1);
-  if (existing) return existing.token;
-  const [created] = await db.insert(calendarTokens).values({ projectId, userId, token: newToken() }).returning();
-  return created.token;
+  const [existing] = await db.select().from(calendarTokens).where(activeToken(userId, projectId)).orderBy(desc(calendarTokens.createdAt)).limit(1);
+  return existing?.token ?? null;
+}
+
+/** Writes: call from an action, never during render. The partial unique index makes concurrent calls converge on one token. */
+export async function getOrCreateCalendarToken(db: Db, userId: string, projectId: string): Promise<string> {
+  const have = await getCalendarToken(db, userId, projectId);
+  if (have) return have;
+  await db.insert(calendarTokens).values({ projectId, userId, token: newToken() }).onConflictDoNothing();
+  return (await getCalendarToken(db, userId, projectId))!;
 }
 
 export async function regenerateCalendarToken(db: Db, userId: string, projectId: string): Promise<string> {

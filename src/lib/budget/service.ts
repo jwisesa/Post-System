@@ -436,7 +436,7 @@ async function versionTx(tx: Tx, userId: string, projectId: string, docId: strin
     if (number > 1 && !d.notes) throw new InputError("Catatan perubahan wajib diisi untuk versi baru.");
     const [v] = await tx.insert(budgetVersions).values({
       projectId, docId, number, ref: d.ref, docDate: d.docDate || null, lines, pricing: d.pricing, correctsVersionId: corr?.old.id ?? null, subtotal, ppnRateBp: d.ppnBp, ppn: tax.ppn, pph23RateBp: d.pph23Bp, pph23: tax.pph23, notes: d.notes, links: d.links, createdBy: userId,
-      ...(corr ? { status: corr.old.status === "superseded" ? "draft" : corr.old.status, statusNote: corr.old.status === "approved" ? corr.old.statusNote : "" } : {}),
+      ...(corr ? { status: corr.old.status === "superseded" ? "draft" : corr.old.status, statusNote: corr.old.status === "approved" ? corr.old.statusNote : "", ...(corr.old.status === "approved" ? { statusBy: corr.old.statusBy, statusAt: corr.old.statusAt } : {}) } : {}),
     }).returning();
     if (corr) {
       if (corr.old.status !== "approved" && corr.old.status !== "superseded") await tx.update(budgetVersions).set({ status: "superseded", statusNote: `Dikoreksi oleh versi ${number}`, statusBy: userId, statusAt: new Date() }).where(eq(budgetVersions.id, corr.old.id));
@@ -455,7 +455,7 @@ export async function correctVersion(db: Db, userId: string, projectId: string, 
   const why = reason.trim().slice(0, 500);
   if (!why) throw new InputError("Isi alasan koreksi.");
   return db.transaction(async (tx) => {
-    const [old] = isUuid(versionId) ? await tx.select().from(budgetVersions).where(and(eq(budgetVersions.id, versionId), eq(budgetVersions.projectId, projectId))) : [];
+    const [old] = isUuid(versionId) ? await tx.select().from(budgetVersions).where(and(eq(budgetVersions.id, versionId), eq(budgetVersions.projectId, projectId))).for("update") : [];
     if (!old) throw new InputError("Versi tidak ditemukan.");
     return versionTx(tx, userId, projectId, old.docId, { ...input, notes: `Koreksi: ${why}${input.notes?.trim() ? ` · ${input.notes.trim()}` : ""}` }, { old, reason: why });
   });

@@ -1,6 +1,6 @@
 // In-app inbox + web push. Notification text must stay lock-screen safe: no budget amounts, script text or reviewer comment bodies.
 import { createHash, timingSafeEqual } from "node:crypto";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { after } from "next/server";
 import type { Db } from "@/db/client";
 import { budgetInvoices, budgetPayments, budgetVendors, notifications, projectMembers, projects, pushSubscriptions, scheduleItems } from "@/db/schema";
@@ -13,9 +13,20 @@ import { sendPing } from "./vapid";
 type Fetch = typeof fetch;
 export type NotifyRow = typeof notifications.$inferInsert;
 
+/** Known browser push services only; the server POSTs to this URL, so arbitrary hosts would be SSRF. */
+export const PUSH_HOST = /^(fcm\.googleapis\.com|([a-z0-9-]+\.)*push\.services\.mozilla\.com|([a-z0-9-]+\.)*notify\.windows\.com|web\.push\.apple\.com|([a-z0-9-]+\.)*push\.apple\.com)$/;
+export const isPushEndpoint = (u: string) => { try { const x = new URL(u); return x.protocol === "https:" && PUSH_HOST.test(x.hostname); } catch { return false; } };
+const MAX_SUBS = 10;
+
+/** An endpoint already bound to another user is deleted and re-inserted (never rebound in place); the oldest devices beyond MAX_SUBS are dropped. */
 export const subscribe = (db: Db, userId: string, s: { endpoint: string; keys: { p256dh: string; auth: string }; userAgent?: string }) =>
-  db.insert(pushSubscriptions).values({ userId, endpoint: s.endpoint, keys: s.keys, userAgent: (s.userAgent ?? "").slice(0, 300) })
-    .onConflictDoUpdate({ target: pushSubscriptions.endpoint, set: { userId, keys: s.keys } });
+  db.transaction(async (tx) => {
+    await tx.delete(pushSubscriptions).where(and(eq(pushSubscriptions.endpoint, s.endpoint), ne(pushSubscriptions.userId, userId)));
+    await tx.insert(pushSubscriptions).values({ userId, endpoint: s.endpoint, keys: s.keys, userAgent: (s.userAgent ?? "").slice(0, 300) })
+      .onConflictDoUpdate({ target: pushSubscriptions.endpoint, set: { keys: s.keys }, setWhere: eq(pushSubscriptions.userId, userId) });
+    const mine = await tx.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId)).orderBy(sql`${pushSubscriptions.createdAt} desc`);
+    if (mine.length > MAX_SUBS) await tx.delete(pushSubscriptions).where(inArray(pushSubscriptions.id, mine.slice(MAX_SUBS).map((r) => r.id)));
+  });
 
 export const unsubscribe = (db: Db, userId: string, endpoint: string) =>
   db.delete(pushSubscriptions).where(and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.endpoint, endpoint)));
@@ -29,17 +40,23 @@ export async function markAllRead(db: Db, userId: string, kind?: NotifyRow["kind
     .where(and(eq(notifications.userId, userId), isNull(notifications.readAt), kind ? eq(notifications.kind, kind) : undefined));
 }
 
-/** Inserts (duplicates by dedupe_key are skipped), then pings the devices of the users that got a NEW row. Dead subscriptions (404/410) are deleted. */
-export async function notify(db: Db, rows: NotifyRow[], f: Fetch = fetch) {
-  if (!rows.length) return 0;
-  const fresh = await db.insert(notifications).values(rows).onConflictDoNothing({ target: notifications.dedupeKey }).returning({ userId: notifications.userId });
-  const users = [...new Set(fresh.map((r) => r.userId))];
-  if (!users.length) return 0;
+const insertRows = (db: Db, rows: NotifyRow[]) =>
+  db.insert(notifications).values(rows).onConflictDoNothing({ target: notifications.dedupeKey }).returning({ userId: notifications.userId });
+
+async function ping(db: Db, users: string[], f: Fetch) {
+  if (!users.length) return;
   const subs = await db.select().from(pushSubscriptions).where(inArray(pushSubscriptions.userId, users));
   await Promise.all(subs.map(async (s) => {
     const status = await sendPing(s, f);
     if (status === 404 || status === 410) await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, s.id));
   }));
+}
+
+/** Inserts (duplicates by dedupe_key are skipped), then pings the devices of the users that got a NEW row. Dead subscriptions (404/410) are deleted. */
+export async function notify(db: Db, rows: NotifyRow[], f: Fetch = fetch) {
+  if (!rows.length) return 0;
+  const fresh = await insertRows(db, rows);
+  await ping(db, [...new Set(fresh.map((r) => r.userId))], f);
   return fresh.length;
 }
 
@@ -93,8 +110,11 @@ export async function runDaily(db: Db, today: string, f: Fetch = fetch) {
       rows.push({ userId: m.userId, projectId: p.id, kind: "check", title: "Pemeriksaan: temuan error", body: `${p.name} · ${e.title}`, url: `/admin/p/${p.slug}/checks`, dedupeKey: `check:${e.rule}:${createHash("sha256").update(p.id + e.title).digest("hex").slice(0, 16)}:${m.userId}` });
     }
   }
+  // Insert every batch first, then ping each user with a new row once.
+  const users = new Set<string>();
   let n = 0;
-  for (let k = 0; k < rows.length; k += 200) n += await notify(db, rows.slice(k, k + 200), f);
+  for (let k = 0; k < rows.length; k += 200) for (const r of await insertRows(db, rows.slice(k, k + 200))) { users.add(r.userId); n++; }
+  await ping(db, [...users], f);
   return n;
 }
 

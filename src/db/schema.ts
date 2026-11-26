@@ -715,7 +715,7 @@ export const calendarTokens = ps.table("calendar_tokens", {
   token: text("token").notNull().unique(),
   createdAt: createdAt(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
-});
+}, (t) => [uniqueIndex("calendar_tokens_active_uq").on(t.projectId, t.userId).where(sql`revoked_at is null`)]);
 
 /** Web Push endpoints of a user's devices. The push itself carries no data; see lib/push. */
 export const pushSubscriptions = ps.table("push_subscriptions", {

@@ -73,7 +73,7 @@ const TAB_LABEL: Record<BudgetTab, string> = { sum: "Ringkasan", bills: "Tagihan
 const exportsFor = (slug: string, tab: BudgetTab): ExportItem[] => {
   const csv = (type: string, label: string): ExportItem => ({ href: `/admin/p/${slug}/budget/export?type=${type}`, label, kind: "csv" });
   const pdf = (view: string, label: string): ExportItem => ({ href: `/admin/p/${slug}/budget/print?view=${view}`, label, kind: "pdf" });
-  return { sum: [csv("scopes", "CSV lingkup"), pdf("ringkasan", "PDF ringkasan")], bills: [csv("invoices", "CSV tagihan"), pdf("tagihan", "PDF tagihan")], vendor: [csv("vendors", "CSV vendor")], drive: [csv("drives", "CSV belanja drive"), pdf("drives", "PDF belanja drive")], plans: [csv("scenarios", "CSV perbandingan rencana"), pdf("rencana", "PDF rencana")] }[tab];
+  return { sum: [csv("scopes", "CSV lingkup"), pdf("ringkasan", "PDF ringkasan")], bills: [csv("invoices", "CSV tagihan"), pdf("tagihan", "PDF tagihan")], vendor: [csv("vendors", "CSV vendor")], drive: [csv("drives", "CSV belanja drive"), pdf("drives", "PDF belanja drive")], plans: [csv("scenarios", "CSV perbandingan rencana"), pdf("rencana", "PDF rencana")] }[tab] ?? [];
 };
 
 export function BudgetView({ slug, canEdit, today, invoices, rows, total, phases, deliverables, vendors, contacts, drive, plans, tab }: {

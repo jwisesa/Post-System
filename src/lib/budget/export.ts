@@ -15,6 +15,8 @@ const INV_STATUS = { planned: "Rencana", received: "Diterima", cancelled: "Dibat
 const n = (x: number) => String(x);
 /** Text cells only: a leading = + - @ tab or CR would run as a spreadsheet formula, so prefix an apostrophe. Amounts (n) stay untouched. */
 export const csvText = (v: string) => (/^[=+\-@\t\r]/.test(v) ? `'${v}` : v);
+/** Phone numbers like "+62 812-3456" stay readable (digits, spaces and dashes only after the plus); everything else keeps the formula guard. */
+export const csvPhone = (v: string) => (/^\+[\d\s-]+$/.test(v) ? v : csvText(v));
 
 /** Route guard: 401 not signed in, 404 not a member, 403 without budget.view. */
 export async function authorizeBudgetExport(db: Db, user: { id: string } | null, slug: string): Promise<{ ok: true; projectId: string; userId: string; slug: string } | { ok: false; status: 401 | 403 | 404; message: string }> {
@@ -72,7 +74,7 @@ export async function budgetCsvRows(db: Db, userId: string, projectId: string, t
   if (type === "vendors") {
     return [
       ["Vendor", "Kategori", "Kontak", "Email", "Telepon", "PKP (PPN)", "Dipotong PPh 23", "Status"],
-      ...data.vendors.map((v) => [csvText(v.name), csvText(v.categories.map(categoryLabel).join(", ")), csvText(v.contactName), csvText(v.email), csvText(v.phone), v.chargesPpn ? "Ya" : "Tidak", v.withholdsPph23 ? "Ya" : "Tidak", v.archivedAt ? "Diarsipkan" : "Aktif"]),
+      ...data.vendors.map((v) => [csvText(v.name), csvText(v.categories.map(categoryLabel).join(", ")), csvText(v.contactName), csvText(v.email), csvPhone(v.phone), v.chargesPpn ? "Ya" : "Tidak", v.withholdsPph23 ? "Ya" : "Tidak", v.archivedAt ? "Diarsipkan" : "Aktif"]),
     ];
   }
   const cmp = buildComparison(data, data.scenarios.map((s) => s.id));

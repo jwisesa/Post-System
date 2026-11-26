@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { createPgliteDb, type Db } from "@/db/client";
 import { auditLog, budgetDocs } from "@/db/schema";
 import * as d from "@/lib/budget/drives";
-import { budgetCsvRows, csvText } from "@/lib/budget/export";
+import { budgetCsvRows, csvPhone, csvText } from "@/lib/budget/export";
 import * as b from "@/lib/budget/service";
 import * as s from "@/lib/services";
 
@@ -27,6 +27,10 @@ describe("budget review fixes", () => {
     expect(csvText("=1+1")).toBe("'=1+1");
     expect(csvText("-x")).toBe("'-x");
     expect(csvText("Biasa")).toBe("Biasa");
+    expect(csvPhone("+62 812-3456")).toBe("+62 812-3456");
+    expect(csvPhone("+1+1")).toBe("'+1+1");
+    expect(csvPhone("+62 812\t=1")).toBe("'+62 812\t=1");
+    expect(csvPhone("0812")).toBe("0812");
     await b.addVersion(db, u, pid, docId, ver({ lumpSum: 50000 }));
     const inv = await b.addInvoice(db, u, pid, { scopeId, vendorId, termin: "@cmd", ref: "", issueDate: "", dueDate: "", subtotal: 1000, status: "planned", links: [], notes: "" });
     expect(inv.invoiceId).toBeTruthy();

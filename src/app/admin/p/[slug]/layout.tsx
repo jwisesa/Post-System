@@ -5,7 +5,7 @@ import { NavScroll } from "@/components/ui/nav-scroll";
 import { ProjectSettings } from "@/components/project-settings";
 import { ProjectFields } from "@/components/project-fields";
 import { CalendarCard } from "@/components/today/CalendarCard";
-import { getOrCreateCalendarToken } from "@/lib/calendar/service";
+import { getCalendarToken } from "@/lib/calendar/service";
 import { deleteProjectAction, updateProjectAction } from "../../actions";
 import { headers } from "next/headers";
 import { Icon } from "@/components/ui/icons";
@@ -26,7 +26,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
   const base = `/admin/p/${slug}`;
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
-  const calendarToken = await getOrCreateCalendarToken(db, user.id, project.id);
+  const calendarToken = await getCalendarToken(db, user.id, project.id);
   const nav = (
     <>
       <NavLink href={base} exact icon="today">Hari Ini</NavLink>

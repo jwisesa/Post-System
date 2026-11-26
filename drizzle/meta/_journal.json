@@ -141,6 +141,13 @@
       "when": 1795645585542,
       "tag": "0019_jazzy_starbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795647056146,
+      "tag": "0020_spicy_silver_sable",
+      "breakpoints": true
     }
   ]
 }
