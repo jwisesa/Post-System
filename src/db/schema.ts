@@ -482,6 +482,26 @@ export const scriptTagKinds = ps.table(
   (t) => [unique().on(t.projectId, t.key), index("script_tag_kinds_project_idx").on(t.projectId)],
 );
 
+/** Reversible merge of names the parser kept apart (typos, variants). Stored scene data is never rewritten; `from_name` shows as `to_name` at read time. No script text. */
+export const scriptAliases = ps.table(
+  "script_aliases",
+  {
+    id: id(),
+    scriptId: uuid("script_id")
+      .notNull()
+      .references(() => scripts.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    fromName: text("from_name").notNull(),
+    toName: text("to_name").notNull(),
+    createdAt: createdAt(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (t) => [unique().on(t.scriptId, t.kind, t.fromName)],
+);
+
 // ---------- budget ----------
 // Money is whole Rupiah (bigint, mode number; the service keeps |x| <= 1e15). Rates are integer basis points; quantities are thousandths.
 // Phase / deliverable links on a scope are id arrays with no foreign key (resolved on read), so a timeline edit never touches financial data.

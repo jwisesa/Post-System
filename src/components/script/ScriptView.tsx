@@ -14,12 +14,14 @@ import { useToast } from "../ui/toast";
 import { KindManager, KindsProvider, type CustomKindRow } from "./kinds";
 import { Keyed } from "./SceneReader";
 import { Scenes } from "./SceneTable";
+import { MergedNote, MergeTools, pickBox, useMergeSelect, type MergeCtx } from "./merge";
+import type { Alias } from "@/lib/script/aliases";
 
 type Tab = "scenes" | "characters" | "locations" | "post" | "summary";
 const TABS: [Tab, string][] = [["scenes", "Adegan"], ["characters", "Tokoh"], ["locations", "Lokasi"], ["post", "Kebutuhan post"], ["summary", "Ringkasan"]];
 const th = "px-2 py-1 text-start font-medium whitespace-nowrap";
 
-export function ScriptView({ slug, script, scenes, agg, canEdit, phases, initialTag = "", initialScene = "", textIds = [], customKinds = [], kindUsage = {} }: { slug: string; script: { id: string; title: string; sourceName: string; pages: number }; scenes: SceneRow[]; agg: ScriptAggregate; canEdit: boolean; phases: Phase[]; initialTag?: string; initialScene?: string; textIds?: string[]; customKinds?: CustomKindRow[]; kindUsage?: Record<string, number> }) {
+export function ScriptView({ slug, script, scenes, agg, canEdit, phases, initialTag = "", initialScene = "", textIds = [], customKinds = [], kindUsage = {}, aliases = [] }: { aliases?: Alias[]; slug: string; script: { id: string; title: string; sourceName: string; pages: number }; scenes: SceneRow[]; agg: ScriptAggregate; canEdit: boolean; phases: Phase[]; initialTag?: string; initialScene?: string; textIds?: string[]; customKinds?: CustomKindRow[]; kindUsage?: Record<string, number> }) {
   const toast = useToast();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("scenes");
@@ -73,8 +75,8 @@ export function ScriptView({ slug, script, scenes, agg, canEdit, phases, initial
         )}
       </div>
       {tab === "scenes" && <Scenes slug={slug} scriptId={script.id} textIds={textIds} initialScene={sceneToOpen} scriptTitle={script.title} scenes={scenes} phases={phases} canEdit={canEdit} initialTag={tagFilter} onClose={() => { setSceneToOpen(""); setTab(from); }} />}
-      {tab === "characters" && <Characters agg={agg} />}
-      {tab === "locations" && <Locations agg={agg} />}
+      {tab === "characters" && <Characters agg={agg} ctx={{ slug, scriptId: script.id, kind: "character", canEdit, aliases, items: agg.characters }} />}
+      {tab === "locations" && <Locations agg={agg} ctx={{ slug, scriptId: script.id, kind: "location", canEdit, aliases, items: agg.locations.map((l) => ({ name: l.place, scenes: l.scenes, blocks: l.scenes, sceneNumbers: l.sceneNumbers })) }} />}
       {tab === "post" && <PostNeeds kinds={kinds} slug={slug} canEdit={canEdit} scenes={scenes} phases={phases} onShow={(k) => { setTagFilter(k); setSceneToOpen(""); setFrom("scenes"); setTab("scenes"); }} onOpen={(id, kind) => { setTagFilter(kind); setSceneToOpen(id); setFrom("post"); setTab("scenes"); }} />}
       {tab === "summary" && <Summary agg={agg} />}
       {managing && <KindManager slug={slug} custom={customKinds} usage={kindUsage} canEdit={canEdit} onClose={() => setManaging(false)} />}
@@ -96,18 +98,21 @@ const sortHead = (label: string, k: string, s: { key: string; desc: boolean; tog
   </th>
 );
 
-function Characters({ agg }: { agg: ScriptAggregate }) {
+function Characters({ agg, ctx }: { agg: ScriptAggregate; ctx: MergeCtx }) {
+  const m = useMergeSelect();
   const s = useSort<"name" | "scenes" | "blocks">("blocks");
   const rows = [...agg.characters].sort((a, b) => (s.key === "name" ? a.name.localeCompare(b.name, "id") : a[s.key] - b[s.key]) * (s.desc ? -1 : 1));
   if (!rows.length) return <p className="muted text-sm">Tidak ada tokoh terdeteksi.</p>;
   return (
+    <div className="space-y-3"><MergeTools ctx={ctx} s={m} />
     <div className="overflow-x-auto">
       <table className="table text-sm tabular-nums">
-        <thead><tr className="text-xs">{sortHead("Tokoh", "name", s)}{sortHead("Adegan", "scenes", s)}{sortHead("Blok dialog", "blocks", s)}<th className={th}>Nomor adegan</th></tr></thead>
+        <thead><tr className="text-xs">{ctx.canEdit && <th className={th}><span className="sr-only">Pilih</span></th>}{sortHead("Tokoh", "name", s)}{sortHead("Adegan", "scenes", s)}{sortHead("Blok dialog", "blocks", s)}<th className={th}>Nomor adegan</th></tr></thead>
         <tbody>
           {rows.map((c) => (
             <tr key={c.name} className="hoverable">
-              <td className="px-2 py-1 font-medium whitespace-nowrap">{c.name}</td>
+              {ctx.canEdit && <td className="px-1">{pickBox(ctx, m, c.name)}</td>}
+              <td className="px-2 py-1 font-medium whitespace-nowrap">{c.name}<MergedNote ctx={ctx} name={c.name} /></td>
               <td className="px-2 py-1">{c.scenes}</td>
               <td className="px-2 py-1">{c.blocks}</td>
               <td className="px-2 py-1">{c.sceneNumbers.join(", ")}</td>
@@ -115,21 +120,24 @@ function Characters({ agg }: { agg: ScriptAggregate }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </div></div>
   );
 }
 
-function Locations({ agg }: { agg: ScriptAggregate }) {
+function Locations({ agg, ctx }: { agg: ScriptAggregate; ctx: MergeCtx }) {
+  const m = useMergeSelect();
   const s = useSort<"name" | "scenes" | "seconds">("scenes");
   const rows = [...agg.locations].sort((a, b) => (s.key === "name" ? a.place.localeCompare(b.place, "id") : a[s.key] - b[s.key]) * (s.desc ? -1 : 1));
   return (
+    <div className="space-y-3"><MergeTools ctx={ctx} s={m} />
     <div className="overflow-x-auto">
       <table className="table text-sm tabular-nums">
-        <thead><tr className="text-xs">{sortHead("Lokasi", "name", s)}{sortHead("Adegan", "scenes", s)}{sortHead("Durasi", "seconds", s)}<th className={th}>Nomor adegan</th></tr></thead>
+        <thead><tr className="text-xs">{ctx.canEdit && <th className={th}><span className="sr-only">Pilih</span></th>}{sortHead("Lokasi", "name", s)}{sortHead("Adegan", "scenes", s)}{sortHead("Durasi", "seconds", s)}<th className={th}>Nomor adegan</th></tr></thead>
         <tbody>
           {rows.map((l) => (
             <tr key={l.place} className="hoverable">
-              <td className="px-2 py-1 font-medium">{l.place}</td>
+              {ctx.canEdit && <td className="px-1">{pickBox(ctx, m, l.place)}</td>}
+              <td className="px-2 py-1 font-medium">{l.place}<MergedNote ctx={ctx} name={l.place} /></td>
               <td className="px-2 py-1">{l.scenes}</td>
               <td className="px-2 py-1 whitespace-nowrap">~{fmtDuration(l.seconds)}</td>
               <td className="px-2 py-1">{l.sceneNumbers.join(", ")}</td>
@@ -137,7 +145,7 @@ function Locations({ agg }: { agg: ScriptAggregate }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </div></div>
   );
 }
 

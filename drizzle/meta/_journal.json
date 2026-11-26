@@ -148,6 +148,13 @@
       "when": 1795647056146,
       "tag": "0020_spicy_silver_sable",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795665237506,
+      "tag": "0021_wild_pride",
+      "breakpoints": true
     }
   ]
 }

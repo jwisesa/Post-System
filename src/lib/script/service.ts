@@ -1,9 +1,10 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
-import { scriptSceneText, scriptScenes, scriptTagKinds, scripts } from "@/db/schema";
+import { scriptAliases, scriptSceneText, scriptScenes, scriptTagKinds, scripts } from "@/db/schema";
 import { InputError, pgSafe, record, requireRole, type Tx } from "../services";
 import { aggregate } from "./aggregate";
+import { applyAliases, MAX_ALIASES, MAX_ALIAS_NAME, type AliasKind } from "./aliases";
 import { getSchedule } from "../schedule/service";
 import { needsByPhase, type Phase } from "./needs";
 import { defaultPhase } from "./tags";
@@ -73,9 +74,11 @@ export async function getScript(db: Db, projectId: string, scriptId: string) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(scriptId)) return null; // empty or malformed ids are just "not found"
   const [script] = await db.select().from(scripts).where(and(eq(scripts.id, scriptId), eq(scripts.projectId, projectId)));
   if (!script) return null;
-  const scenes = await db.select().from(scriptScenes).where(eq(scriptScenes.scriptId, scriptId)).orderBy(asc(scriptScenes.position));
+  const raw = await db.select().from(scriptScenes).where(eq(scriptScenes.scriptId, scriptId)).orderBy(asc(scriptScenes.position));
+  const aliases = await listAliases(db, scriptId);
+  const scenes = applyAliases(raw, aliases); // every consumer (page, CSV, print) reads through here
   const textIds = (await db.select({ id: scriptSceneText.sceneId }).from(scriptSceneText).innerJoin(scriptScenes, eq(scriptScenes.id, scriptSceneText.sceneId)).where(eq(scriptScenes.scriptId, scriptId))).map((r) => r.id);
-  return { script, scenes, aggregate: aggregate(scenes, script.pages), textIds };
+  return { script, scenes, aggregate: aggregate(scenes, script.pages), textIds, aliases: aliases.map((a) => ({ kind: a.kind, fromName: a.fromName, toName: a.toName })) };
 }
 export type SceneRow = NonNullable<Awaited<ReturnType<typeof getScript>>>["scenes"][number];
 
@@ -128,6 +131,52 @@ export async function deleteScript(db: Db, userId: string, projectId: string, sc
     const [row] = await tx.delete(scripts).where(and(eq(scripts.id, scriptId), eq(scripts.projectId, projectId))).returning();
     if (!row) throw new InputError("Naskah tidak ditemukan.");
     await record(tx, { projectId, userId, entity: "script", entityId: scriptId, action: "delete", summary: `Menghapus naskah "${row.title}"` });
+  });
+}
+
+// ---------- name merging (reversible aliases) ----------
+
+export const listAliases = (db: Db | Tx, scriptId: string) => db.select().from(scriptAliases).where(eq(scriptAliases.scriptId, scriptId)).orderBy(asc(scriptAliases.createdAt), asc(scriptAliases.fromName));
+
+const KINDS: AliasKind[] = ["character", "location"];
+const noun = (k: string, n: number) => `${n} ${k === "character" ? "karakter" : "lokasi"}`;
+
+/** Supervisor: `names` (as displayed) become `canonical`. Chains are flattened, so every alias points straight at a final name. */
+export async function mergeNames(db: Db, userId: string, projectId: string, scriptId: string, kind: AliasKind, names: string[], canonicalIn: string) {
+  await requireRole(db, userId, projectId, "script.edit");
+  if (!KINDS.includes(kind)) throw new InputError("Jenis tidak valid.");
+  const canonical = pgSafe(canonicalIn).replace(/\s+/g, " ").trim().toUpperCase();
+  const from = [...new Set(names.map((n) => pgSafe(n).replace(/\s+/g, " ").trim().toUpperCase()))].filter((n) => n && n !== canonical);
+  if (!canonical) throw new InputError("Nama utama wajib diisi.");
+  if (canonical.length > MAX_ALIAS_NAME || from.some((n) => n.length > MAX_ALIAS_NAME)) throw new InputError(`Nama maksimal ${MAX_ALIAS_NAME} karakter.`);
+  if (kind === "location" && /\s[-–—]\s/.test(canonical)) throw new InputError("Nama lokasi utama tidak boleh memuat \" - \"; gunakan nama tempatnya saja.");
+  if (!from.length) throw new InputError("Pilih setidaknya satu nama lain untuk digabungkan.");
+  await db.transaction(async (tx) => {
+    const [script] = await tx.select({ id: scripts.id }).from(scripts).where(and(eq(scripts.id, scriptId), eq(scripts.projectId, projectId)));
+    if (!script) throw new InputError("Naskah tidak ditemukan.");
+    const all = (await listAliases(tx, scriptId)).filter((a) => a.kind === kind);
+    const gone = all.filter((a) => a.fromName === canonical).map((a) => a.id); // the main name stops being an alias itself
+    const keep = all.filter((a) => !gone.includes(a.id));
+    const repoint = keep.filter((a) => from.includes(a.toName) && !from.includes(a.fromName) && a.fromName !== canonical); // earlier merges into a name that is now merged away
+    const total = new Set([...keep.map((a) => a.fromName), ...from]).size;
+    if (total > MAX_ALIASES) throw new InputError(`Maksimal ${MAX_ALIASES} penggabungan per naskah.`);
+    if (gone.length) await tx.delete(scriptAliases).where(inArray(scriptAliases.id, gone));
+    for (const a of repoint) await tx.update(scriptAliases).set({ toName: canonical }).where(eq(scriptAliases.id, a.id));
+    for (const n of from) {
+      await tx.insert(scriptAliases).values({ scriptId, projectId, kind, fromName: n, toName: canonical, createdBy: userId })
+        .onConflictDoUpdate({ target: [scriptAliases.scriptId, scriptAliases.kind, scriptAliases.fromName], set: { toName: canonical } });
+    }
+    await record(tx, { projectId, userId, entity: "script", entityId: scriptId, action: "update", summary: `Menggabungkan ${noun(kind, from.length + 1)}` });
+  });
+}
+
+/** Supervisor: restores one merged-away name. */
+export async function unmerge(db: Db, userId: string, projectId: string, scriptId: string, kind: AliasKind, fromName: string) {
+  await requireRole(db, userId, projectId, "script.edit");
+  await db.transaction(async (tx) => {
+    const rows = await tx.delete(scriptAliases).where(and(eq(scriptAliases.scriptId, scriptId), eq(scriptAliases.projectId, projectId), eq(scriptAliases.kind, kind), eq(scriptAliases.fromName, fromName))).returning({ id: scriptAliases.id });
+    if (!rows.length) throw new InputError("Penggabungan tidak ditemukan.");
+    await record(tx, { projectId, userId, entity: "script", entityId: scriptId, action: "update", summary: `Memisahkan ${noun(kind, 1)}` });
   });
 }
 

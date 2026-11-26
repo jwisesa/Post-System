@@ -49,6 +49,7 @@ export default async function ScriptPage({ params, searchParams }: { params: Pro
           textIds={current.textIds}
           customKinds={customKinds}
           kindUsage={usage}
+          aliases={current.aliases}
         />
       )}
     </div>

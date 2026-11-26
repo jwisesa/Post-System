@@ -75,3 +75,11 @@ export async function moveTagKind(slug: string, id: string, dir: -1 | 1) {
 export async function deleteTagKind(slug: string, id: string) {
   return run(slug, (db, userId, projectId) => sc.deleteKind(db, userId, projectId, id));
 }
+
+export async function mergeScriptNames(slug: string, scriptId: string, kind: "character" | "location", names: string[], canonical: string) {
+  return run(slug, (db, userId, projectId) => sc.mergeNames(db, userId, projectId, scriptId, kind, names, canonical).then(() => ({})));
+}
+
+export async function unmergeScriptName(slug: string, scriptId: string, kind: "character" | "location", fromName: string) {
+  return run(slug, (db, userId, projectId) => sc.unmerge(db, userId, projectId, scriptId, kind, fromName).then(() => ({})));
+}
